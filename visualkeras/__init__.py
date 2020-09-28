@@ -1,7 +1,7 @@
 from typing import Any
 from PIL import Image, ImageDraw
 from tensorflow.python.keras.layers import Layer
-
+from math import ceil
 
 class Box:
     x1: int
@@ -31,7 +31,7 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
              scale_depth: float = 0.1, scale_height: float = 4, type_ignore: list = [], index_ignore: list = [],
              color_map: dict = {}, dense_orientation: str = 'x',
              background_fill: Any = 'white', draw_volume=True, padding=10,
-             distance=0) -> Image:
+             distance=0, funnel: bool = True) -> Image:
     """
     GenerateS a architecture visualization for a given sequential keras model in style of a Convolutional Neural Network.
 
@@ -50,7 +50,8 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param padding: Distance in pixel before the first and after the last layer.
-    :param distance: Distance in pixel between two layers.
+    :param distance: Distance in pixel between two layers
+    :param funnel: If set to True, a funnel will be drawn between consecutive layers
 
     :return: Generated architecture image.
     """
@@ -129,7 +130,7 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
 
     # Generate image
 
-    img = Image.new('RGBA', (int(img_width), int(img_height)), background_fill)
+    img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
     draw = ImageDraw.Draw(img)
 
     # draw.line([0, img.height / 2, img.width, img.height / 2], fill='red', width=5)
@@ -137,22 +138,38 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
 
     # Draw created boxes
 
+    last_box = None
+
     for box in boxes:
         fill = box.fill
         outline = box.outline
+        y_off = (img.height - (box.y2 - (box.y1 - box.de))) / 2
+
+        box.y1 += y_off
+        box.y2 += y_off
+
+        box.x1 += x_off
+        box.x2 += x_off
+
         x1 = box.x1
         x2 = box.x2
         y1 = box.y1
         y2 = box.y2
         de = box.de
 
-        y_off = (img.height - (y2 - (y1 - de))) / 2
+        if last_box is not None and funnel:
+            draw.line([last_box.x2 + last_box.de, last_box.y1 - last_box.de,
+                       x1 + de, y1 - de], fill=outline)
 
-        y1 += + y_off
-        y2 += + y_off
+            draw.line([last_box.x2 + last_box.de, last_box.y2 - last_box.de,
+                       x1 + de, y2 - de], fill=outline)
 
-        x1 += x_off
-        x2 += x_off
+            draw.line([last_box.x2, last_box.y2,
+                       x1, y2], fill=outline)
+
+            draw.line([last_box.x2, last_box.y1,
+                       x1, y1], fill=outline)
+
 
         draw.rectangle([x1, y1, x2, y2],
                        fill=fill,
@@ -173,6 +190,8 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
         # draw.line([x1 + de, y1 - de, x1 + de, y2 - de], fill=outline)
         # draw.line([x1 + de, y2 - de, x1, y2], fill=outline)
         # draw.line([x1 + de, y2 - de, x2 + de, y2 - de], fill=outline)
+
+        last_box = box
 
     if out_file is not None:
         img.save(out_file)
