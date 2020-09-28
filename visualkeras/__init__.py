@@ -31,11 +31,11 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
              scale_depth: float = 0.1, scale_height: float = 4, type_ignore: list = [], index_ignore: list = [],
              color_map: dict = {}, dense_orientation: str = 'x',
              background_fill: Any = 'white', draw_volume=True, padding=10,
-             distance=0, funnel: bool = True) -> Image:
+             distance = 10, funnel: bool = True) -> Image:
     """
-    GenerateS a architecture visualization for a given sequential keras model in style of a Convolutional Neural Network.
+    Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each layer) in style of a Convolutional Neural Network.
 
-    :param model: A sequential keras model that will be visualized.
+    :param model: A keras model that will be visualized.
     :param out_file: Path to the file to write the created image to. If the image does not exist yet it will be created, else overwritten. Image type is inferred from the file ending. Providing None will disable writing.
     :param min_x: Minimum x size a layer will have.
     :param min_yz: Minimum y and z size a layer will have.
@@ -78,21 +78,28 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
         h = min_yz
         d = min_x
 
-        if len(layer.output_shape) == 4:
-            w = min(max(layer.output_shape[1] * scale_height, w), max_yz)
-            h = min(max(layer.output_shape[2] * scale_height, h), max_yz)
-            d = min(max(layer.output_shape[3] * scale_depth, d), max_x)
-        elif len(layer.output_shape) == 3:
-            w = min(max(layer.output_shape[1] * scale_height, w), max_yz)
-            h = min(max(layer.output_shape[2] * scale_height, h), max_yz)
+        if isinstance(layer.output_shape, tuple):
+            shape = layer.output_shape
+        elif isinstance(layer.output_shape, list) and len(layer.output_shape) == 1:
+            shape = layer.output_shape[0]
+        else:
+            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+
+        if len(shape) == 4:
+            w = min(max(shape[1] * scale_height, w), max_yz)
+            h = min(max(shape[2] * scale_height, h), max_yz)
+            d = min(max(shape[3] * scale_depth, d), max_x)
+        elif len(shape) == 3:
+            w = min(max(shape[1] * scale_height, w), max_yz)
+            h = min(max(shape[2] * scale_height, h), max_yz)
             d = min(max(d), max_x)
-        elif len(layer.output_shape) == 2:
+        elif len(shape) == 2:
             if dense_orientation == 'x':
-                d = min(max(layer.output_shape[1] * scale_depth, min_x), max_x)
+                d = min(max(shape[1] * scale_depth, min_x), max_x)
             elif dense_orientation == 'y':
-                h = min(max(layer.output_shape[1] * scale_height, h), max_yz)
+                h = min(max(shape[1] * scale_height, h), max_yz)
             elif dense_orientation == 'z':
-                w = min(max(layer.output_shape[1] * scale_height, w), max_yz)
+                w = min(max(shape[1] * scale_height, w), max_yz)
             else:
                 raise ValueError(f"unsupported orientation {dense_orientation}")
         else:

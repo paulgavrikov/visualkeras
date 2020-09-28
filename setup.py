@@ -8,7 +8,7 @@ setuptools.setup(
     version="0.0.1",
     author="Paul Gavrikov",
     author_email="paul.gavrikov@hs-offenburg.de",
-    description="Architecture visualization of Keras Sequential models",
+    description="Architecture visualization of Keras models",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/paulgavrikov/visualkeras",
