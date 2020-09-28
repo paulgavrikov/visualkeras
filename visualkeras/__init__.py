@@ -3,33 +3,65 @@ from PIL import Image, ImageDraw
 from tensorflow.python.keras.layers import Layer
 
 
+class Box:
+    x1: int
+    x2: int
+    y1: int
+    y2: int
+    de: int
+    fill: Any
+    outline: Any
+
+
 class FakeLayer(Layer):
 
-    def __init__(self, padding: int = 100):
+    def __init__(self, padding: int = 50):
         super().__init__()
         self.padding = padding
 
 
 # TODO
-# calculate and shift x offset
-# calculate and set image size
-# optional: add layer groups / group paddings
+# default colormap
+# optional: add layer groups
 # optional: translucent layers
 
 
 def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max_x: int = 400,
              max_yz: int = 2000,
-             scale_depth: float = 0.3, scale_height: float = 5, type_ignore: list = [], index_ignore: list = [],
+             scale_depth: float = 0.1, scale_height: float = 4, type_ignore: list = [], index_ignore: list = [],
              color_map: dict = {}, dense_orientation: str = 'x',
-             background_fill: Any = 'gray', text_fill: Any = 'black', draw_volume=True) -> Image:
-    img = Image.new('RGBA', (3000, max_yz), background_fill)
-    draw = ImageDraw.Draw(img)
+             background_fill: Any = 'white', draw_volume=True, padding=10,
+             distance=0) -> Image:
+    """
+    GenerateS a architecture visualization for a given sequential keras model in style of a Convolutional Neural Network.
 
-    draw.line([0, img.height / 2, img.width, img.height / 2], fill='red', width=5)
-    draw.line([img.width / 2, 0, img.width / 2, img.height], fill='red', width=5)
+    :param model: A sequential keras model that will be visualized.
+    :param out_file: Path to the file to write the created image to. If the image does not exist yet it will be created, else overwritten. Image type is inferred from the file ending. Providing None will disable writing.
+    :param min_x: Minimum x size a layer will have.
+    :param min_yz: Minimum y and z size a layer will have.
+    :param max_x: Maximum x size a layer will have.
+    :param max_yz: Maximum y and z size a layer will have.
+    :param scale_depth: Scalar multiplier for the height of each layer.
+    :param scale_height: Scalar multiplier for the height of each layer.
+    :param type_ignore: List of layer types in the keras model to ignore during drawing.
+    :param index_ignore: List of layer indexes in the keras model to ignore during drawing.
+    :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for not specified classes.
+    :param dense_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
+    :param background_fill: Color for the image background. Can be str or (R,G,B,A).
+    :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
+    :param padding: Distance in pixel before the first and after the last layer.
+    :param distance: Distance in pixel between two layers.
 
-    current_x = 373.3333333333333 / 2
+    :return: Generated architecture image.
+    """
 
+    # Iterate over the model to compute bounds and generate boxes
+
+    boxes = list()
+    current_x = padding
+    x_off = -1
+    img_height = 0
+    img_width = 0
     for index, layer in enumerate(model.layers):
 
         print(layer, layer.input_shape, layer.output_shape)
@@ -44,9 +76,6 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
         w = min_yz
         h = min_yz
         d = min_x
-
-        fill = color_map.get(type(layer), {}).get('fill', 'orange')
-        outline = color_map.get(type(layer), {}).get('outline', 'black')
 
         if len(layer.output_shape) == 4:
             w = min(max(layer.output_shape[1] * scale_height, w), max_yz)
@@ -64,23 +93,66 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
             elif dense_orientation == 'z':
                 w = min(max(layer.output_shape[1] * scale_height, w), max_yz)
             else:
-                print(f"unsupported orientation {dense_orientation}")
+                raise ValueError(f"unsupported orientation {dense_orientation}")
         else:
-            print(f"not supported tensor shape {layer.output_shape}")
-            continue
+            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
 
-        de = 0
+        box = Box()
+
+        box.de = 0
         if draw_volume:
-            de = w / 3
+            box.de = w / 3
 
-        # bottom left coordinate
-        x1 = current_x - de / 2
+        if x_off == -1:
+            x_off = box.de / 2
 
-        y1 = (img.height - h) / 2 + de / 2
+        # top left coordinate
+        box.x1 = current_x - box.de / 2
+        box.y1 = box.de
 
-        # top right coordinate
-        x2 = x1 + d
-        y2 = y1 + h
+        # bottom right coordinate
+        box.x2 = box.x1 + d
+        box.y2 = box.y1 + h
+
+        box.fill = color_map.get(type(layer), {}).get('fill', 'orange')
+        box.outline = color_map.get(type(layer), {}).get('outline', 'black')
+
+        boxes.append(box)
+
+        # Update image bounds
+        hh = box.y2 - (box.y1 - box.de)
+        if hh > img_height:
+            img_height = hh
+        img_width = box.x2 + box.de + x_off + padding
+
+        current_x += d + distance
+
+    # Generate image
+
+    img = Image.new('RGBA', (int(img_width), int(img_height)), background_fill)
+    draw = ImageDraw.Draw(img)
+
+    # draw.line([0, img.height / 2, img.width, img.height / 2], fill='red', width=5)
+    # draw.line([img.width / 2, 0, img.width / 2, img.height], fill='red', width=5)
+
+    # Draw created boxes
+
+    for box in boxes:
+        fill = box.fill
+        outline = box.outline
+        x1 = box.x1
+        x2 = box.x2
+        y1 = box.y1
+        y2 = box.y2
+        de = box.de
+
+        y_off = (img.height - (y2 - (y1 - de))) / 2
+
+        y1 += + y_off
+        y2 += + y_off
+
+        x1 += x_off
+        x2 += x_off
 
         draw.rectangle([x1, y1, x2, y2],
                        fill=fill,
@@ -88,29 +160,19 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
 
         draw.polygon([x1, y1,
                       x1 + de, y1 - de,
-                      x1 + de + d, y1 - de,
-                      x1 + d, y1
+                      x2 + de, y1 - de,
+                      x2, y1
                       ], fill=fill, outline=outline)
 
-        draw.polygon([x1 + de + d, y1 - de,
-                      x1 + d, y1,
+        draw.polygon([x2 + de, y1 - de,
+                      x2, y1,
                       x2, y2,
                       x2 + de, y2 - de
                       ], fill=fill, outline=outline)
 
-        # draw.line([x1 + de, y1 - de, x1 + de, y1 - de + h], fill=outline)
-        # draw.line([x1 + de, y1 - de + h, x1, y1 + h], fill=outline)
-        # draw.line([x1 + de, y1 - de + h, x2 + de, y2 - de], fill=outline)
-
-        # draw.rectangle([x1 + de, y1 - de, x2 + de, y2 - de],
-        #                fill=fill,
-        #                outline=outline)
-
-        label = 'x'.join(map(str, list(layer.output_shape[1:])))
-
-        draw.text((x1, y2 + 10), label, fill=text_fill)  # todo magic value
-
-        current_x += d
+        # draw.line([x1 + de, y1 - de, x1 + de, y2 - de], fill=outline)
+        # draw.line([x1 + de, y2 - de, x1, y2], fill=outline)
+        # draw.line([x1 + de, y2 - de, x2 + de, y2 - de], fill=outline)
 
     if out_file is not None:
         img.save(out_file)
