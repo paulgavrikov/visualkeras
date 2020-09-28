@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw
 from tensorflow.python.keras.layers import Layer
 from math import ceil
 
+
 class Box:
     x1: int
     x2: int
@@ -13,45 +14,57 @@ class Box:
     outline: Any
 
 
-class FakeLayer(Layer):
+class ColorWheel:
+    colors = ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#073b4c"]
 
-    def __init__(self, padding: int = 50):
+    def __init__(self):
+        self._cache = dict()
+
+    def get_color(self, class_type: type):
+        if class_type not in self._cache.keys():
+            index = len(self._cache.keys()) % len(self.colors)
+            self._cache[class_type] = self.colors[index]
+        return self._cache.get(class_type)
+
+
+class SpacingDummyLayer(Layer):
+
+    def __init__(self, spacing: int = 50):
         super().__init__()
-        self.padding = padding
+        self.spacing = spacing
 
 
 # TODO
-# default colormap
 # optional: add layer groups
 # optional: translucent layers
 
 
-def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max_x: int = 400,
-             max_yz: int = 2000,
-             scale_depth: float = 0.1, scale_height: float = 4, type_ignore: list = [], index_ignore: list = [],
-             color_map: dict = {}, dense_orientation: str = 'x',
-             background_fill: Any = 'white', draw_volume=True, padding=10,
-             distance = 10, funnel: bool = True) -> Image:
+def cnn_arch(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
+             max_xy: int = 2000,
+             scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = [], index_ignore: list = [],
+             color_map: dict = {}, one_dim_orientation: str = 'z',
+             background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
+             spacing: int = 10, draw_funnel: bool = True) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each layer) in style of a Convolutional Neural Network.
 
     :param model: A keras model that will be visualized.
-    :param out_file: Path to the file to write the created image to. If the image does not exist yet it will be created, else overwritten. Image type is inferred from the file ending. Providing None will disable writing.
-    :param min_x: Minimum x size a layer will have.
-    :param min_yz: Minimum y and z size a layer will have.
-    :param max_x: Maximum x size a layer will have.
-    :param max_yz: Maximum y and z size a layer will have.
-    :param scale_depth: Scalar multiplier for the height of each layer.
-    :param scale_height: Scalar multiplier for the height of each layer.
+    :param to_file: Path to the file to write the created image to. If the image does not exist yet it will be created, else overwritten. Image type is inferred from the file ending. Providing None will disable writing.
+    :param min_z: Minimum z size in pixel a layer will have.
+    :param min_xy: Minimum x and y size in pixel a layer will have.
+    :param max_z: Maximum z size in pixel a layer will have.
+    :param max_xy: Maximum x and y size in pixel a layer will have.
+    :param scale_z: Scalar multiplier for the z size of each layer.
+    :param scale_xy: Scalar multiplier for the x and y size of each layer.
     :param type_ignore: List of layer types in the keras model to ignore during drawing.
     :param index_ignore: List of layer indexes in the keras model to ignore during drawing.
     :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for not specified classes.
-    :param dense_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
+    :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param padding: Distance in pixel before the first and after the last layer.
-    :param distance: Distance in pixel between two layers
-    :param funnel: If set to True, a funnel will be drawn between consecutive layers
+    :param spacing: Spacing in pixel between two layers
+    :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
 
     :return: Generated architecture image.
     """
@@ -59,49 +72,53 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
     # Iterate over the model to compute bounds and generate boxes
 
     boxes = list()
-    current_x = padding
+    color_wheel = ColorWheel()
+    current_z = padding
     x_off = -1
+
     img_height = 0
     img_width = 0
+
     for index, layer in enumerate(model.layers):
 
-        print(layer, layer.input_shape, layer.output_shape)
-
+        # Ignore layers that the use has opted out to
         if type(layer) in type_ignore or index in index_ignore:
             continue
 
-        if type(layer) == FakeLayer:
-            current_x += layer.padding
+        # Do no render the FakeSpacingLayer, just increase the pointer
+        if type(layer) == SpacingDummyLayer:
+            current_z += layer.spacing
             continue
 
-        w = min_yz
-        h = min_yz
-        d = min_x
+        x = min_xy
+        y = min_xy
+        z = min_z
 
         if isinstance(layer.output_shape, tuple):
             shape = layer.output_shape
-        elif isinstance(layer.output_shape, list) and len(layer.output_shape) == 1:
+        elif isinstance(layer.output_shape, list) and len(
+                layer.output_shape) == 1:  # drop dimension for non seq. models
             shape = layer.output_shape[0]
         else:
             raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
 
         if len(shape) == 4:
-            w = min(max(shape[1] * scale_height, w), max_yz)
-            h = min(max(shape[2] * scale_height, h), max_yz)
-            d = min(max(shape[3] * scale_depth, d), max_x)
+            x = min(max(shape[1] * scale_xy, x), max_xy)
+            y = min(max(shape[2] * scale_xy, y), max_xy)
+            z = min(max(shape[3] * scale_z, z), max_z)
         elif len(shape) == 3:
-            w = min(max(shape[1] * scale_height, w), max_yz)
-            h = min(max(shape[2] * scale_height, h), max_yz)
-            d = min(max(d), max_x)
+            x = min(max(shape[1] * scale_xy, x), max_xy)
+            y = min(max(shape[2] * scale_xy, y), max_xy)
+            z = min(max(z), max_z)
         elif len(shape) == 2:
-            if dense_orientation == 'x':
-                d = min(max(shape[1] * scale_depth, min_x), max_x)
-            elif dense_orientation == 'y':
-                h = min(max(shape[1] * scale_height, h), max_yz)
-            elif dense_orientation == 'z':
-                w = min(max(shape[1] * scale_height, w), max_yz)
+            if one_dim_orientation == 'x':
+                x = min(max(shape[1] * scale_xy, x), max_xy)
+            elif one_dim_orientation == 'y':
+                y = min(max(shape[1] * scale_xy, y), max_xy)
+            elif one_dim_orientation == 'z':
+                z = min(max(shape[1] * scale_z, z), max_z)
             else:
-                raise ValueError(f"unsupported orientation {dense_orientation}")
+                raise ValueError(f"unsupported orientation {one_dim_orientation}")
         else:
             raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
 
@@ -109,20 +126,20 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
 
         box.de = 0
         if draw_volume:
-            box.de = w / 3
+            box.de = x / 3
 
         if x_off == -1:
             x_off = box.de / 2
 
         # top left coordinate
-        box.x1 = current_x - box.de / 2
+        box.x1 = current_z - box.de / 2
         box.y1 = box.de
 
         # bottom right coordinate
-        box.x2 = box.x1 + d
-        box.y2 = box.y1 + h
+        box.x2 = box.x1 + z
+        box.y2 = box.y1 + y
 
-        box.fill = color_map.get(type(layer), {}).get('fill', 'orange')
+        box.fill = color_map.get(type(layer), {}).get('fill', color_wheel.get_color(type(layer)))
         box.outline = color_map.get(type(layer), {}).get('outline', 'black')
 
         boxes.append(box)
@@ -133,7 +150,7 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
             img_height = hh
         img_width = box.x2 + box.de + x_off + padding
 
-        current_x += d + distance
+        current_z += z + spacing
 
     # Generate image
 
@@ -150,7 +167,7 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
     for box in boxes:
         fill = box.fill
         outline = box.outline
-        y_off = (img.height - (box.y2 - (box.y1 - box.de))) / 2
+        y_off = (img.height - (box.y2 - (box.y1 - box.de))) / 2  # center the layer vertically
 
         box.y1 += y_off
         box.y2 += y_off
@@ -164,7 +181,7 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
         y2 = box.y2
         de = box.de
 
-        if last_box is not None and funnel:
+        if last_box is not None and draw_funnel:
             draw.line([last_box.x2 + last_box.de, last_box.y1 - last_box.de,
                        x1 + de, y1 - de], fill=outline)
 
@@ -176,7 +193,6 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
 
             draw.line([last_box.x2, last_box.y1,
                        x1, y1], fill=outline)
-
 
         draw.rectangle([x1, y1, x2, y2],
                        fill=fill,
@@ -200,7 +216,7 @@ def cnn_arch(model, out_file: str = None, min_x: int = 20, min_yz: int = 20, max
 
         last_box = box
 
-    if out_file is not None:
-        img.save(out_file)
+    if to_file is not None:
+        img.save(to_file)
 
     return img
