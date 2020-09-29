@@ -75,7 +75,7 @@ def cnn_arch(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_
     x_off = -1
 
     img_height = 0
-    img_width = 0
+    max_right = 0
 
     for index, layer in enumerate(model.layers):
 
@@ -146,12 +146,14 @@ def cnn_arch(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_
         hh = box.y2 - (box.y1 - box.de)
         if hh > img_height:
             img_height = hh
-        img_width = box.x2 + box.de + x_off + padding
+
+        if box.x2 + box.de > max_right:
+            max_right = box.x2 + box.de
 
         current_z += z + spacing
 
     # Generate image
-
+    img_width = max_right + x_off + padding
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
     draw = ImageDraw.Draw(img)
 
