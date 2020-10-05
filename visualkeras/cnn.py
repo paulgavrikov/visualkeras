@@ -25,8 +25,10 @@ class ColorWheel:
             self._cache[class_type] = self.colors[index]
         return self._cache.get(class_type)
 
+
 try:  # only define the dummy layer if tensorflow is installed
     from tensorflow.python.keras.layers import Layer
+
 
     class SpacingDummyLayer(Layer):
 
@@ -37,12 +39,49 @@ except:
     pass
 
 
+def get_rgba_tuple(color):
+    """
+
+    :param color:
+    :return: (R, G, B, A) tuple
+
+    >>> get_rgba_tuple('red')
+    (255, 0, 0, 255)
+    >>> get_rgba_tuple("rgb(1, 2, 3)")
+    (1, 2, 3, 255)
+    >>> get_rgba_tuple("#010203")
+    (1, 2, 3, 255)
+    >>> get_rgba_tuple("#01020304")
+    (1, 2, 3, 4)
+    >>> get_rgba_tuple("rgb(100%, 50%, 0%)")
+    (255, 128, 0, 255)
+    >>> get_rgba_tuple((100, 50, 0))
+    (100, 50, 0, 255)
+    >>> get_rgba_tuple((100, 50, 0, 44))
+    (100, 50, 0, 44)
+    >>> get_rgba_tuple(0x010203)
+    (1, 2, 3, 255)
+    >>> get_rgba_tuple(0x01020304)
+    (1, 2, 3, 4)
+    """
+    if isinstance(color, str):
+        rgba = ImageColor.getrgb(color)
+    elif isinstance(color, tuple):
+        rgba = color
+    else:
+        return 0, 0, 0, 255
+
+    if len(rgba) == 3:
+        rgba = (rgba[0], rgba[1], rgba[2], 255)
+    return rgba
+
+
 def cnn_arch(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
              max_xy: int = 2000,
              scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = [], index_ignore: list = [],
              color_map: dict = {}, one_dim_orientation: str = 'z',
              background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
-             spacing: int = 10, draw_funnel: bool = True) -> Image:
+             spacing: int = 10, draw_funnel: bool = True, shade_step=10) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each layer) in style of a Convolutional Neural Network.
 
@@ -63,6 +102,7 @@ def cnn_arch(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_
     :param padding: Distance in pixel before the first and after the last layer.
     :param spacing: Spacing in pixel between two layers
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
+    :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
 
     :return: Generated architecture image.
     """
@@ -194,12 +234,9 @@ def cnn_arch(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_
             draw.line([last_box.x2, last_box.y1,
                        x1, y1], fill=outline)
 
-        shade = 10 if de > 0 else 0  # todo: magic
+        fill_1 = fill_2 = fill_3 = get_rgba_tuple(fill)
 
-        fill_1 = fill_2 = fill_3 = fill
-
-        fill_2 = ImageColor.getrgb(fill_2)  # todo: this only works if fill is str!
-        fill_3 = ImageColor.getrgb(fill_3)
+        shade = shade_step if de > 0 else 0
 
         fill_2 = (fill_2[0] - shade, fill_2[1] - shade, fill_2[2] - shade)
         fill_3 = (fill_3[0] - 2 * shade, fill_3[1] - 2 * shade, fill_3[2] - 2 * shade)
