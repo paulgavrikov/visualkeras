@@ -1,9 +1,8 @@
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Dense, Flatten, Conv2D, Dropout, MaxPooling2D, InputLayer, ZeroPadding2D
-import visualkeras
 from collections import defaultdict
-from tensorflow import keras
-from tensorflow.keras import layers
+import visualkeras
+
 
 # create VGG16
 image_size = 224
@@ -69,34 +68,13 @@ color_map[MaxPooling2D]['fill'] = 'red'
 color_map[Dense]['fill'] = 'green'
 color_map[Flatten]['fill'] = 'teal'
 
-visualkeras.cnn_arch(model, to_file='../figures/vgg16.png', type_ignore=[visualkeras.SpacingDummyLayer])
-visualkeras.cnn_arch(model, to_file='../figures/vgg16_spacing_layers.png', spacing=50)
-visualkeras.cnn_arch(model, to_file='../figures/vgg16_type_ignore.png',
-                     type_ignore=[ZeroPadding2D, Dropout, Flatten, visualkeras.SpacingDummyLayer])
-visualkeras.cnn_arch(model, to_file='../figures/vgg16_color_map.png',
-                     color_map=color_map, type_ignore=[visualkeras.SpacingDummyLayer])
-visualkeras.cnn_arch(model, to_file='../figures/vgg16_flat.png',
-                     draw_volume=False, type_ignore=[visualkeras.SpacingDummyLayer])
-visualkeras.cnn_arch(model, to_file='../figures/vgg16_scaling.png',
-                     scale_xy=1, scale_z=1, max_z=1000, type_ignore=[visualkeras.SpacingDummyLayer])
-
-encoder_input = keras.Input(shape=(28, 28, 1), name='img')
-x = layers.Conv2D(16, 3, activation='relu')(encoder_input)
-x = layers.Conv2D(32, 3, activation='relu')(x)
-x = layers.MaxPooling2D(3)(x)
-x = layers.Conv2D(32, 3, activation='relu')(x)
-x = layers.Conv2D(16, 3, activation='relu')(x)
-encoder_output = layers.GlobalMaxPooling2D()(x)
-encoder = keras.Model(encoder_input, encoder_output, name='encoder')
-
-visualkeras.cnn_arch(encoder, to_file='../figures/encoder.png')
-
-x = layers.Reshape((4, 4, 1))(encoder_output)
-x = layers.Conv2DTranspose(16, 3, activation='relu')(x)
-x = layers.Conv2DTranspose(32, 3, activation='relu')(x)
-x = layers.UpSampling2D(3)(x)
-x = layers.Conv2DTranspose(16, 3, activation='relu')(x)
-decoder_output = layers.Conv2DTranspose(1, 3, activation='relu')(x)
-autoencoder = keras.Model(encoder_input, decoder_output, name='autoencoder')
-
-visualkeras.cnn_arch(autoencoder, to_file='../figures/autoencoder.png')
+visualkeras.layered_view(model, to_file='../figures/vgg16.png', type_ignore=[visualkeras.SpacingDummyLayer])
+visualkeras.layered_view(model, to_file='../figures/vgg16_spacing_layers.png', spacing=0)
+visualkeras.layered_view(model, to_file='../figures/vgg16_type_ignore.png',
+                         type_ignore=[ZeroPadding2D, Dropout, Flatten, visualkeras.SpacingDummyLayer])
+visualkeras.layered_view(model, to_file='../figures/vgg16_color_map.png',
+                         color_map=color_map, type_ignore=[visualkeras.SpacingDummyLayer])
+visualkeras.layered_view(model, to_file='../figures/vgg16_flat.png',
+                         draw_volume=False, type_ignore=[visualkeras.SpacingDummyLayer])
+visualkeras.layered_view(model, to_file='../figures/vgg16_scaling.png',
+                         scale_xy=1, scale_z=1, max_z=1000, type_ignore=[visualkeras.SpacingDummyLayer])
