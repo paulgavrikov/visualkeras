@@ -76,14 +76,15 @@ def get_rgba_tuple(color):
     return rgba
 
 
-def cnn_arch(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
-             max_xy: int = 2000,
-             scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = [], index_ignore: list = [],
-             color_map: dict = {}, one_dim_orientation: str = 'z',
-             background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
-             spacing: int = 10, draw_funnel: bool = True, shade_step=10) -> Image:
+def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
+                 max_xy: int = 2000,
+                 scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = [], index_ignore: list = [],
+                 color_map: dict = {}, one_dim_orientation: str = 'z',
+                 background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
+                 spacing: int = 10, draw_funnel: bool = True, shade_step=10) -> Image:
     """
-    Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each layer) in style of a Convolutional Neural Network.
+    Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
+    layer) in layered style (greeat for CNN).
 
     :param model: A keras model that will be visualized.
     :param to_file: Path to the file to write the created image to. If the image does not exist yet it will be created, else overwritten. Image type is inferred from the file ending. Providing None will disable writing.

@@ -1,1 +1,1 @@
-from visualkeras.cnn import *
+from visualkeras.layered import *

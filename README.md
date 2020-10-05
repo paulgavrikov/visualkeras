@@ -3,7 +3,8 @@
 
 ## Introduction
 Visualkeras is a Python package to help visualize Keras neural network architectures. It allows easy styling to fit most 
-needs. As of now it only supports CNN style architecture generation.
+needs. As of now it only supports layered style architecture generation which is great for CNNs (Convolutional Neural 
+Networks).
 
 ## Installation
 To install the current release:
@@ -20,22 +21,22 @@ import visualkeras
 
 model = ...
 
-visualkeras.cnn_arch(model).show() # display using your system viewer
-visualkeras.cnn_arch(model, to_file='output.png') # write to disk
-visualkeras.cnn_arch(model, to_file='output.png').show() # write and show
+visualkeras.layered_view(model).show() # display using your system viewer
+visualkeras.layered_view(model, to_file='output.png') # write to disk
+visualkeras.layered_view(model, to_file='output.png').show() # write and show
 ```
 
 To help unerstand some of the most important parameters we are going to use a VGG16 CNN architecture (see [example.py](examples/example.py)).
 
 ###### Default
 ```python
-visualkeras.cnn_arch(model)
+visualkeras.layered_view(model)
 ```
 ![Default view of a VGG16 CNN](figures/vgg16.png)
 
 ###### Flat Style
 ```python
-visualkeras.cnn_arch(model, draw_volume=False)
+visualkeras.layered_view(model, draw_volume=False)
 ```
 ![Flat view of a VGG16 CNN](figures/vgg16_flat.png)
 
@@ -49,7 +50,7 @@ model = ...
 model.add(visualkeras.SpacingDummyLayer(spacing=100))
 ...
 
-visualkeras.cnn_arch(model, spacing=50)
+visualkeras.layered_view(model, spacing=0)
 ```
 ![Spaced and grouped view of a VGG16 CNN](figures/vgg16_spacing_layers.png)
 
@@ -68,7 +69,7 @@ color_map[MaxPooling2D]['fill'] = 'red'
 color_map[Dense]['fill'] = 'green'
 color_map[Flatten]['fill'] = 'teal'
 
-visualkeras.cnn_arch(model, color_map=color_map)
+visualkeras.layered_view(model, color_map=color_map)
 ```
 ![Custom colored view of a VGG16 CNN](figures/vgg16_color_map.png)
 
@@ -77,7 +78,7 @@ Some models may consist of too many layers to visualize or to comprehend the mod
 hide (ignore) certain layers of the keras model without modifying it. Visualkeras allows ignoring layers by their type
  (`type_ignore`) or index in the keras layer sequence (`index_ignore`).
 ```python
-visualkeras.cnn_arch(model, type_ignore=[ZeroPadding2D, Dropout, Flatten])
+visualkeras.layered_view(model, type_ignore=[ZeroPadding2D, Dropout, Flatten])
 ```
 ![Simplified view of a VGG16 CNN](figures/vgg16_type_ignore.png)
 
@@ -87,7 +88,7 @@ applied. By default visualkeras will enlarge the x and y dimension and reduce th
 deemed visually most appealing. However, it is possible to control scaling using `scale_xy` and `scale_z`. Additionally, 
 to prevent to small or large options minimum and maximum values can be set (`min_xy`, `min_z`, `max_xy`, `max_z`).  
 ```python
-visualkeras.cnn_arch(model, scale_xy=1, scale_z=1, max_z=1000)
+visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ```
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
