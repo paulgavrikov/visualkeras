@@ -2,7 +2,7 @@
 
 
 ## Introduction
-Visualkeras is a Python package to help visualize Keras neural network architectures. It allows easy styling to fit most 
+Visualkeras is a Python package to help visualize Keras 1D and 2D neural network architectures. It allows easy styling to fit most 
 needs. As of now it only supports layered style architecture generation which is great for CNNs (Convolutional Neural 
 Networks).
 
