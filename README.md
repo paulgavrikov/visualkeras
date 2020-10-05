@@ -94,7 +94,5 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
 ## Planned features
-* Switch to pycairo
 * Translucent layers
-* Layer and Group labels
-* Special view for Fully Connected Neural Networks
+* Graph view for dense networks
