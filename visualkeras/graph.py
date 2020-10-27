@@ -1,20 +1,16 @@
-from typing import Any
 import aggdraw
 from PIL import Image, ImageDraw
 from math import ceil
 from .utils import *
 from .layer_utils import *
-
-try:
-    from tensorflow.python.keras.layers import Dense, InputLayer
-except:
-    from keras.layers import Dense, InputLayer
+import keras
 
 
 class _DummyLayer:
 
-    def __init__(self, units, name):
-        # self.units = units
+    def __init__(self, name, units=None):
+        if units:
+            self.units = units
         self.name = name
 
 
@@ -52,57 +48,17 @@ def graph_view(model, to_file: str = None,
 
     # Iterate over the model to compute bounds and generate boxes
 
-    # TODO: assert len of input and outlabels
-
     layers = list()
-    # layer_labels = list()
     layer_y = list()
-
-    if inout_as_tensor:
-        inputs = len(model.inputs)
-        outputs = len(model.outputs)
-    else:
-        inputs = self_multiply(model.input_shape)
-        outputs = self_multiply(model.output_shape)
-    #
-    # # Make labels if not provided
-    #
-    # if not input_labels:
-    #     input_labels = [f"Input {i}" for i in range(inputs)]
-    #
-    # if not output_labels:
-    #     output_labels = [f"Output {i}" for i in range(outputs)]
-    #
-    # # Measure label size
-    #
-    # fake_img = Image.new('RGB', (0, 0))
-    # fake_draw = ImageDraw.Draw(fake_img)
-    # input_label_size = max([fake_draw.textsize(text=s) for s in input_labels])
-    # output_label_size = max([fake_draw.textsize(text=s) for s in output_labels])
-    #
-    # del fake_img, fake_draw
 
     # Attach helper layers
 
     id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
-    model_layers = model_to_hierarchy_lists(model, id_to_num_mapping, adj_matrix)
+    model_layers = model_to_hierarchy_lists(model)
 
     # add fake output layers
-    num_outs = len(model.outputs)
-    adj_matrix = np.pad(adj_matrix, ((0, num_outs), (0, num_outs)), mode='constant', constant_values=0)
-    dummy_outputs = [_DummyLayer(1, 'output_' + str(i + 1)) for i in range(num_outs)]
-    model_layers.append(dummy_outputs)
-    for dummy_output in dummy_outputs:
-        id_to_num_mapping[id(dummy_output)] = len(id_to_num_mapping.keys())
-
-    for i, output_layer in enumerate(find_output_layers(model)):
-        output_layer_idx = id_to_num_mapping[id(output_layer)]
-        dummy_layer_idx = id_to_num_mapping[id(dummy_outputs[i])]
-
-        adj_matrix[output_layer_idx, dummy_layer_idx] += 1
-
-    # if not hasattr(model_layers[-1], 'filters') and not hasattr(model_layers[-1], 'units'):
-    #     model_layers += [_DummyLayer(units=outputs, is_input=False)]
+    model_layers.append([_DummyLayer(model.output_names[i], None if inout_as_tensor else self_multiply(model.output_shape[i])) for i in range(len(model.outputs))])
+    id_to_num_mapping, adj_matrix = augment_output_layers(model, model_layers[-1], id_to_num_mapping, adj_matrix)
 
     # Create architecture
 
@@ -114,15 +70,10 @@ def graph_view(model, to_file: str = None,
         current_y = 0
         nodes = []
         for layer in layer_list:
-            # label = layer.name
-            #
-            # if isinstance(layer, Dense):
-            #     label += f"({layer.units}, {str(layer.activation.__name__)})"
-            #
-            # layer_labels.append(label)
 
-            units = 1
             is_box = True
+            units = 1
+
             if show_neurons:
                 if hasattr(layer, 'units'):
                     is_box = False
@@ -130,6 +81,9 @@ def graph_view(model, to_file: str = None,
                 elif hasattr(layer, 'filters'):
                     is_box = False
                     units = layer.filters
+                elif isinstance(layer, keras.engine.input_layer.InputLayer) and not inout_as_tensor:
+                    is_box = False
+                    units = self_multiply(layer.input_shape)
 
             n = min(units, ellipsize_after)
             layer_nodes = list()
@@ -167,10 +121,8 @@ def graph_view(model, to_file: str = None,
 
     # Generate image
 
-    img_width = len(layers) * node_size + (len(layers) - 1) * layer_spacing + 2 * padding \
-               # + input_label_size[0] + output_label_size[0] + text_padding * 2
-    img_height = max(*layer_y) + 2 * padding \
-                # + text_padding + input_label_size[1]
+    img_width = len(layers) * node_size + (len(layers) - 1) * layer_spacing + 2 * padding
+    img_height = max(*layer_y) + 2 * padding
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
 
     draw = aggdraw.Draw(img)
@@ -178,7 +130,6 @@ def graph_view(model, to_file: str = None,
     # y correction (centering)
     for i, layer in enumerate(layers):
         y_off = (img.height - layer_y[i]) / 2
-        # y_off += text_padding + input_label_size[1]
         for node in layer:
             node.y1 += y_off
             node.y2 += y_off
@@ -197,25 +148,7 @@ def graph_view(model, to_file: str = None,
                     _draw_connector(draw, start_node, end_node, color=connector_fill, width=connector_width)
 
     for i, layer in enumerate(layers):
-
-        # layer_label_w = draw.textsize(layer_labels[i])
-        # draw.text((layer[0].x1 + (layer[0].x2 - layer[0].x1 - layer_label_w[0]) / 2, padding), layer_labels[i],
-        #           fill=text_color)
-
         for node_index, node in enumerate(layer):
-
-            # Draw labels
-
-            # if i == 0 and not isinstance(node, Ellipses):
-            #     cy = node.y1 + (node.y2 - node.y1 - input_label_size[1]) / 2
-            #     text = input_labels[node_index] if node_index != len(layer) - 1 else input_labels[-1]
-            #     draw.text((padding, cy), text, fill=text_color)
-            #
-            # if i == len(layers) - 1 and not isinstance(node, Ellipses):
-            #     cy = node.y1 + (node.y2 - node.y1 - output_label_size[1]) / 2
-            #     text = output_labels[node_index] if node_index != len(layer) - 1 else output_labels[-1]
-            #     draw.text((node.x2 + text_padding, cy), text, fill=text_color)
-
             _draw_node(node, draw)
 
     draw.flush()
