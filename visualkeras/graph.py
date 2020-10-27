@@ -18,13 +18,12 @@ class _DummyLayer:
         self.name = name
 
 
-def graph_view(model, to_file: str = None, type_ignore: list = [], index_ignore: list = [],
+def graph_view(model, to_file: str = None,
                color_map: dict = {}, node_size: int = 50,
-               background_fill: Any = 'black', padding: int = 10,
+               background_fill: Any = 'white', padding: int = 10,
                layer_spacing: int = 250, node_spacing: int = 10, connector_fill: Any = 'gray',
-               connector_width: int = 1, ellipsize_after: int = 10, input_labels: list = None,
-               output_labels=None, text_padding: int = 10, text_color: Any = 'black',
-               inout_as_tensor: bool = True, show_units: bool = True) -> Image:
+               connector_width: int = 1, ellipsize_after: int = 10,
+               inout_as_tensor: bool = True, show_neurons: bool = True) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in graph style.
@@ -32,8 +31,6 @@ def graph_view(model, to_file: str = None, type_ignore: list = [], index_ignore:
     :param model: A keras model that will be visualized.
     :param to_file: Path to the file to write the created image to. If the image does not exist yet it will be created,
     else overwritten. Image type is inferred from the file ending. Providing None will disable writing.
-    :param type_ignore: List of layer types in the keras model to ignore during drawing.
-    :param index_ignore: List of layer indexes in the keras model to ignore during drawing.
     :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for
     not specified classes.
     :param node_size: Size in pixel each node will have.
@@ -41,8 +38,14 @@ def graph_view(model, to_file: str = None, type_ignore: list = [], index_ignore:
     :param padding: Distance in pixel before the first and after the last layer.
     :param layer_spacing: Spacing in pixel between two layers
     :param node_spacing: Spacing in pixel between nodes
-    :param inout_as_tensor: If True there will be one input and output for each tensor, else the tensor will be
-    flattened and one node for each scalar will be created (e.g. a (10, 10, ) shape will be represented by 100 nodes)
+    :param connector_fill: Color for the connectors. Can be str or (R,G,B,A).
+    :param connector_width: Line-width of the connectors in pixel.
+    :param ellipsize_after: Maximum number of neurons per layer to draw. If a layer is exceeding this, the remaining
+    neurons will be drawn as ellipses.
+    :param inout_as_tensor: If True there will be one input and output node for each tensor, else the tensor will be
+    flattened and one node for each scalar will be created (e.g. a (10, 10) shape will be represented by 100 nodes)
+    :param show_neurons: If True a node for each neuron in supported layers is created (constrained by ellipsize_after),
+    else each layer is represented by a node
 
     :return: Generated architecture image.
     """
@@ -120,7 +123,7 @@ def graph_view(model, to_file: str = None, type_ignore: list = [], index_ignore:
 
             units = 1
             is_box = True
-            if show_units:
+            if show_neurons:
                 if hasattr(layer, 'units'):
                     is_box = False
                     units = layer.units
@@ -149,7 +152,7 @@ def graph_view(model, to_file: str = None, type_ignore: list = [], index_ignore:
 
                 current_y = c.y2 + node_spacing
 
-                c.fill = color_map.get(type(layer), {}).get('fill', 'cyan')
+                c.fill = color_map.get(type(layer), {}).get('fill', 'orange')
                 c.outline = color_map.get(type(layer), {}).get('outline', 'black')
 
                 layer_nodes.append(c)
@@ -234,7 +237,7 @@ def _draw_connector(draw, start_node, end_node, color, width):
 
 def _draw_node(node: RectShape, draw: ImageDraw):
     pen = aggdraw.Pen(node.outline)
-    brush = aggdraw.Brush(node.fill, 200)
+    brush = aggdraw.Brush(node.fill)
     if isinstance(node, Circle):
         draw.ellipse([node.x1, node.y1, node.x2, node.y2], pen, brush)
     elif isinstance(node, Box):
