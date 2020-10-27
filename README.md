@@ -1,5 +1,8 @@
 # visualkeras
 
+[![Wheel Status](https://pypip.in/wheel/visualkeras/badge.svg?style=flat)](https://pypi.python.org/pypi/visualkeras)
+[![Latest Version](https://pypip.in/version/visualkeras/badge.svg?style=flat)](https://pypi.python.org/pypi/visualkeras)
+[![Build Status](https://travis-ci.org/paulgavrikov/visualkeras.svg?branch=master)](https://travis-ci.org/paulgavrikov/visualkeras)
 
 ## Introduction
 Visualkeras is a Python package to help visualize Keras 1D and 2D neural network architectures. It allows easy styling to fit most 
