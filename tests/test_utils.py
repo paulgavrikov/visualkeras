@@ -73,7 +73,7 @@ class UtilMethods(unittest.TestCase):
         self.assertEqual(x, y)
 
         x = get_rgba_tuple(0x01020304)
-        y = (1, 2, 3, 4)
+        y = (2, 3, 4, 255)
         self.assertEqual(x, y)
 
 

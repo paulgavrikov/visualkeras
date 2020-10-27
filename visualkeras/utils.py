@@ -42,12 +42,12 @@ def get_rgba_tuple(color) -> tuple:
     :param color:
     :return: (R, G, B, A) tuple
     """
-    if isinstance(color, str):
-        rgba = ImageColor.getrgb(color)
-    elif isinstance(color, tuple):
+    if isinstance(color, tuple):
         rgba = color
+    elif isinstance(color, int):
+        return color >> 16 & 0xff, color >> 8 & 0xff, color & 0xff, 255
     else:
-        return 0, 0, 0, 255  # todo
+        rgba = ImageColor.getrgb(color)
 
     if len(rgba) == 3:
         rgba = (rgba[0], rgba[1], rgba[2], 255)
