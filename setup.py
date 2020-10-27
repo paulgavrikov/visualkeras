@@ -19,7 +19,9 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-        'pillow>=6.2.0'
+        'pillow>=6.2.0',
+        'numpy>=1.18.1',
+        'aggdraw>=1.3.11'
     ],
     python_requires='>=3.6',
 )
