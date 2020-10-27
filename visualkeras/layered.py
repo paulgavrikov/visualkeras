@@ -2,7 +2,7 @@ from typing import Any
 from PIL import Image, ImageDraw
 from math import ceil
 from .utils import *
-
+from .layer_utils import *
 
 def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
                  max_xy: int = 2000,
