@@ -1,20 +1,31 @@
-# visualkeras
+# visualkeras for Keras / TensorFlow
 
 [![Wheel Status](https://pypip.in/wheel/visualkeras/badge.svg?style=flat)](https://pypi.python.org/pypi/visualkeras)
 [![Latest Version](https://pypip.in/version/visualkeras/badge.svg?style=flat)](https://pypi.python.org/pypi/visualkeras)
 [![Build Status](https://travis-ci.org/paulgavrikov/visualkeras.svg?branch=master)](https://travis-ci.org/paulgavrikov/visualkeras)
 
 ## Introduction
-Visualkeras is a Python package to help visualize Keras 1D and 2D neural network architectures. It allows easy styling to fit most 
-needs. As of now it only supports layered style architecture generation which is great for CNNs (Convolutional Neural 
-Networks).
+Visualkeras is a Python package to help visualize Keras (either standalone or included in tensorflow) neural network architectures. It allows easy styling to fit most 
+needs. As of now it supports layered style architecture generation which is great for CNNs (Convolutional Neural 
+Networks) and a grap style architecture.
+
+## Model Support
+
+|  Mode | Sequential  |  Functional |  Subclassed models |
+|---|---|---|---|
+| `visualkeras.layered_view()` | yes<sup>(1)</sup> | partially<sup>(1,2)</sup> |  not tested |
+| `visualkeras.graph_view()` | yes | yes |  not tested |
+
+<sup>1</sup>: Any tensor with more than 3 dimensions will be rendered as 3D tensor with elongated z-axis.
+
+<sup>2</sup>: Only linear models where each layer has no more than one in or output. Non-linear models will be shown in sequential order.
 
 ## Installation
 To install the current release:
 ```bash
 pip install visualkeras
 ```
-To update visual to the latest version, add --upgrade flag to the above commands.
+To update visualkeras to the latest version, add the `--upgrade` flag to the above commands.
 
 ## Usage
 
@@ -96,6 +107,3 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
-## Planned features
-* Translucent layers
-* Graph view for dense networks
