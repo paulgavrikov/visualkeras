@@ -3,7 +3,6 @@ from PIL import Image, ImageDraw
 from math import ceil
 from .utils import *
 from .layer_utils import *
-import keras
 
 
 class _DummyLayer:
@@ -54,7 +53,7 @@ def graph_view(model, to_file: str = None,
     # Attach helper layers
 
     id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
-    model_layers = model_to_hierarchy_lists(model)
+    model_layers = model_to_hierarchy_lists(model, id_to_num_mapping, adj_matrix)
 
     # add fake output layers
     model_layers.append([_DummyLayer(model.output_names[i], None if inout_as_tensor else self_multiply(model.output_shape[i])) for i in range(len(model.outputs))])
@@ -81,7 +80,7 @@ def graph_view(model, to_file: str = None,
                 elif hasattr(layer, 'filters'):
                     is_box = False
                     units = layer.filters
-                elif isinstance(layer, keras.engine.input_layer.InputLayer) and not inout_as_tensor:
+                elif is_internal_input(layer) and not inout_as_tensor:
                     is_box = False
                     units = self_multiply(layer.input_shape)
 

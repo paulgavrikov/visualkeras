@@ -1,23 +1,30 @@
 import numpy as np
 from .utils import get_keys_by_value
+from collections.abc import Iterable
 
-try:  # only define the dummy layer if tensorflow is installed
-    from tensorflow.python.keras.layers import Layer
-
-
-    class SpacingDummyLayer(Layer):
-
-        def __init__(self, spacing: int = 50):
-            super().__init__()
-            self.spacing = spacing
+try:
+    from tensorflow.keras.layers import Layer
 except:
-    pass
+    try:
+        from keras.layers import Layer
+    except:
+        pass
+
+
+class SpacingDummyLayer(Layer):
+
+    def __init__(self, spacing: int = 50):
+        super().__init__()
+        self.spacing = spacing
 
 
 def get_incoming_layers(layer):
     for i, node in enumerate(layer._inbound_nodes):
-        for inbound_layer in node.inbound_layers:
-            yield inbound_layer
+        if isinstance(node.inbound_layers, Iterable):
+            for inbound_layer in node.inbound_layers:
+                yield inbound_layer
+        else:  # for tf 2.3
+            yield node.inbound_layers
 
 
 def get_outgoing_layers(layer):
@@ -26,9 +33,7 @@ def get_outgoing_layers(layer):
 
 
 def model_to_adj_matrix(model):
-    from keras.models import Sequential
-
-    if isinstance(model, Sequential):
+    if hasattr(model, 'built'):
         if not model.built:
             model.build()
     layers = model._layers
@@ -81,9 +86,32 @@ def find_output_layers(model):
         yield model.get_layer(name=name)
 
 
-def model_to_hierarchy_lists(model):
-    return [model._layers_by_depth[d]
-            for d in sorted(list(model._layers_by_depth.keys()))[::-1]]
+def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
+    if adj_matrix is None:
+        id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
+    hierarchy = [set(find_input_layers(model, id_to_num_mapping, adj_matrix))]
+    prev_layers = set(hierarchy[0])
+    finished = False
+
+    while not finished:
+        layer = list()
+        finished = True
+        for start_layer in hierarchy[-1]:
+            start_layer_idx = id_to_num_mapping[id(start_layer)]
+            for end_layer_idx in np.where(adj_matrix[start_layer_idx] > 0)[0]:
+                finished = False
+                for end_layer_id in get_keys_by_value(id_to_num_mapping, end_layer_idx):
+                    end_layer = find_layer_by_id(model, end_layer_id)
+                    incoming_to_end_layer = set(get_incoming_layers(end_layer))
+                    intersection = set(incoming_to_end_layer).intersection(prev_layers)
+                    if len(intersection) == len(incoming_to_end_layer):
+                        if end_layer not in layer:
+                            layer.append(end_layer)
+                            prev_layers.add(end_layer)
+        if not finished:
+            hierarchy.append(layer)
+
+    return hierarchy
 
 
 def augment_output_layers(model, output_layers, id_to_num_mapping, adj_matrix):
@@ -100,3 +128,21 @@ def augment_output_layers(model, output_layers, id_to_num_mapping, adj_matrix):
         adj_matrix[output_layer_idx, dummy_layer_idx] += 1
 
     return id_to_num_mapping, adj_matrix
+
+
+def is_internal_input(layer):
+    try:
+        import tensorflow as tf
+        if isinstance(layer, tf.python.keras.engine.input_layer.InputLayer):
+            return True
+    except:
+        pass
+
+    try:
+        import keras
+        if isinstance(layer, keras.engine.input_layer.InputLayer):
+            return True
+    except:
+        pass
+
+    return False
