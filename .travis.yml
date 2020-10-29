@@ -5,10 +5,10 @@ python:
   - "3.7"
   - "3.8"
   - "3.9"
-  - "nightly"  # nightly build
 # command to install dependencies
 install:
   - python setup.py -q install
+  - python -m pip install -q tensorflow keras
 # command to run tests
 script:
   - python -m pytest
