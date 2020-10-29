@@ -1,5 +1,6 @@
 from typing import Any
-from PIL import ImageColor
+from PIL import ImageColor, ImageDraw
+import aggdraw
 
 
 class RectShape:
@@ -7,20 +8,77 @@ class RectShape:
     x2: int
     y1: int
     y2: int
-    fill: Any
-    outline: Any
+    _fill: Any
+    _outline: Any
+
+    @property
+    def fill(self):
+        return self._fill
+
+    @property
+    def outline(self):
+        return self._outline
+
+    @fill.setter
+    def fill(self, v):
+        self._fill = get_rgba_tuple(v)
+
+    @outline.setter
+    def outline(self, v):
+        self._outline = get_rgba_tuple(v)
+
+    def _get_pen_brush(self):
+        pen = aggdraw.Pen(self._outline)
+        brush = aggdraw.Brush(self._fill)
+        return pen, brush
 
 
 class Box(RectShape):
     de: int
+    shade: int
+
+    def draw(self, draw: ImageDraw):
+        pen, brush = self._get_pen_brush()
+
+        if hasattr(self, 'de') and self.de > 0:
+            brush_s1 = aggdraw.Brush(fade_color(self.fill, self.shade))
+            brush_s2 = aggdraw.Brush(fade_color(self.fill, 2 * self.shade))
+
+            draw.line([self.x1 + self.de, self.y1 - self.de, self.x1 + self.de, self.y2 - self.de], pen)
+            draw.line([self.x1 + self.de, self.y2 - self.de, self.x1, self.y2], pen)
+            draw.line([self.x1 + self.de, self.y2 - self.de, self.x2 + self.de, self.y2 - self.de], pen)
+
+            draw.polygon([self.x1, self.y1,
+                          self.x1 + self.de, self.y1 - self.de,
+                          self.x2 + self.de, self.y1 - self.de,
+                          self.x2, self.y1
+                          ], pen, brush_s1)
+
+            draw.polygon([self.x2 + self.de, self.y1 - self.de,
+                          self.x2, self.y1,
+                          self.x2, self.y2,
+                          self.x2 + self.de, self.y2 - self.de
+                          ], pen, brush_s2)
+
+        draw.rectangle([self.x1, self.y1, self.x2, self.y2], pen, brush)
 
 
 class Circle(RectShape):
-    pass
+
+    def draw(self, draw: ImageDraw):
+        pen, brush = self._get_pen_brush()
+        draw.ellipse([self.x1, self.y1, self.x2, self.y2], pen, brush)
 
 
 class Ellipses(RectShape):
-    pass
+
+    def draw(self, draw: ImageDraw):
+        pen, brush = self._get_pen_brush()
+        w = self.x2 - self.x1
+        d = int(w / 7)
+        draw.ellipse([self.x1 + (w - d) / 2, self.y1 + 1 * d, self.x1 + (w + d) / 2, self.y1 + 2 * d], pen, brush)
+        draw.ellipse([self.x1 + (w - d) / 2, self.y1 + 3 * d, self.x1 + (w + d) / 2, self.y1 + 4 * d], pen, brush)
+        draw.ellipse([self.x1 + (w - d) / 2, self.y1 + 5 * d, self.x1 + (w + d) / 2, self.y1 + 6 * d], pen, brush)
 
 
 class ColorWheel:
@@ -36,7 +94,14 @@ class ColorWheel:
         return self._cache.get(class_type)
 
 
-def get_rgba_tuple(color) -> tuple:
+def fade_color(color: tuple, fade_amount: int) -> tuple:
+    r = max(0, color[0] - fade_amount)
+    g = max(0, color[1] - fade_amount)
+    b = max(0, color[2] - fade_amount)
+    return r, g, b, color[3]
+
+
+def get_rgba_tuple(color: Any) -> tuple:
     """
 
     :param color:
@@ -45,7 +110,7 @@ def get_rgba_tuple(color) -> tuple:
     if isinstance(color, tuple):
         rgba = color
     elif isinstance(color, int):
-        return color >> 16 & 0xff, color >> 8 & 0xff, color & 0xff, 255
+        rgba = (color >> 16 & 0xff, color >> 8 & 0xff, color & 0xff, color >> 24 & 0xff)
     else:
         rgba = ImageColor.getrgb(color)
 

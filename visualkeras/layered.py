@@ -1,8 +1,9 @@
-from typing import Any
 from PIL import Image, ImageDraw
+import aggdraw
 from math import ceil
 from .utils import *
 from .layer_utils import *
+
 
 def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
                  max_xy: int = 2000,
@@ -12,7 +13,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  spacing: int = 10, draw_funnel: bool = True, shade_step=10) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
-    layer) in layered style (greeat for CNN).
+    layer) in layered style (great for CNN).
 
     :param model: A keras model that will be visualized.
     :param to_file: Path to the file to write the created image to. If the image does not exist yet it will be created, else overwritten. Image type is inferred from the file ending. Providing None will disable writing.
@@ -39,6 +40,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     # Iterate over the model to compute bounds and generate boxes
 
     boxes = list()
+    layer_y = list()
     color_wheel = ColorWheel()
     current_z = padding
     x_off = -1
@@ -69,10 +71,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         else:
             raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
 
-        if len(shape) == 4:
+        if len(shape) >= 4:
             x = min(max(shape[1] * scale_xy, x), max_xy)
             y = min(max(shape[2] * scale_xy, y), max_xy)
-            z = min(max(shape[3] * scale_z, z), max_z)
+            z = min(max(self_multiply(shape[3:]) * scale_z, z), max_z)
         elif len(shape) == 3:
             x = min(max(shape[1] * scale_xy, x), max_xy)
             y = min(max(shape[2] * scale_xy, y), max_xy)
@@ -109,7 +111,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         box.fill = color_map.get(type(layer), {}).get('fill', color_wheel.get_color(type(layer)))
         box.outline = color_map.get(type(layer), {}).get('outline', 'black')
 
+        box.shade = shade_step
         boxes.append(box)
+        layer_y.append(box.y2 - (box.y1 - box.de))
 
         # Update image bounds
         hh = box.y2 - (box.y1 - box.de)
@@ -124,73 +128,44 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     # Generate image
     img_width = max_right + x_off + padding
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
-    draw = ImageDraw.Draw(img)
+    draw = aggdraw.Draw(img)
 
-    # draw.line([0, img.height / 2, img.width, img.height / 2], fill='red', width=5)
-    # draw.line([img.width / 2, 0, img.width / 2, img.height], fill='red', width=5)
+    # x, y correction (centering)
+
+    for i, node in enumerate(boxes):
+        y_off = (img.height - layer_y[i]) / 2
+        node.y1 += y_off
+        node.y2 += y_off
+
+        node.x1 += x_off
+        node.x2 += x_off
 
     # Draw created boxes
 
     last_box = None
 
     for box in boxes:
-        fill = box.fill
-        outline = box.outline
-        y_off = (img.height - (box.y2 - (box.y1 - box.de))) / 2  # center the layer vertically
 
-        box.y1 += y_off
-        box.y2 += y_off
-
-        box.x1 += x_off
-        box.x2 += x_off
-
-        x1 = box.x1
-        x2 = box.x2
-        y1 = box.y1
-        y2 = box.y2
-        de = box.de
+        pen = aggdraw.Pen(get_rgba_tuple(box.outline))
 
         if last_box is not None and draw_funnel:
             draw.line([last_box.x2 + last_box.de, last_box.y1 - last_box.de,
-                       x1 + de, y1 - de], fill=outline)
+                       box.x1 + box.de, box.y1 - box.de], pen)
 
             draw.line([last_box.x2 + last_box.de, last_box.y2 - last_box.de,
-                       x1 + de, y2 - de], fill=outline)
+                       box.x1 + box.de, box.y2 - box.de], pen)
 
             draw.line([last_box.x2, last_box.y2,
-                       x1, y2], fill=outline)
+                       box.x1, box.y2], pen)
 
             draw.line([last_box.x2, last_box.y1,
-                       x1, y1], fill=outline)
+                       box.x1, box.y1], pen)
 
-        fill_1 = fill_2 = fill_3 = get_rgba_tuple(fill)
-
-        shade = shade_step if de > 0 else 0
-
-        fill_2 = (fill_2[0] - shade, fill_2[1] - shade, fill_2[2] - shade)
-        fill_3 = (fill_3[0] - 2 * shade, fill_3[1] - 2 * shade, fill_3[2] - 2 * shade)
-
-        draw.rectangle([x1, y1, x2, y2],
-                       fill=fill_3,
-                       outline=outline)
-
-        draw.polygon([x1, y1,
-                      x1 + de, y1 - de,
-                      x2 + de, y1 - de,
-                      x2, y1
-                      ], fill=fill_2, outline=outline)
-
-        draw.polygon([x2 + de, y1 - de,
-                      x2, y1,
-                      x2, y2,
-                      x2 + de, y2 - de
-                      ], fill=fill_1, outline=outline)
-
-        # draw.line([x1 + de, y1 - de, x1 + de, y2 - de], fill=outline)
-        # draw.line([x1 + de, y2 - de, x1, y2], fill=outline)
-        # draw.line([x1 + de, y2 - de, x2 + de, y2 - de], fill=outline)
+        box.draw(draw)
 
         last_box = box
+
+    draw.flush()
 
     if to_file is not None:
         img.save(to_file)

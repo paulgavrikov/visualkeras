@@ -76,7 +76,6 @@ def get_functional_model_with_nested(lib):
 
     output = lib.layers.Dense(1, activation='softmax', name='dense_4')(sub_out)
 
-
     model = lib.Model([input_img, input_img2], [output, mid_1])
     return model
 
@@ -97,7 +96,6 @@ def get_sequential_model(lib):
 
 
 def get_sequential_model_with_nested(lib):
-
     submodel = lib.models.Sequential()
     submodel.add(lib.layers.Dense(1, activation='relu', name='sub_dense_1'))
     submodel.add(lib.layers.Dropout(0.5, name='sub_dropout'))
@@ -156,7 +154,7 @@ def _get_models(request):
         return get_sequential_model(tf.keras)
     elif request.param == "sequential_model_keras":
         return get_sequential_model(keras)
-    
+
     elif request.param == "functional_model_tf_with_nested":
         return get_functional_model_with_nested(tf.keras)
     elif request.param == "functional_model_keras_with_nested":
@@ -165,6 +163,6 @@ def _get_models(request):
         return get_sequential_model_with_nested(tf.keras)
     elif request.param == "sequential_model_keras_with_nested":
         return get_sequential_model_with_nested(keras)
-    
+
     else:
         raise ValueError("invalid internal test config")

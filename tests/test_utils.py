@@ -1,5 +1,5 @@
 import unittest
-from visualkeras.utils import get_rgba_tuple, self_multiply, get_keys_by_value
+from visualkeras.utils import get_rgba_tuple, self_multiply, get_keys_by_value, fade_color
 
 
 class UtilMethods(unittest.TestCase):
@@ -69,12 +69,15 @@ class UtilMethods(unittest.TestCase):
 
     def test_get_rgba_tuples_by_int(self):
         x = get_rgba_tuple(0x010203)
-        y = (1, 2, 3, 255)
+        y = (1, 2, 3, 0)
         self.assertEqual(x, y)
 
         x = get_rgba_tuple(0x01020304)
-        y = (2, 3, 4, 255)
+        y = (2, 3, 4, 1)
         self.assertEqual(x, y)
+
+    def test_fade_color(self):
+        self.assertEqual(fade_color((0, 10, 30, 200), 20), (0, 0, 10, 200))
 
 
 if __name__ == '__main__':

@@ -11,4 +11,4 @@ install:
   - python -m pip install -q tensorflow keras
 # command to run tests
 script:
-  - python -m pytest
+  - python -m pytest -v

@@ -148,7 +148,7 @@ def graph_view(model, to_file: str = None,
 
     for i, layer in enumerate(layers):
         for node_index, node in enumerate(layer):
-            _draw_node(node, draw)
+            node.draw(draw)
 
     draw.flush()
 
@@ -165,18 +165,3 @@ def _draw_connector(draw, start_node, end_node, color, width):
     x2 = end_node.x1
     y2 = end_node.y1 + (end_node.y2 - end_node.y1) / 2
     draw.line([x1, y1, x2, y2], pen)
-
-
-def _draw_node(node: RectShape, draw: ImageDraw):
-    pen = aggdraw.Pen(node.outline)
-    brush = aggdraw.Brush(node.fill)
-    if isinstance(node, Circle):
-        draw.ellipse([node.x1, node.y1, node.x2, node.y2], pen, brush)
-    elif isinstance(node, Box):
-        draw.rectangle([node.x1, node.y1, node.x2, node.y2], pen, brush)
-    elif isinstance(node, Ellipses):
-        w = node.x2 - node.x1
-        d = int(w / 7)
-        draw.ellipse([node.x1 + (w - d) / 2, node.y1 + 1 * d, node.x1 + (w + d) / 2, node.y1 + 2 * d], pen, brush)
-        draw.ellipse([node.x1 + (w - d) / 2, node.y1 + 3 * d, node.x1 + (w + d) / 2, node.y1 + 4 * d], pen, brush)
-        draw.ellipse([node.x1 + (w - d) / 2, node.y1 + 5 * d, node.x1 + (w + d) / 2, node.y1 + 6 * d], pen, brush)
