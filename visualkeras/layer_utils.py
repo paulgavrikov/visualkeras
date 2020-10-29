@@ -4,10 +4,10 @@ from collections.abc import Iterable
 
 try:
     from tensorflow.keras.layers import Layer
-except:
+except ModuleNotFoundError:
     try:
         from keras.layers import Layer
-    except:
+    except ModuleNotFoundError:
         pass
 
 
@@ -135,14 +135,14 @@ def is_internal_input(layer):
         import tensorflow as tf
         if isinstance(layer, tf.python.keras.engine.input_layer.InputLayer):
             return True
-    except:
+    except ModuleNotFoundError:
         pass
 
     try:
         import keras
         if isinstance(layer, keras.engine.input_layer.InputLayer):
             return True
-    except:
+    except ModuleNotFoundError:
         pass
 
     return False
