@@ -132,8 +132,8 @@ def augment_output_layers(model, output_layers, id_to_num_mapping, adj_matrix):
 
 def is_internal_input(layer):
     try:
-        import tensorflow as tf
-        if isinstance(layer, tf.python.keras.engine.input_layer.InputLayer):
+        import tensorflow.python.keras.engine.input_layer.InputLayer
+        if isinstance(layer, tensorflow.python.keras.engine.input_layer.InputLayer):
             return True
     except ModuleNotFoundError:
         pass
