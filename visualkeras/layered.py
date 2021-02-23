@@ -10,7 +10,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = [], index_ignore: list = [],
                  color_map: dict = {}, one_dim_orientation: str = 'z',
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
-                 spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = True,
+                 spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
                  font_size: int = 24) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
