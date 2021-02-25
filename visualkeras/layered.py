@@ -181,9 +181,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         try:
             font = ImageFont.truetype(font_path, font_size)
-
+            default_font = False
         except OSError:
             font = ImageFont.load_default()
+            default_font = True
             traceback.print_exc()
             print("Font cannot be open, loading default font")
             print("Please check the path: ", font_path)
@@ -203,7 +204,11 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             box.outline = color_map[layer].get('outline', "#000000")
             last_box = box
             box.draw(draw_box)
-            draw_text.text((box.x2 + 10, box.y1 - (font_size / 2)), layer, font=font, fill='black')
+            if not default_font:
+                draw_text.text((box.x2 + 10, box.y1 - (font_size / 2)), layer, font=font, fill='black')
+            else:
+                draw_text.text((box.x2 + 10, box.y1 - 8/2), layer, font=font, fill='black')
+
 
         draw_box.flush()
         img_box.paste(img_text, mask=img_text)
