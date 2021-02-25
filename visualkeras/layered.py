@@ -1,3 +1,4 @@
+import traceback
 from PIL import Image, ImageDraw, ImageFont
 import aggdraw
 from math import ceil
@@ -11,7 +12,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  color_map: dict = {}, one_dim_orientation: str = 'z',
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
                  spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
-                 font_size: int = 24) -> Image:
+                 font_size: int = 24, font_path: str = 'arial.ttf') -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -178,7 +179,14 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         draw_box = aggdraw.Draw(img_box)
         draw_text = ImageDraw.Draw(img_text)
 
-        font = ImageFont.truetype("arial.ttf", font_size)
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+
+        except OSError:
+            font = ImageFont.load_default()
+            traceback.print_exc()
+            print("Font cannot be open, loading default font")
+            print("Please check the path: ", font_path)
 
         last_box = Box()
         last_box.y2 = 0
@@ -195,7 +203,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             box.outline = color_map[layer].get('outline', "#000000")
             last_box = box
             box.draw(draw_box)
-            draw_text.text((box.x2 + 10, box.y1 - (font_size/2)), layer, font=font, fill='black')
+            draw_text.text((box.x2 + 10, box.y1 - (font_size / 2)), layer, font=font, fill='black')
 
         draw_box.flush()
         img_box.paste(img_text, mask=img_text)
