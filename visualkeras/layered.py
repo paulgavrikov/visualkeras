@@ -1,5 +1,4 @@
-from PIL import Image, ImageDraw
-import aggdraw
+from PIL import ImageFont
 from math import ceil
 from .utils import *
 from .layer_utils import *
@@ -10,7 +9,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = [], index_ignore: list = [],
                  color_map: dict = {}, one_dim_orientation: str = 'z',
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
-                 spacing: int = 10, draw_funnel: bool = True, shade_step=10) -> Image:
+                 spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
+                 font: ImageFont = None, font_color: Any = 'black') -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -33,6 +33,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param spacing: Spacing in pixel between two layers
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
     :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
+    :param legend: Add a legend of the layers to the image
+    :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
+    :param font_color: Color for the font if used. Can be str or (R,G,B,A).
 
     :return: Generated architecture image.
     """
@@ -44,6 +47,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     color_wheel = ColorWheel()
     current_z = padding
     x_off = -1
+
+    layer_names = set()
 
     img_height = 0
     max_right = 0
@@ -58,6 +63,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         if type(layer) == SpacingDummyLayer:
             current_z += layer.spacing
             continue
+
+        layer_name = type(layer).__name__
+        layer_names.add(layer_name)
 
         x = min_xy
         y = min_xy
@@ -108,8 +116,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         box.x2 = box.x1 + z
         box.y2 = box.y1 + y
 
-        box.fill = color_map.get(type(layer), {}).get('fill', color_wheel.get_color(type(layer)))
-        box.outline = color_map.get(type(layer), {}).get('outline', 'black')
+        box.fill = color_map.get(layer_name, {}).get('fill', color_wheel.get_color(layer_name))
+        box.outline = color_map.get(layer_name, {}).get('outline', 'black')
+        color_map[layer_name] = {'fill': box.fill, 'outline': box.outline}
 
         box.shade = shade_step
         boxes.append(box)
@@ -131,7 +140,6 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     draw = aggdraw.Draw(img)
 
     # x, y correction (centering)
-
     for i, node in enumerate(boxes):
         y_off = (img.height - layer_y[i]) / 2
         node.y1 += y_off
@@ -166,6 +174,52 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         last_box = box
 
     draw.flush()
+
+    # Create layer color legend
+    if legend:
+        if font is None:
+            font = ImageFont.load_default()
+
+        text_height = font.getsize("Ag")[1]
+        cube_size = min_xy
+        if text_height > cube_size:
+            cube_size = text_height
+
+        de = 0
+        if draw_volume:
+            de = cube_size // 2
+
+        legend_height = len(layer_names) * (cube_size + de + spacing) + 2 * padding
+        img_box = Image.new('RGBA', (int(ceil(img_width)), legend_height + padding), background_fill)
+        img_text = Image.new('RGBA', (int(ceil(img_width)), legend_height + padding), (0, 0, 0, 0))
+        draw_box = aggdraw.Draw(img_box)
+        draw_text = ImageDraw.Draw(img_text)
+
+        last_box = Box()
+        last_box.y2 = padding
+
+        for layer_name in layer_names:
+            box = Box()
+            box.x1 = padding
+            box.x2 = box.x1 + cube_size
+            box.y1 = last_box.y2 + spacing + de
+            box.y2 = box.y1 + cube_size
+            box.de = de
+            box.shade = shade_step
+            box.fill = color_map.get(layer_name, {}).get('fill', "#000000")
+            box.outline = color_map.get(layer_name, {}).get('outline', "#000000")
+            last_box = box
+            box.draw(draw_box)
+
+            text_x = box.x2 + box.de + spacing
+            text_y = box.y1 - de + (cube_size + de) / 2  # 2D center of the cube
+            text_y -= text_height / 2  # height of some text that has ascending and descending elongation
+
+            draw_text.text((text_x, text_y), layer_name, font=font, fill=font_color)
+
+        draw_box.flush()
+        img_box.paste(img_text, mask=img_text)
+        img = vertical_image_concat(img, img_box)
 
     if to_file is not None:
         img.save(to_file)
