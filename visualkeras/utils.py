@@ -1,5 +1,5 @@
 from typing import Any
-from PIL import ImageColor, ImageDraw
+from PIL import ImageColor, ImageDraw, Image
 import aggdraw
 
 
@@ -83,7 +83,8 @@ class Ellipses(RectShape):
 
 class ColorWheel:
 
-    def __init__(self, colors: list = ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#073b4c"]):
+    def __init__(self, colors: list = ["#ffd166", "#ef476f", "#F95C3A", "#f456d4", "#06d6a0", "#35D049", "#118ab2",
+                                       "#073b4c"]):
         self._cache = dict()
         self.colors = colors
 
@@ -140,3 +141,16 @@ def self_multiply(tensor_tuple: tuple):
     for i in range(1, len(tensor_list)):
         s *= tensor_list[i]
     return s
+
+
+def get_concat_v(im1: Image, im2: Image):
+    """
+    Concat vertical of two images
+    :param im1: top image
+    :param im2: bottom image
+    :return: image concatenated
+    """
+    dst = Image.new('RGBA', (im1.width, im1.height + im2.height))
+    dst.paste(im1, (0, 0))
+    dst.paste(im2, (0, im1.height))
+    return dst

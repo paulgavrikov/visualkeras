@@ -1,4 +1,5 @@
-from PIL import Image, ImageDraw
+import traceback
+from PIL import Image, ImageDraw, ImageFont
 import aggdraw
 from math import ceil
 from .utils import *
@@ -10,7 +11,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = [], index_ignore: list = [],
                  color_map: dict = {}, one_dim_orientation: str = 'z',
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
-                 spacing: int = 10, draw_funnel: bool = True, shade_step=10) -> Image:
+                 spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
+                 font_size: int = 24, font_path: str = 'arial.ttf') -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -33,6 +35,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param spacing: Spacing in pixel between two layers
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
     :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
+    :param legend: Add to the image a color layer legend
+    :param font_size: Font size for legend
 
     :return: Generated architecture image.
     """
@@ -108,8 +112,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         box.x2 = box.x1 + z
         box.y2 = box.y1 + y
 
-        box.fill = color_map.get(type(layer), {}).get('fill', color_wheel.get_color(type(layer)))
-        box.outline = color_map.get(type(layer), {}).get('outline', 'black')
+        box.fill = color_map.get(type(layer).__name__, {}).get('fill', color_wheel.get_color(type(layer)))
+        box.outline = color_map.get(type(layer).__name__, {}).get('outline', 'black')
+        color_map[type(layer).__name__] = {'fill': box.fill, 'outline': box.outline}
 
         box.shade = shade_step
         boxes.append(box)
@@ -131,7 +136,6 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     draw = aggdraw.Draw(img)
 
     # x, y correction (centering)
-
     for i, node in enumerate(boxes):
         y_off = (img.height - layer_y[i]) / 2
         node.y1 += y_off
@@ -166,6 +170,49 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         last_box = box
 
     draw.flush()
+
+    # Create layer color legend
+    if legend:
+        legend_height = len(color_map.keys()) * (20 + padding)
+        img_box = Image.new('RGBA', (int(ceil(img_width)), legend_height + padding), background_fill)
+        img_text = Image.new('RGBA', (int(ceil(img_width)), legend_height + padding), (0, 0, 0, 0))
+        draw_box = aggdraw.Draw(img_box)
+        draw_text = ImageDraw.Draw(img_text)
+
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+            default_font = False
+        except OSError:
+            font = ImageFont.load_default()
+            default_font = True
+            traceback.print_exc()
+            print("Font cannot be open, loading default font")
+            print("Please check the path: ", font_path)
+
+        last_box = Box()
+        last_box.y2 = 0
+
+        for layer in color_map.keys():
+            box = Box()
+            box.x1 = 10
+            box.x2 = 20
+            box.y1 = 10 + padding + last_box.y2
+            box.y2 = 10 + box.y1
+            box.de = 5
+            box.shade = 0
+            box.fill = color_map[layer].get('fill', "#000000")
+            box.outline = color_map[layer].get('outline', "#000000")
+            last_box = box
+            box.draw(draw_box)
+            if not default_font:
+                draw_text.text((box.x2 + 10, box.y1 - (font_size / 2)), layer, font=font, fill='black')
+            else:
+                draw_text.text((box.x2 + 10, box.y1 - 8/2), layer, font=font, fill='black')
+
+
+        draw_box.flush()
+        img_box.paste(img_text, mask=img_text)
+        img = get_concat_v(img, img_box)
 
     if to_file is not None:
         img.save(to_file)
