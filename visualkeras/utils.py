@@ -1,5 +1,5 @@
 from typing import Any
-from PIL import ImageColor, ImageDraw
+from PIL import ImageColor, ImageDraw, Image
 import aggdraw
 
 
@@ -140,3 +140,17 @@ def self_multiply(tensor_tuple: tuple):
     for i in range(1, len(tensor_list)):
         s *= tensor_list[i]
     return s
+
+
+def vertical_image_concat(im1: Image, im2: Image):
+    """
+    Vertical concatenation of two PIL images.
+
+    :param im1: top image
+    :param im2: bottom image
+    :return: concatenated image
+    """
+    dst = Image.new('RGBA', (max(im1.width, im2.width), im1.height + im2.height))
+    dst.paste(im1, (0, 0))
+    dst.paste(im2, (0, im1.height))
+    return dst
