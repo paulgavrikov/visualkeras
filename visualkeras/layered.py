@@ -48,7 +48,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     current_z = padding
     x_off = -1
 
-    layer_names = set()
+    layer_types = set()
 
     img_height = 0
     max_right = 0
@@ -64,8 +64,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             current_z += layer.spacing
             continue
 
-        layer_name = type(layer).__name__
-        layer_names.add(layer_name)
+        layer_type = type(layer)
+        layer_types.add(layer_type)
 
         x = min_xy
         y = min_xy
@@ -116,9 +116,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         box.x2 = box.x1 + z
         box.y2 = box.y1 + y
 
-        box.fill = color_map.get(layer_name, {}).get('fill', color_wheel.get_color(layer_name))
-        box.outline = color_map.get(layer_name, {}).get('outline', 'black')
-        color_map[layer_name] = {'fill': box.fill, 'outline': box.outline}
+        box.fill = color_map.get(layer_type, {}).get('fill', color_wheel.get_color(layer_type))
+        box.outline = color_map.get(layer_type, {}).get('outline', 'black')
+        color_map[layer_type] = {'fill': box.fill, 'outline': box.outline}
 
         box.shade = shade_step
         boxes.append(box)
@@ -189,7 +189,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         if draw_volume:
             de = cube_size // 2
 
-        legend_height = len(layer_names) * (cube_size + de + spacing) + 2 * padding
+        legend_height = len(layer_types) * (cube_size + de + spacing) + 2 * padding
         img_box = Image.new('RGBA', (int(ceil(img_width)), legend_height + padding), background_fill)
         img_text = Image.new('RGBA', (int(ceil(img_width)), legend_height + padding), (0, 0, 0, 0))
         draw_box = aggdraw.Draw(img_box)
@@ -198,7 +198,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         last_box = Box()
         last_box.y2 = padding
 
-        for layer_name in layer_names:
+        for layer_type in layer_types:
             box = Box()
             box.x1 = padding
             box.x2 = box.x1 + cube_size
@@ -206,8 +206,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             box.y2 = box.y1 + cube_size
             box.de = de
             box.shade = shade_step
-            box.fill = color_map.get(layer_name, {}).get('fill', "#000000")
-            box.outline = color_map.get(layer_name, {}).get('outline', "#000000")
+            box.fill = color_map.get(layer_type, {}).get('fill', "#000000")
+            box.outline = color_map.get(layer_type, {}).get('outline', "#000000")
             last_box = box
             box.draw(draw_box)
 
@@ -215,7 +215,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             text_y = box.y1 - de + (cube_size + de) / 2  # 2D center of the cube
             text_y -= text_height / 2  # height of some text that has ascending and descending elongation
 
-            draw_text.text((text_x, text_y), layer_name, font=font, fill=font_color)
+            draw_text.text((text_x, text_y), layer_type.__name__, font=font, fill=font_color)
 
         draw_box.flush()
         img_box.paste(img_text, mask=img_text)
