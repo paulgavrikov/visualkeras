@@ -142,15 +142,16 @@ def self_multiply(tensor_tuple: tuple):
     return s
 
 
-def vertical_image_concat(im1: Image, im2: Image):
+def vertical_image_concat(im1: Image, im2: Image, background_fill: Any = 'white'):
     """
     Vertical concatenation of two PIL images.
 
     :param im1: top image
     :param im2: bottom image
+    :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :return: concatenated image
     """
-    dst = Image.new('RGBA', (max(im1.width, im2.width), im1.height + im2.height))
+    dst = Image.new('RGBA', (max(im1.width, im2.width), im1.height + im2.height), background_fill)
     dst.paste(im1, (0, 0))
     dst.paste(im2, (0, im1.height))
     return dst

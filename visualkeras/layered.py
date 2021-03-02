@@ -232,7 +232,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding, spacing=spacing,
                                      background_fill=background_fill, horizontal=True)
-        img = vertical_image_concat(img, legend_image)
+        img = vertical_image_concat(img, legend_image, background_fill=background_fill)
 
     if to_file is not None:
         img.save(to_file)
