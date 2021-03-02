@@ -48,6 +48,12 @@ visualkeras.layered_view(model)
 ```
 ![Default view of a VGG16 CNN](figures/vgg16.png)
 
+###### Legend
+```python
+visualkeras.layered_view(model, legend=True)
+```
+![Layered view of a VGG16 CNN with legend](figures/vgg16_legend.png)
+
 ###### Flat Style
 ```python
 visualkeras.layered_view(model, draw_volume=False)

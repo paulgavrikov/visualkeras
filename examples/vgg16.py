@@ -3,7 +3,6 @@ from tensorflow.python.keras.layers import Dense, Flatten, Conv2D, Dropout, MaxP
 from collections import defaultdict
 import visualkeras
 
-
 # create VGG16
 image_size = 224
 model = Sequential()
@@ -69,6 +68,8 @@ color_map[Dense]['fill'] = 'green'
 color_map[Flatten]['fill'] = 'teal'
 
 visualkeras.layered_view(model, to_file='../figures/vgg16.png', type_ignore=[visualkeras.SpacingDummyLayer])
+visualkeras.layered_view(model, to_file='../figures/vgg16_legend.png', type_ignore=[visualkeras.SpacingDummyLayer],
+                         legend=True)
 visualkeras.layered_view(model, to_file='../figures/vgg16_spacing_layers.png', spacing=0)
 visualkeras.layered_view(model, to_file='../figures/vgg16_type_ignore.png',
                          type_ignore=[ZeroPadding2D, Dropout, Flatten, visualkeras.SpacingDummyLayer])
