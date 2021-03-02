@@ -154,3 +154,55 @@ def vertical_image_concat(im1: Image, im2: Image):
     dst.paste(im1, (0, 0))
     dst.paste(im2, (0, im1.height))
     return dst
+
+
+def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horizontal: bool = True, padding: int = 0,
+                  spacing: int = 0, background_fill: Any = 'white'):
+    """
+    Creates a linear layout of a passed list of images in horizontal or vertical orientation. The layout will wrap in x
+    or y dimension if a maximum value is exceeded.
+
+    :param images: List of PIL images
+    :param max_width: Maximum width of the image. Only enforced in horizontal orientation.
+    :param max_height: Maximum height of the image. Only enforced in vertical orientation.
+    :param horizontal: If True, will draw images horizontally, else vertically.
+    :param padding: Top, bottom, left, right border distance in pixels.
+    :param spacing: Spacing in pixels between elements.
+    :param background_fill: Color for the image background. Can be str or (R,G,B,A).
+    :return:
+    """
+    coords = list()
+    width = 0
+    height = 0
+
+    x, y = padding, padding
+
+    for img in images:
+        if horizontal:
+            if max_width != -1 and x + img.width > max_width:
+                # make a new row
+                x = padding
+                y = height - padding + spacing
+            coords.append((x, y))
+
+            width = max(x + img.width + padding, width)
+            height = max(y + img.height + padding, height)
+
+            x += img.width + spacing
+        else:
+            if max_height != -1 and y + img.height > max_height:
+                # make a new column
+                x = width - padding + spacing
+                y = padding
+            coords.append((x, y))
+
+            width = max(x + img.width + padding, width)
+            height = max(y + img.height + padding, height)
+
+            y += img.height + spacing
+
+    layout = Image.new('RGBA', (width, height), background_fill)
+    for img, coord in zip(images, coords):
+        layout.paste(img, coord)
+
+    return layout

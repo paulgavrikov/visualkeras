@@ -198,37 +198,41 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         if draw_volume:
             de = cube_size // 2
 
-        legend_height = len(layer_types) * (cube_size + de + spacing) + 2 * padding
-        img_box = Image.new('RGBA', (int(ceil(img_width)), legend_height + padding), background_fill)
-        img_text = Image.new('RGBA', (int(ceil(img_width)), legend_height + padding), (0, 0, 0, 0))
-        draw_box = aggdraw.Draw(img_box)
-        draw_text = ImageDraw.Draw(img_text)
-
-        last_box = Box()
-        last_box.y2 = padding
+        patches = list()
 
         for layer_type in layer_types:
+            label = layer_type.__name__
+            text_size = font.getsize(label)
+            label_patch_size = (cube_size + de + spacing + text_size[0], cube_size + de)
+            # this only works if cube_size is bigger than text height
+
+            img_box = Image.new('RGBA', label_patch_size, background_fill)
+            img_text = Image.new('RGBA', label_patch_size, (0, 0, 0, 0))
+            draw_box = aggdraw.Draw(img_box)
+            draw_text = ImageDraw.Draw(img_text)
+
             box = Box()
-            box.x1 = padding
+            box.x1 = 0
             box.x2 = box.x1 + cube_size
-            box.y1 = last_box.y2 + spacing + de
+            box.y1 = de
             box.y2 = box.y1 + cube_size
             box.de = de
             box.shade = shade_step
             box.fill = color_map.get(layer_type, {}).get('fill', "#000000")
             box.outline = color_map.get(layer_type, {}).get('outline', "#000000")
-            last_box = box
             box.draw(draw_box)
 
             text_x = box.x2 + box.de + spacing
-            text_y = box.y1 - de + (cube_size + de) / 2  # 2D center of the cube
-            text_y -= text_height / 2  # height of some text that has ascending and descending elongation
+            text_y = (label_patch_size[1] - text_height) / 2  # 2D center; use text_height and not the current label!
+            draw_text.text((text_x, text_y), label, font=font, fill=font_color)
 
-            draw_text.text((text_x, text_y), layer_type.__name__, font=font, fill=font_color)
+            draw_box.flush()
+            img_box.paste(img_text, mask=img_text)
+            patches.append(img_box)
 
-        draw_box.flush()
-        img_box.paste(img_text, mask=img_text)
-        img = vertical_image_concat(img, img_box)
+        legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding, spacing=spacing,
+                                     background_fill=background_fill, horizontal=True)
+        img = vertical_image_concat(img, legend_image)
 
     if to_file is not None:
         img.save(to_file)
