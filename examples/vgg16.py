@@ -2,6 +2,7 @@ from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Dense, Flatten, Conv2D, Dropout, MaxPooling2D, InputLayer, ZeroPadding2D
 from collections import defaultdict
 import visualkeras
+from PIL import ImageFont
 
 # create VGG16
 image_size = 224
@@ -67,9 +68,11 @@ color_map[MaxPooling2D]['fill'] = 'red'
 color_map[Dense]['fill'] = 'green'
 color_map[Flatten]['fill'] = 'teal'
 
+font = ImageFont.truetype("arial.ttf", 32)
+
 visualkeras.layered_view(model, to_file='../figures/vgg16.png', type_ignore=[visualkeras.SpacingDummyLayer])
 visualkeras.layered_view(model, to_file='../figures/vgg16_legend.png', type_ignore=[visualkeras.SpacingDummyLayer],
-                         legend=True)
+                         legend=True, font=font)
 visualkeras.layered_view(model, to_file='../figures/vgg16_spacing_layers.png', spacing=0)
 visualkeras.layered_view(model, to_file='../figures/vgg16_type_ignore.png',
                          type_ignore=[ZeroPadding2D, Dropout, Flatten, visualkeras.SpacingDummyLayer])

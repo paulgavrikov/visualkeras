@@ -54,8 +54,16 @@ visualkeras.layered_view(model)
 ![Default view of a VGG16 CNN](figures/vgg16.png)
 
 ###### Legend
+
+You can set the legend parameter to describe the relationship between color and layer types. It is also possible to pass
+a custom `PIL.ImageFont` to use (or just leave it out and visualkeras will use the default PIL font). Please note that 
+you may need to provide the full path of the desired font depending on your OS.
+
 ```python
-visualkeras.layered_view(model, legend=True)
+from PIL import ImageFont
+
+font = ImageFont.truetype("arial.ttf", 32)  # using comic sans is strictly prohibited!
+visualkeras.layered_view(model, legend=True, font=font)  # font is optional!
 ```
 ![Layered view of a VGG16 CNN with legend](figures/vgg16_legend.png)
 
