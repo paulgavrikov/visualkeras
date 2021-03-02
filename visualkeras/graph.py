@@ -14,7 +14,7 @@ class _DummyLayer:
 
 
 def graph_view(model, to_file: str = None,
-               color_map: dict = {}, node_size: int = 50,
+               color_map: dict = None, node_size: int = 50,
                background_fill: Any = 'white', padding: int = 10,
                layer_spacing: int = 250, node_spacing: int = 10, connector_fill: Any = 'gray',
                connector_width: int = 1, ellipsize_after: int = 10,
@@ -44,6 +44,9 @@ def graph_view(model, to_file: str = None,
 
     :return: Generated architecture image.
     """
+
+    if color_map is None:
+        color_map = dict()
 
     # Iterate over the model to compute bounds and generate boxes
 
