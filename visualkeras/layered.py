@@ -6,8 +6,8 @@ from .layer_utils import *
 
 def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
                  max_xy: int = 2000,
-                 scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = [], index_ignore: list = [],
-                 color_map: dict = {}, one_dim_orientation: str = 'z',
+                 scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = None, index_ignore: list = None,
+                 color_map: dict = None, one_dim_orientation: str = 'z',
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
                  spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
                  font: ImageFont = None, font_color: Any = 'black') -> Image:
@@ -52,6 +52,15 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
     img_height = 0
     max_right = 0
+
+    if type_ignore is None:
+        type_ignore = list()
+
+    if index_ignore is None:
+        index_ignore = list()
+
+    if color_map is None:
+        color_map = dict()
 
     for index, layer in enumerate(model.layers):
 
