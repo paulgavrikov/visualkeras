@@ -21,11 +21,16 @@ Networks), and a graph style architecture, which works great for most models inc
 <sup>2</sup>: Only linear models where each layer has no more than one in or output. Non-linear models will be shown in sequential order.
 
 ## Installation
-To install the current release:
+To install published releases from PyPi execute:
 ```bash
 pip install visualkeras
 ```
 To update visualkeras to the latest version, add the `--upgrade` flag to the above commands.
+
+If you want the latest (potentially unstable) features you can also directly install from the github master branch:
+```bash
+pip install git+https://github.com/paulgavrikov/visualkeras
+```
 
 ## Usage
 
