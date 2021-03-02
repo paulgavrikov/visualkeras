@@ -4,6 +4,34 @@ from .utils import *
 from .layer_utils import *
 
 
+def get_layer_dim(shape, scale_xy, scale_z, min_xy, min_z, max_xy, max_z, one_dim_orientation) -> (int, int, int):
+    x = min_xy
+    y = min_xy
+    z = min_z
+
+    if len(shape) >= 4:
+        x = min(max(shape[1] * scale_xy, x), max_xy)
+        y = min(max(shape[2] * scale_xy, y), max_xy)
+        z = min(max(self_multiply(shape[3:]) * scale_z, z), max_z)
+    elif len(shape) == 3:
+        x = min(max(shape[1] * scale_xy, x), max_xy)
+        y = min(max(shape[2] * scale_xy, y), max_xy)
+        z = min(max(z), max_z)
+    elif len(shape) == 2:
+        if one_dim_orientation == 'x':
+            x = min(max(shape[1] * scale_xy, x), max_xy)
+        elif one_dim_orientation == 'y':
+            y = min(max(shape[1] * scale_xy, y), max_xy)
+        elif one_dim_orientation == 'z':
+            z = min(max(shape[1] * scale_z, z), max_z)
+        else:
+            raise ValueError(f"unsupported orientation {one_dim_orientation}")
+    else:
+        raise RuntimeError(f"not supported tensor shape {shape}")
+
+    return x, y, z
+
+
 def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
                  max_xy: int = 2000,
                  scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = None, index_ignore: list = None,
@@ -46,7 +74,6 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     layer_y = list()
     color_wheel = ColorWheel()
     current_z = padding
-    x_off = -1
 
     layer_types = set()
 
@@ -62,100 +89,89 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     if color_map is None:
         color_map = dict()
 
-    for index, layer in enumerate(model.layers):
+    for depth, layer_set in enumerate(model_to_hierarchy_lists(model)):
 
-        # Ignore layers that the use has opted out to
-        if type(layer) in type_ignore or index in index_ignore:
-            continue
+        last_box = Box()
+        last_box.y2 = 0
 
-        # Do no render the SpacingDummyLayer, just increase the pointer
-        if type(layer) == SpacingDummyLayer:
-            current_z += layer.spacing
-            continue
+        grouped_dims = list()
+        grouped_max_z = 0
 
-        layer_type = type(layer)
-        layer_types.add(layer_type)
-
-        x = min_xy
-        y = min_xy
-        z = min_z
-
-        if isinstance(layer.output_shape, tuple):
-            shape = layer.output_shape
-        elif isinstance(layer.output_shape, list) and len(
-                layer.output_shape) == 1:  # drop dimension for non seq. models
-            shape = layer.output_shape[0]
-        else:
-            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
-
-        if len(shape) >= 4:
-            x = min(max(shape[1] * scale_xy, x), max_xy)
-            y = min(max(shape[2] * scale_xy, y), max_xy)
-            z = min(max(self_multiply(shape[3:]) * scale_z, z), max_z)
-        elif len(shape) == 3:
-            x = min(max(shape[1] * scale_xy, x), max_xy)
-            y = min(max(shape[2] * scale_xy, y), max_xy)
-            z = min(max(z), max_z)
-        elif len(shape) == 2:
-            if one_dim_orientation == 'x':
-                x = min(max(shape[1] * scale_xy, x), max_xy)
-            elif one_dim_orientation == 'y':
-                y = min(max(shape[1] * scale_xy, y), max_xy)
-            elif one_dim_orientation == 'z':
-                z = min(max(shape[1] * scale_z, z), max_z)
+        for i, layer in enumerate(layer_set):
+            # Do no render the SpacingDummyLayer, just increase the pointer
+            if type(layer) == SpacingDummyLayer:
+                x, y, z = 0, 0, layer.spacing
             else:
-                raise ValueError(f"unsupported orientation {one_dim_orientation}")
-        else:
-            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+                if isinstance(layer.output_shape, tuple):
+                    shape = layer.output_shape
+                elif isinstance(layer.output_shape, list) and len(
+                        layer.output_shape) == 1:  # drop dimension for non seq. models
+                    shape = layer.output_shape[0]
+                else:
+                    raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+                x, y, z = get_layer_dim(shape, scale_xy, scale_z, min_xy, min_z, max_xy, max_z, one_dim_orientation)
+            grouped_max_z = max(z, grouped_max_z)
+            grouped_dims.append((x, y, z))
 
-        box = Box()
+        for i, layer in enumerate(layer_set):
 
-        box.de = 0
-        if draw_volume:
-            box.de = x / 3
+            # Ignore layers that the use has opted out to
+            if type(layer) in type_ignore or model._layers.index(layer) in index_ignore or type(
+                    layer) == SpacingDummyLayer:
+                continue
 
-        if x_off == -1:
-            x_off = box.de / 2
+            layer_type = type(layer)
+            layer_types.add(layer_type)
 
-        # top left coordinate
-        box.x1 = current_z - box.de / 2
-        box.y1 = box.de
+            x, y, z = grouped_dims[i]
 
-        # bottom right coordinate
-        box.x2 = box.x1 + z
-        box.y2 = box.y1 + y
+            box = Box()
 
-        box.fill = color_map.get(layer_type, {}).get('fill', color_wheel.get_color(layer_type))
-        box.outline = color_map.get(layer_type, {}).get('outline', 'black')
-        color_map[layer_type] = {'fill': box.fill, 'outline': box.outline}
+            box.de = 0
+            if draw_volume:
+                box.de = x / 3
 
-        box.shade = shade_step
-        boxes.append(box)
-        layer_y.append(box.y2 - (box.y1 - box.de))
+            # top left coordinate
+            box.x1 = current_z + (grouped_max_z - z) / 2
+            box.y1 = last_box.y2 + box.de + spacing
 
-        # Update image bounds
-        hh = box.y2 - (box.y1 - box.de)
-        if hh > img_height:
-            img_height = hh
+            # bottom right coordinate
+            box.x2 = box.x1 + z
+            box.y2 = box.y1 + y
 
-        if box.x2 + box.de > max_right:
-            max_right = box.x2 + box.de
+            box.fill = color_map.get(layer_type, {}).get('fill', color_wheel.get_color(layer_type))
+            box.outline = color_map.get(layer_type, {}).get('outline', 'black')
+            color_map[layer_type] = {'fill': box.fill, 'outline': box.outline}
 
-        current_z += z + spacing
+            box.shade = shade_step
+            boxes.append(box)
+            layer_y.append(box.y2 - (box.y1 - box.de))
+
+            # Update image bounds
+            hh = box.y2 - (box.y1 - box.de)
+            if hh > img_height:
+                img_height = hh
+
+            if box.x2 + box.de > max_right:
+                max_right = box.x2 + box.de
+
+            last_box = box
+
+        current_z += grouped_max_z + spacing
 
     # Generate image
-    img_width = max_right + x_off + padding
+    img_width = max_right + padding
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
     draw = aggdraw.Draw(img)
 
-    # x, y correction (centering)
-    for i, node in enumerate(boxes):
-        y_off = (img.height - layer_y[i]) / 2
-        node.y1 += y_off
-        node.y2 += y_off
-
-        node.x1 += x_off
-        node.x2 += x_off
+    # # x, y correction (centering)
+    # for i, node in enumerate(boxes):
+    #     y_off = (img.height - layer_y[i]) / 2
+    #     node.y1 += y_off
+    #     node.y2 += y_off
+    #
+    #     node.x1 += x_off
+    #     node.x2 += x_off
 
     # Draw created boxes
 
@@ -165,18 +181,18 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         pen = aggdraw.Pen(get_rgba_tuple(box.outline))
 
-        if last_box is not None and draw_funnel:
-            draw.line([last_box.x2 + last_box.de, last_box.y1 - last_box.de,
-                       box.x1 + box.de, box.y1 - box.de], pen)
-
-            draw.line([last_box.x2 + last_box.de, last_box.y2 - last_box.de,
-                       box.x1 + box.de, box.y2 - box.de], pen)
-
-            draw.line([last_box.x2, last_box.y2,
-                       box.x1, box.y2], pen)
-
-            draw.line([last_box.x2, last_box.y1,
-                       box.x1, box.y1], pen)
+        # if last_box is not None and draw_funnel:
+        #     draw.line([last_box.x2 + last_box.de, last_box.y1 - last_box.de,
+        #                box.x1 + box.de, box.y1 - box.de], pen)
+        #
+        #     draw.line([last_box.x2 + last_box.de, last_box.y2 - last_box.de,
+        #                box.x1 + box.de, box.y2 - box.de], pen)
+        #
+        #     draw.line([last_box.x2, last_box.y2,
+        #                box.x1, box.y2], pen)
+        #
+        #     draw.line([last_box.x2, last_box.y1,
+        #                box.x1, box.y1], pen)
 
         box.draw(draw)
 
@@ -230,7 +246,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             img_box.paste(img_text, mask=img_text)
             patches.append(img_box)
 
-        legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding, spacing=spacing,
+        legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding,
+                                     spacing=spacing,
                                      background_fill=background_fill, horizontal=True)
         img = vertical_image_concat(img, legend_image, background_fill=background_fill)
 
