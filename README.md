@@ -6,8 +6,8 @@
 
 ## Introduction
 Visualkeras is a Python package to help visualize Keras (either standalone or included in tensorflow) neural network architectures. It allows easy styling to fit most 
-needs. As of now it supports layered style architecture generation which is great for CNNs (Convolutional Neural 
-Networks) and a grap style architecture.
+needs. This module supports layered style architecture generation which is great for CNNs (Convolutional Neural 
+Networks), and a graph style architecture, which works great for most models including plain feed-forward networks.
 
 ## Model Support
 
@@ -40,7 +40,7 @@ visualkeras.layered_view(model, to_file='output.png') # write to disk
 visualkeras.layered_view(model, to_file='output.png').show() # write and show
 ```
 
-To help unerstand some of the most important parameters we are going to use a VGG16 CNN architecture (see [example.py](examples/example.py)).
+To help understand some of the most important parameters we are going to use a VGG16 CNN architecture (see [example.py](examples/example.py)).
 
 ###### Default
 ```python
