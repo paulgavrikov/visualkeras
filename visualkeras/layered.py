@@ -74,7 +74,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             continue
 
         layer_type = type(layer)
-        layer_types.append(layer_type)
+
+        if layer_type not in layer_types:
+            layer_types.append(layer_type)
 
         x = min_xy
         y = min_xy
@@ -198,7 +200,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         patches = list()
 
-        for layer_type in list(dict.fromkeys(layer_types)):
+        for layer_type in layer_types:
             label = layer_type.__name__
             text_size = font.getsize(label)
             label_patch_size = (cube_size + de + spacing + text_size[0], cube_size + de)
