@@ -90,25 +90,19 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         else:
             raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
 
-        if len(shape) >= 4:
-            x = min(max(shape[1] * scale_xy, x), max_xy)
-            y = min(max(shape[2] * scale_xy, y), max_xy)
-            z = min(max(self_multiply(shape[3:]) * scale_z, z), max_z)
-        elif len(shape) == 3:
-            x = min(max(shape[1] * scale_xy, x), max_xy)
-            y = min(max(shape[2] * scale_xy, y), max_xy)
-            z = min(max(z), max_z)
-        elif len(shape) == 2:
-            if one_dim_orientation == 'x':
-                x = min(max(shape[1] * scale_xy, x), max_xy)
-            elif one_dim_orientation == 'y':
-                y = min(max(shape[1] * scale_xy, y), max_xy)
-            elif one_dim_orientation == 'z':
-                z = min(max(shape[1] * scale_z, z), max_z)
+        shape = shape[1:]  # drop batch size
+
+        if len(shape) == 1:
+            if one_dim_orientation in ['x', 'y', 'z']:
+                shape = (1, ) * "xyz".index(one_dim_orientation) + shape
             else:
-                raise ValueError(f"unsupported orientation {one_dim_orientation}")
-        else:
-            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+                raise ValueError(f"unsupported orientation: {one_dim_orientation}")
+
+        shape = shape + (1, ) * (4 - len(shape))  # expand 4D.
+
+        x = min(max(shape[0] * scale_xy, x), max_xy)
+        y = min(max(shape[1] * scale_xy, y), max_xy)
+        z = min(max(self_multiply(shape[2:]) * scale_z, z), max_z)
 
         box = Box()
 
