@@ -45,7 +45,7 @@ visualkeras.layered_view(model, to_file='output.png') # write to disk
 visualkeras.layered_view(model, to_file='output.png').show() # write and show
 ```
 
-To help understand some of the most important parameters we are going to use a VGG16 CNN architecture (see [example.py](examples/example.py)).
+To help understand some of the most important parameters we are going to use a VGG16 CNN architecture (see [example.py](examples/vgg16.py)).
 
 ###### Default
 ```python
