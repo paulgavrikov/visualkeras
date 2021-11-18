@@ -126,3 +126,17 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
+###### Reversed view and output shapes
+For an encoder-like architecture the above looks good but for a decoder-like architecture we would look at the back of
+each layer. For this type of models we can switch draw_reversed to True. With this option enabled we need to adjust the
+padding_left parameter so that the leftmost layer is still in view.
+In addition to this we can enable draw_shapes, which results in printing the output shapes of each layer under the
+respective box. draw_shapes can be 0 (no shapes), 1 (shapes beneath every box), 2 (shapes alternating beneath and above
+every box), 3 (treat boxes between two spacing layers as one unit with same output shapes). The output quality may vary
+with the used font. An extra font for the output shapes can be given with font_shapes. Additionally we need to set
+padding_vertical so that we can the output shape of the largest box.
+![Default view of a decoder-like model with output shapes](figures/decoder.png)
+![Reversed view of a decoder-like model with output shapes](figures/decoder_reversed.png)
+_Note: Showing output shapes does not work with a Sequential model. See reversed_view.py in examples._
+
+
