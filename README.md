@@ -126,3 +126,16 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
+## Citation
+
+If you find this project helpful for your research please consider citing it in your publication as follows.
+```
+@misc{Gavrikov2020VisualKeras,
+  author = {Gavrikov, Paul},
+  title = {visualkeras},
+  year = {2020},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/paulgavrikov/visualkeras}},
+}
+```
