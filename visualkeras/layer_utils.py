@@ -36,7 +36,12 @@ def model_to_adj_matrix(model):
     if hasattr(model, 'built'):
         if not model.built:
             model.build()
-    layers = model._layers
+            
+    layers = []
+    if hasattr(model, '_layers'):
+        layers = model._layers
+    elif hasattr(model, '_self_tracked_trackables'):
+        layers = model._self_tracked_trackables
 
     adj_matrix = np.zeros((len(layers), len(layers)))
     id_to_num_mapping = dict()
@@ -60,14 +65,26 @@ def model_to_adj_matrix(model):
 
 
 def find_layer_by_id(model, _id):
-    for layer in model._layers:  # manually because get_layer does not access model._layers
-        if id(layer) == _id:
-            return layer
+    layers = []
+    if hasattr(model, '_layers'):
+        layers = model._layers
+    elif hasattr(model, '_self_tracked_trackables'):
+        layers = model._self_tracked_trackables
+    
+    for layer in layers: # manually because get_layer does not access model._layers
+            if id(layer) == _id:
+                return layer
     return None
 
 
 def find_layer_by_name(model, name):
-    for layer in model._layers:  # manually because get_layer does not access model._layers
+    layers = []
+    if hasattr(model, '_layers'):
+        layers = model._layers
+    elif hasattr(model, '_self_tracked_trackables'):
+        layers = model._self_tracked_trackables
+    
+    for layer in layers:
         if layer.name == name:
             return layer
     return None
