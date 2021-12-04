@@ -140,3 +140,16 @@ padding_vertical so that we can the output shape of the largest box.
 _Note: Showing output shapes does not work with a Sequential model. See reversed_view.py in examples._
 
 
+## Citation
+
+If you find this project helpful for your research please consider citing it in your publication as follows.
+```
+@misc{Gavrikov2020VisualKeras,
+  author = {Gavrikov, Paul},
+  title = {visualkeras},
+  year = {2020},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/paulgavrikov/visualkeras}},
+}
+```
