@@ -1,8 +1,8 @@
 # visualkeras for Keras / TensorFlow
 
-[![Wheel Status](https://pypip.in/wheel/visualkeras/badge.svg?style=flat)](https://pypi.python.org/pypi/visualkeras)
-[![Latest Version](https://pypip.in/version/visualkeras/badge.svg?style=flat)](https://pypi.python.org/pypi/visualkeras)
+[![Latest Version](https://img.shields.io/pypi/v/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 [![Build Status](https://travis-ci.org/paulgavrikov/visualkeras.svg?branch=master)](https://travis-ci.org/paulgavrikov/visualkeras)
+[![Download Count](https://img.shields.io/pypi/dm/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 
 ## Introduction
 Visualkeras is a Python package to help visualize Keras (either standalone or included in tensorflow) neural network architectures. It allows easy styling to fit most 
