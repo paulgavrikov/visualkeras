@@ -126,6 +126,26 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
+## FAQ
+
+###### Feature X documented here does not work
+The main branch may be ahead of pypi. Consider upgrading to the latest (perhaps unstable) build as discussed in _Installation_. 
+
+###### Installing aggdraw fails
+This is most likely due to missing gcc / g++ components (e.g. on Elementary OS). Try installing them via your package 
+manager, e.g.:
+```bash
+sudo apt-get install gcc
+sudo apt-get install g++
+```
+
+###### .show() doesn't open a window
+
+You have probably not configured your default image viewer. You can install imagemagick via most package managers:
+```bash
+sudo apt-get install imagemagick
+```
+
 ## Citation
 
 If you find this project helpful for your research please consider citing it in your publication as follows.
