@@ -126,6 +126,24 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
+###### Output shape information
+With the `draw_shapes` argument of `layered_view` the output shapes of each layer can be shown. The font used for the shape text can be defined with `font_shapes`.
+`draw_shapes` can be either `0`, `1`, `2` or `3` and the different values have the following effects:
+
+0. No shape information will be drawn.
+1. Shape information will be drawn beneath every box.
+2. Shape information will be drawn alternating beneath and above every box.
+3. Treat boxes between two spacing layers as one unit with same output shapes. Shape infromation will be drawn beneath every unit. If layers between two spacing layers do not have the same output shape this results in unwanted behaviour.
+
+The following images show results for `draw_shapes=1,2,3`:
+
+![draw_shapes_1](figures/draw_shapes_1.png)
+
+![draw_shapes_1](figures/draw_shapes_2.png)
+
+![draw_shapes_1](figures/draw_shapes_3.png)
+
+
 ## FAQ
 
 ###### Feature X documented here does not work

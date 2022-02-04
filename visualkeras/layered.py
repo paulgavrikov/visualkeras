@@ -29,7 +29,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
-    :param draw_shapes: Draw output shapes of layers und boxes. Can be 0 (no shapes), 1 (shapes beneath every box), 2 (shapes alternating beneath and above every box), 3 (treat boxes between two spacing layers as one unit with same output shapes)
+    :param draw_shapes: Draw output shapes of layers und boxes. Can be 0 (no shapes), 1 (shapes beneath every box), 2 (shapes alternating beneath and above every box), 3 (shapes beneath every unit. Treat boxes between two spacing layers as one unit with same output shapes)
     :param padding: Distance in pixel before the first and after the last layer.
     :param spacing: Spacing in pixel between two layers
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
@@ -41,6 +41,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
     :return: Generated architecture image.
     """
+
+    if draw_shapes != 0:
+        if font_shapes is None:
+            font_shapes = ImageFont.load_default()
 
     # Iterate over the model to compute bounds and generate boxes
 
@@ -143,8 +147,13 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
     # Generate image
     img_width = max_right + x_off + padding
+
+    if draw_shapes == 2:
+        (shapes_w, shapes_h) = font_shapes.getsize('x1234567890')
+        # getSize function cannot handle multiline text. Therefore multiple height by 2.
+        img_height += (shapes_h*2 + 20)*2  # Additional times two because shape text will be below and above boxes
+    
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
-    draw = aggdraw.Draw(img)
 
     # x, y correction (centering)
     for i, node in enumerate(boxes):
@@ -154,6 +163,14 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         node.x1 += x_off
         node.x2 += x_off
+    
+    if draw_shapes in [1,3]:
+        (shapes_w, shapes_h) = font_shapes.getsize('x1234567890')
+        # getSize function cannot handle multiline text. Therefore multiple height by 2.
+        img_height += shapes_h*2 + 20
+        img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
+    
+    draw = aggdraw.Draw(img)
 
     # Draw created boxes
 
@@ -202,15 +219,16 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                     idx = idx1 + ceil((idx2 - idx1) / 2)
                     box = boxes[idx]
                     text_x = box.x1 + (box.x2 - box.x1) / 2
-                    text_y = box.y2 + 20
+                    text_y = box.y2 + 15
                 else:  # Even number of layers between two spacing layers
                     print(f"Even number of layers between two spacing layers")
                     idx = idx1 + (idx2 - idx1) // 2
                     box = boxes[idx]
-                    text_x = box.x1 + (box.x2 - box.x1) / 2 + spacing
-                    text_y = box.y2 + 20
+                    text_x = box.x2 + spacing / 2
+                    text_y = box.y2 + 15
 
                 spacing_layer_index = i  # After i-th box comes spacing layer
+                print(f"After {i}-th box comes spacing layer")
                 draw_text = True
             else:
                 i += 1
@@ -218,24 +236,27 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             if index == len(model.layers) - 1:
                 idx1 = spacing_layer_index
                 idx2 = i
+                print(f"Last layer i={i}, spacing_layer_index={spacing_layer_index}")
                 if idx2 - idx1 <= 0:
                     raise RuntimeError(
                         f"Unexpected spacing layer at index {index}. Two spacing layers in a row not allowed")
-                if idx2 - idx1 % 2 == 1:  # Odd number of layers between two spacing layers
+                if (idx2 - idx1) % 2 == 1:  # Odd number of layers between two spacing layers
+                    print(f"Odd number of layers between two spacing layers (Last layer)")
                     idx = idx1 + ceil((idx2 - idx1) / 2)
-                    box = boxes[i]
+                    box = boxes[idx]
                     text_x = box.x1 + (box.x2 - box.x1) / 2
-                    text_y = box.y2 + 20
+                    text_y = box.y2 + 15
                 else:  # Even number of layers between two spacing layers
+                    print(f"Even number of layers between two spacing layers (Last layer)")
                     idx = idx1 + (idx2 - idx1) // 2
-                    box = boxes[i]
+                    box = boxes[idx]
                     text_x = box.x1 + (box.x2 - box.x1) / 2 + padding
-                    text_y = box.y2 + 20
+                    text_x = box.x2 + spacing / 2
+                    text_y = box.y2 + 15
                 draw_text = True
 
             if draw_text:
                 # Draw text
-                print(f"Drawing text")
                 output_shape = [x for x in list(layer.output_shape) if x is not None]
                 if isinstance(output_shape[0], tuple):
                     output_shape = list(output_shape[0])
@@ -247,8 +268,13 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                         output_shape_txt += "x"
                     if ii == len(output_shape) - 2:
                         output_shape_txt += "\n"
-                draw_layer_shapes.text((text_x, text_y), output_shape_txt, font=font_shapes, fill=font_color,
-                                       direction='ltr', anchor='mm', align='center')
+                text_x_adjust = []
+                for line in output_shape_txt.split('\n'):
+                    text_x_adjust.append(font_shapes.getsize(line)[0])
+                text_x -= max(text_x_adjust)/2  # Shift text to the left by half of the text width, so that it is centered
+                # Centering with middle text anchor 'm' does not work with align center
+                draw_layer_shapes.multiline_text((text_x, text_y), output_shape_txt, font=font_shapes, fill=font_color,
+                                                direction='ltr', anchor='la', align='center')
                 draw_text = False
 
     elif draw_shapes == 1 or draw_shapes == 2:
@@ -263,13 +289,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             i += 1
             box = boxes[i]
             text_x = box.x1 + (box.x2 - box.x1) / 2
-            text_y = box.y2 + 20
+            text_y = box.y2 + 15
             if draw_shapes == 2 and i % 2 == 1:
-                text_x = box.x1 - box.de + (box.x2 - box.x1) / 2
-                text_y = box.y1 - box.de - 20
-
-                # text_x = box.x1 - box.de + (box.x2-(box.x1-box.de))/2
-                # text_y = box.y1 - box.de + (box.y2-(box.y1-box.de))/2
+                text_x = box.x1 + box.de + (box.x2 - box.x1) / 2
+                text_y = box.y1 - box.de - 35
 
             output_shape = [x for x in list(layer.output_shape) if x is not None]
             if isinstance(output_shape[0], tuple):
@@ -282,8 +305,13 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                     output_shape_txt += "x"
                 if ii == len(output_shape) - 2:
                     output_shape_txt += "\n"
-            draw_layer_shapes.text((text_x, text_y), output_shape_txt, font=font_shapes, fill=font_color,
-                                   direction='ltr', anchor='mm', align='center')
+            text_x_adjust = []
+            for line in output_shape_txt.split('\n'):
+                text_x_adjust.append(font_shapes.getsize(line)[0])
+            text_x -= max(text_x_adjust)/2  # Shift text to the left by half of the text width, so that it is centered
+            # Centering with middle text anchor 'm' does not work with align center
+            draw_layer_shapes.multiline_text((text_x, text_y), output_shape_txt, font=font_shapes, fill=font_color,
+                                             direction='ltr', anchor='la', align='center')
 
     # Create layer color legend
     if legend:
