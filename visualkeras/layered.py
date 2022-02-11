@@ -1,3 +1,5 @@
+from tensorflow.keras import layers
+from typing import Callable
 from PIL import ImageFont
 from math import ceil
 from .utils import *
@@ -8,9 +10,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  max_xy: int = 2000,
                  scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = None, index_ignore: list = None,
                  color_map: dict = None, one_dim_orientation: str = 'z',
-                 background_fill: Any = 'white', draw_volume: bool = True, draw_shapes: int = 0,
+                 background_fill: Any = 'white', draw_volume: bool = True,
+                 text_callable: Callable[[int, layers.Layer], tuple] = None,
                  padding: int = 10, spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
-                 font: ImageFont = None, font_shapes: ImageFont = None, font_color: Any = 'black') -> Image:
+                 font: ImageFont = None, font_color: Any = 'black') -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -29,23 +32,16 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
-    :param draw_shapes: Draw output shapes of layers und boxes. Can be 0 (no shapes), 1 (shapes beneath every box), 2 (shapes alternating beneath and above every box), 3 (shapes beneath every unit. Treat boxes between two spacing layers as one unit with same output shapes)
     :param padding: Distance in pixel before the first and after the last layer.
     :param spacing: Spacing in pixel between two layers
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
     :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
     :param legend: Add a legend of the layers to the image
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
-    :param font_shapes: Font that will be used for the shapes of the layers. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
 
     :return: Generated architecture image.
     """
-
-    if draw_shapes != 0:
-        if font_shapes is None:
-            font_shapes = ImageFont.load_default()
-
     # Iterate over the model to compute bounds and generate boxes
 
     boxes = list()
@@ -148,10 +144,40 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     # Generate image
     img_width = max_right + x_off + padding
 
-    if draw_shapes == 2:
-        (shapes_w, shapes_h) = font_shapes.getsize('x1234567890')
-        # getSize function cannot handle multiline text. Therefore multiple height by 2.
-        img_height += (shapes_h*2 + 20)*2  # Additional times two because shape text will be below and above boxes
+    # Check if any text will be written above or below and save the maximum text height for adjusting the image height
+    is_any_text_above = False
+    is_any_text_below = False
+    max_box_with_text_height=0
+    max_box_height = 0
+    text_spacing = 4
+    if text_callable is not None:
+        if font is None:
+            font = ImageFont.load_default()
+        i = -1
+        for index, layer in enumerate(model.layers):
+            if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
+                continue
+            i += 1
+            text, above = text_callable(i, layer)
+            if above:
+                is_any_text_above = True
+            else:
+                is_any_text_below = True
+            
+            text_height = 0
+            for line in text.split('\n'):
+                line_height = font.getsize(line)[1]
+                text_height += line_height
+            text_height += (len(text.split('\n'))-1)*text_spacing
+            box_height = abs(boxes[i].y2-boxes[i].y1)-boxes[i].de
+            box_with_text_height = box_height + text_height
+            if box_with_text_height > max_box_with_text_height:
+                max_box_with_text_height = box_with_text_height
+            if box_height > max_box_height:
+                max_box_height = box_height
+    
+    if is_any_text_above:
+        img_height += abs(max_box_height - max_box_with_text_height)*2
     
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
 
@@ -164,10 +190,13 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         node.x1 += x_off
         node.x2 += x_off
     
-    if draw_shapes in [1,3]:
-        (shapes_w, shapes_h) = font_shapes.getsize('x1234567890')
-        # getSize function cannot handle multiline text. Therefore multiple height by 2.
-        img_height += shapes_h*2 + 20
+
+    
+    if is_any_text_above:
+        img_height -= abs(max_box_height - max_box_with_text_height)
+        img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
+    if is_any_text_below:
+        img_height += abs(max_box_height - max_box_with_text_height)
         img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
     
     draw = aggdraw.Draw(img)
@@ -199,119 +228,37 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
     draw.flush()
 
-    if draw_shapes == 3:
-        # ----------------Draw text under boxes between spacing layers----------------
+    if text_callable is not None:
+        draw_text = ImageDraw.Draw(img)
         i = -1
-        draw_text = False
-        spacing_layer_index = -1
-        draw_layer_shapes = ImageDraw.Draw(img)
         for index, layer in enumerate(model.layers):
-            # Count number of layers between two spacing layers
-            print(f"type layer: {type(layer)}")
-            if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
-                idx1 = spacing_layer_index
-                idx2 = i
-                if idx2 - idx1 <= 0:
-                    raise RuntimeError(
-                        f"Unexpected spacing layer at index {index}. Two spacing layers in a row not allowed.")
-                if (idx2 - idx1) % 2 == 1:  # Odd number of layers between two spacing layers
-                    print(f"Odd number of layers between two spacing layers")
-                    idx = idx1 + ceil((idx2 - idx1) / 2)
-                    box = boxes[idx]
-                    text_x = box.x1 + (box.x2 - box.x1) / 2
-                    text_y = box.y2 + 15
-                else:  # Even number of layers between two spacing layers
-                    print(f"Even number of layers between two spacing layers")
-                    idx = idx1 + (idx2 - idx1) // 2
-                    box = boxes[idx]
-                    text_x = box.x2 + spacing / 2
-                    text_y = box.y2 + 15
-
-                spacing_layer_index = i  # After i-th box comes spacing layer
-                print(f"After {i}-th box comes spacing layer")
-                draw_text = True
-            else:
-                i += 1
-
-            if index == len(model.layers) - 1:
-                idx1 = spacing_layer_index
-                idx2 = i
-                print(f"Last layer i={i}, spacing_layer_index={spacing_layer_index}")
-                if idx2 - idx1 <= 0:
-                    raise RuntimeError(
-                        f"Unexpected spacing layer at index {index}. Two spacing layers in a row not allowed")
-                if (idx2 - idx1) % 2 == 1:  # Odd number of layers between two spacing layers
-                    print(f"Odd number of layers between two spacing layers (Last layer)")
-                    idx = idx1 + ceil((idx2 - idx1) / 2)
-                    box = boxes[idx]
-                    text_x = box.x1 + (box.x2 - box.x1) / 2
-                    text_y = box.y2 + 15
-                else:  # Even number of layers between two spacing layers
-                    print(f"Even number of layers between two spacing layers (Last layer)")
-                    idx = idx1 + (idx2 - idx1) // 2
-                    box = boxes[idx]
-                    text_x = box.x1 + (box.x2 - box.x1) / 2 + padding
-                    text_x = box.x2 + spacing / 2
-                    text_y = box.y2 + 15
-                draw_text = True
-
-            if draw_text:
-                # Draw text
-                output_shape = [x for x in list(layer.output_shape) if x is not None]
-                if isinstance(output_shape[0], tuple):
-                    output_shape = list(output_shape[0])
-                    output_shape = [x for x in output_shape if x is not None]
-                output_shape_txt = ""
-                for ii in range(len(output_shape)):
-                    output_shape_txt += str(output_shape[ii])
-                    if ii < len(output_shape) - 2:
-                        output_shape_txt += "x"
-                    if ii == len(output_shape) - 2:
-                        output_shape_txt += "\n"
-                text_x_adjust = []
-                for line in output_shape_txt.split('\n'):
-                    text_x_adjust.append(font_shapes.getsize(line)[0])
-                text_x -= max(text_x_adjust)/2  # Shift text to the left by half of the text width, so that it is centered
-                # Centering with middle text anchor 'm' does not work with align center
-                draw_layer_shapes.multiline_text((text_x, text_y), output_shape_txt, font=font_shapes, fill=font_color,
-                                                direction='ltr', anchor='la', align='center')
-                draw_text = False
-
-    elif draw_shapes == 1 or draw_shapes == 2:
-        # ----------------Draw text under every box----------------
-        i = -1
-        draw_text = False
-        draw_layer_shapes = ImageDraw.Draw(img)
-        for index, layer in enumerate(model.layers):
-            # Count number of layers between two spacing layers
             if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
                 continue
             i += 1
+            text, above = text_callable(i, layer)
+            text_height = 0
+            text_x_adjust = []
+            for line in text.split('\n'):
+                line_height = font.getsize(line)[1]
+                text_height += line_height
+                text_x_adjust.append(font.getsize(line)[0])
+            text_height += (len(text.split('\n'))-1)*text_spacing
+
             box = boxes[i]
             text_x = box.x1 + (box.x2 - box.x1) / 2
-            text_y = box.y2 + 15
-            if draw_shapes == 2 and i % 2 == 1:
+            text_y = box.y2
+            if above:
                 text_x = box.x1 + box.de + (box.x2 - box.x1) / 2
-                text_y = box.y1 - box.de - 35
-
-            output_shape = [x for x in list(layer.output_shape) if x is not None]
-            if isinstance(output_shape[0], tuple):
-                output_shape = list(output_shape[0])
-                output_shape = [x for x in output_shape if x is not None]
-            output_shape_txt = ""
-            for ii in range(len(output_shape)):
-                output_shape_txt += str(output_shape[ii])
-                if ii < len(output_shape) - 2:
-                    output_shape_txt += "x"
-                if ii == len(output_shape) - 2:
-                    output_shape_txt += "\n"
-            text_x_adjust = []
-            for line in output_shape_txt.split('\n'):
-                text_x_adjust.append(font_shapes.getsize(line)[0])
+                text_y = box.y1 - box.de - text_height
+            
             text_x -= max(text_x_adjust)/2  # Shift text to the left by half of the text width, so that it is centered
             # Centering with middle text anchor 'm' does not work with align center
-            draw_layer_shapes.multiline_text((text_x, text_y), output_shape_txt, font=font_shapes, fill=font_color,
-                                             direction='ltr', anchor='la', align='center')
+            anchor = 'la'
+            if above:
+                anchor = 'la'
+            draw_text.multiline_text((text_x, text_y), text, font=font, fill=font_color,
+                                     direction='ltr', anchor=anchor, align='center',
+                                     spacing=text_spacing)
 
     # Create layer color legend
     if legend:

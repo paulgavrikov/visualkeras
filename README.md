@@ -126,22 +126,34 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
-###### Output shape information
-With the `draw_shapes` argument of `layered_view` the output shapes of each layer can be shown. The font used for the shape text can be defined with `font_shapes`.
-`draw_shapes` can be either `0`, `1`, `2` or `3` and the different values have the following effects:
+###### Drawing information text 
+With the `text_callable` argument a function can be passed to the `layered_view` function which can be used to draw text below or above a specific layer. The function should have to following properties:
 
-0. No shape information will be drawn.
-1. Shape information will be drawn beneath every box.
-2. Shape information will be drawn alternating beneath and above every box.
-3. Treat boxes between two spacing layers as one unit with same output shapes. Shape infromation will be drawn beneath every unit. If layers between two spacing layers do not have the same output shape this results in unwanted behaviour.
+- Accepts two arguments: First the index of the layer in the model. This index ignores layers listed in `type_ignore`, `index_ignore` and also ignores layers of class `SpacingDummyLayer`. The second arguments is the layer object used in the model at the index given in the first argument
 
-The following images show results for `draw_shapes=1,2,3`:
+- Returns two arguments: The first return value is a string containing the text to be drawn. The second return value is a bool value indicating if the text is to be drawn above the box representing the layer.
 
-![draw_shapes_1](figures/draw_shapes_1.png)
+The following function would produce the output shown in the figure below:
+```python
+def text_callable(layer_index, layer):
+    above = bool(layer_index%2)
+    output_shape = [x for x in list(layer.output_shape) if x is not None]
+    if isinstance(output_shape[0], tuple):
+        output_shape = list(output_shape[0])
+        output_shape = [x for x in output_shape if x is not None]
+    output_shape_txt = ""
+    for ii in range(len(output_shape)):
+        output_shape_txt += str(output_shape[ii])
+        if ii < len(output_shape) - 2:
+            output_shape_txt += "x"
+        if ii == len(output_shape) - 2:
+            output_shape_txt += "\n"
+    output_shape_txt += f"\n{layer.name}"
+    return output_shape_txt, above
+```
+![Text Callable](figures/draw_text_callable.png)
 
-![draw_shapes_1](figures/draw_shapes_2.png)
-
-![draw_shapes_1](figures/draw_shapes_3.png)
+_Note: Use the `padding` argument to avoid long text being cut off at the left or right edge of the image. Also use `SpacingDummyLayers` to avoid interleaving text of different layers._
 
 
 ## FAQ
