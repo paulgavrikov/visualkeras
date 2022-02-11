@@ -37,30 +37,47 @@ class Box(RectShape):
     de: int
     shade: int
 
-    def draw(self, draw: ImageDraw):
+    def draw(self, draw: ImageDraw, draw_reversed: bool = False):
         pen, brush = self._get_pen_brush()
 
         if hasattr(self, 'de') and self.de > 0:
             brush_s1 = aggdraw.Brush(fade_color(self.fill, self.shade))
             brush_s2 = aggdraw.Brush(fade_color(self.fill, 2 * self.shade))
 
-            draw.line([self.x1 + self.de, self.y1 - self.de, self.x1 + self.de, self.y2 - self.de], pen)
-            draw.line([self.x1 + self.de, self.y2 - self.de, self.x1, self.y2], pen)
-            draw.line([self.x1 + self.de, self.y2 - self.de, self.x2 + self.de, self.y2 - self.de], pen)
+            if draw_reversed:
+                draw.line([self.x2 - self.de, self.y1 - self.de, self.x2 - self.de, self.y2 - self.de], pen)
+                draw.line([self.x2 - self.de, self.y2 - self.de, self.x2, self.y2], pen)
+                draw.line([self.x1 - self.de, self.y2 - self.de, self.x2 - self.de, self.y2 - self.de], pen)
 
-            draw.polygon([self.x1, self.y1,
-                          self.x1 + self.de, self.y1 - self.de,
-                          self.x2 + self.de, self.y1 - self.de,
-                          self.x2, self.y1
-                          ], pen, brush_s1)
+                draw.polygon([self.x1, self.y1,
+                              self.x1 - self.de, self.y1 - self.de,
+                              self.x2 - self.de, self.y1 - self.de,
+                              self.x2, self.y1
+                              ], pen, brush_s1)
 
-            draw.polygon([self.x2 + self.de, self.y1 - self.de,
-                          self.x2, self.y1,
-                          self.x2, self.y2,
-                          self.x2 + self.de, self.y2 - self.de
-                          ], pen, brush_s2)
+                draw.polygon([self.x1 - self.de, self.y1 - self.de,
+                              self.x1, self.y1,
+                              self.x1, self.y2,
+                              self.x1 - self.de, self.y2 - self.de
+                              ], pen, brush_s2)
+            else:
+                draw.line([self.x1 + self.de, self.y1 - self.de, self.x1 + self.de, self.y2 - self.de], pen)
+                draw.line([self.x1 + self.de, self.y2 - self.de, self.x1, self.y2], pen)
+                draw.line([self.x1 + self.de, self.y2 - self.de, self.x2 + self.de, self.y2 - self.de], pen)
 
-        draw.rectangle([self.x1, self.y1, self.x2, self.y2], pen, brush)
+                draw.polygon([self.x1, self.y1,
+                              self.x1 + self.de, self.y1 - self.de,
+                              self.x2 + self.de, self.y1 - self.de,
+                              self.x2, self.y1
+                              ], pen, brush_s1)
+
+                draw.polygon([self.x2 + self.de, self.y1 - self.de,
+                              self.x2, self.y1,
+                              self.x2, self.y2,
+                              self.x2 + self.de, self.y2 - self.de
+                              ], pen, brush_s2)
+
+            draw.rectangle([self.x1, self.y1, self.x2, self.y2], pen, brush)
 
 
 class Circle(RectShape):

@@ -13,8 +13,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  color_map: dict = None, one_dim_orientation: str = 'z',
                  background_fill: Any = 'white', draw_volume: bool = True,
                  draw_reversed: bool = False,
-                 padding: int = 10, padding_left: int = 0, padding_vertical: int = 10,
-                 spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
+                 padding: int = 10, spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
                  font: ImageFont = None, font_color: Any = 'black') -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
@@ -36,8 +35,6 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param draw_reversed: Draw 3D boxes reversed, going from front-right to back-left.
     :param padding: Distance in pixel before the first and after the last layer.
-    :param padding_left: Distance in pixel only before the first
-    :param padding_vertical: Padding at top and bottom of image
     :param spacing: Spacing in pixel between two layers
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
     :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
@@ -53,7 +50,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     boxes = list()
     layer_y = list()
     color_wheel = ColorWheel()
-    current_z = padding + padding_left
+    current_z = padding
     x_off = -1
 
     layer_types = list()
@@ -155,7 +152,6 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
     # Generate image
     img_width = max_right + x_off + padding
-    img_height += padding_vertical
 
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
     draw = aggdraw.Draw(img)
@@ -168,6 +164,14 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         node.x1 += x_off
         node.x2 += x_off
+
+    # Correct x positions of reversed boxes
+    if draw_reversed:
+        for box in boxes:
+            offset = box.de
+            # offset = 0
+            box.x1 = box.x1 + offset
+            box.x2 = box.x2 + offset
 
     # Draw created boxes
 
