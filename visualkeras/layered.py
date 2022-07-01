@@ -1,3 +1,4 @@
+from itertools import count
 from PIL import ImageFont
 from math import ceil
 from .utils import *
@@ -10,7 +11,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  color_map: dict = None, one_dim_orientation: str = 'z',
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
                  spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
-                 font: ImageFont = None, font_color: Any = 'black') -> Image:
+                 font: ImageFont = None, font_color: Any = 'black', show_dimantion=False) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -36,6 +37,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param legend: Add a legend of the layers to the image
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
+    :param show_dimantion: show layer dimantion if set legend=True
 
     :return: Generated architecture image.
     """
@@ -49,6 +51,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     x_off = -1
 
     layer_types = list()
+    dimantion_list = []
 
     img_height = 0
     max_right = 0
@@ -75,8 +78,11 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         layer_type = type(layer)
 
-        if layer_type not in layer_types:
+        if legend and show_dimantion:
             layer_types.append(layer_type)
+        else:
+            if layer_type not in layer_types:
+                layer_types.append(layer_type)
 
         x = min_xy
         y = min_xy
@@ -89,6 +95,15 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             shape = layer.output_shape[0]
         else:
             raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+        
+        if legend and show_dimantion:
+            dimantion_string = str(shape)
+            dimantion_string = dimantion_string[1:len(dimantion_string)-1].split(", ")
+            dimantion = []
+            for i in range(0, len(dimantion_string)):
+                if dimantion_string[i].isnumeric():
+                    dimantion.append(dimantion_string[i])
+            dimantion_list.append(dimantion)
 
         shape = shape[1:]  # drop batch size
 
@@ -194,8 +209,17 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         patches = list()
 
+        if show_dimantion:
+            counter = 0
+
         for layer_type in layer_types:
-            label = layer_type.__name__
+
+            if show_dimantion:
+                label = layer_type.__name__ + "(" + str(dimantion_list[counter]) + ")"
+                counter += 1
+            else:
+                label = layer_type.__name__
+
             text_size = font.getsize(label)
             label_patch_size = (cube_size + de + spacing + text_size[0], cube_size + de)
             # this only works if cube_size is bigger than text height
