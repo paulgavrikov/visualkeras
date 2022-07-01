@@ -131,6 +131,7 @@ If you need to show layer dimantion you must set `legend=True` and `show_dimanti
 ```python
 visualkeras.layered_view(model, legend=True, show_dimantion=True)
 ```
+![Show layer dimantion in legend mode](figures/vgg16_legend_show_dimantion.png)
 
 ## FAQ
 
