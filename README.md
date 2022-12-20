@@ -126,12 +126,12 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
-###### Show layer dimantion in legend mode
-If you need to show layer dimantion you must set `legend=True` and `show_dimantion=True` in `layered_view`
+###### Show layer dimension in legend mode
+If you need to show layer dimension you must set `legend=True` and `show_dimension=True` in `layered_view`
 ```python
-visualkeras.layered_view(model, legend=True, show_dimantion=True)
+visualkeras.layered_view(model, legend=True, show_dimension=True)
 ```
-![Show layer dimantion in legend mode](figures/vgg16_legend_show_dimantion.png)
+![Show layer dimension in legend mode](figures/vgg16_legend_show_dimension.png)
 
 ## FAQ
 

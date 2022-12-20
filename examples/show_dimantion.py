@@ -70,15 +70,15 @@ color_map[Flatten]['fill'] = 'teal'
 
 font = ImageFont.truetype("arial.ttf", 32)
 
-visualkeras.layered_view(model, legend=True, show_dimantion=True, to_file='../figures/vgg16_show_dimantion.png', type_ignore=[visualkeras.SpacingDummyLayer])
-visualkeras.layered_view(model, legend=True, show_dimantion=True, to_file='../figures/vgg16_legend_show_dimantion.png', type_ignore=[visualkeras.SpacingDummyLayer]
+visualkeras.layered_view(model, legend=True, show_dimension=True, to_file='../figures/vgg16_show_dimension.png', type_ignore=[visualkeras.SpacingDummyLayer])
+visualkeras.layered_view(model, legend=True, show_dimension=True, to_file='../figures/vgg16_legend_show_dimension.png', type_ignore=[visualkeras.SpacingDummyLayer]
                          , font=font)
-visualkeras.layered_view(model, legend=True, show_dimantion=True, to_file='../figures/vgg16_spacing_layers_show_dimantion.png', spacing=0)
-visualkeras.layered_view(model, legend=True, show_dimantion=True, to_file='../figures/vgg16_type_ignore_show_dimantion.png',
+visualkeras.layered_view(model, legend=True, show_dimension=True, to_file='../figures/vgg16_spacing_layers_show_dimension.png', spacing=0)
+visualkeras.layered_view(model, legend=True, show_dimension=True, to_file='../figures/vgg16_type_ignore_show_dimension.png',
                          type_ignore=[ZeroPadding2D, Dropout, Flatten, visualkeras.SpacingDummyLayer])
-visualkeras.layered_view(model, legend=True, show_dimantion=True, to_file='../figures/vgg16_color_map_show_dimantion.png',
+visualkeras.layered_view(model, legend=True, show_dimension=True, to_file='../figures/vgg16_color_map_show_dimension.png',
                          color_map=color_map, type_ignore=[visualkeras.SpacingDummyLayer])
-visualkeras.layered_view(model, legend=True, show_dimantion=True, to_file='../figures/vgg16_flat_show_dimantion.png',
+visualkeras.layered_view(model, legend=True, show_dimension=True, to_file='../figures/vgg16_flat_show_dimension.png',
                          draw_volume=False, type_ignore=[visualkeras.SpacingDummyLayer])
-visualkeras.layered_view(model, legend=True, show_dimantion=True, to_file='../figures/vgg16_scaling_show_dimantion.png',
+visualkeras.layered_view(model, legend=True, show_dimension=True, to_file='../figures/vgg16_scaling_show_dimension.png',
                          scale_xy=1, scale_z=1, max_z=1000, type_ignore=[visualkeras.SpacingDummyLayer])
