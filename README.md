@@ -4,6 +4,10 @@
 [![Build Status](https://travis-ci.org/paulgavrikov/visualkeras.svg?branch=master)](https://travis-ci.org/paulgavrikov/visualkeras)
 [![Download Count](https://img.shields.io/pypi/dm/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 
+## ⚠ Maintainer Wanted ⚠
+
+When I released this package a few years ago just before I started my PhD I was almost certain that I'd continue to use TensorFlow and would require this library daily. However, nowadays I never use TensorFlow... As such maintaining a package for a framework that I do not use while doing a PhD has become very cumbersome. That's why I need you! Yes, you! If you have at least some experience with OSS and know how to create good code please contact me to become a maintainer. There is a lot of potential in this framwork and it has gained quite some traction!
+
 ## Introduction
 Visualkeras is a Python package to help visualize Keras (either standalone or included in tensorflow) neural network architectures. It allows easy styling to fit most 
 needs. This module supports layered style architecture generation which is great for CNNs (Convolutional Neural 
