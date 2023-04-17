@@ -83,7 +83,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         z = min_z
 
         if isinstance(layer.output_shape, tuple):
-            shape = layer.output_shape
+            if isinstance(layer.output_shape[0], tuple):
+                shape = layer.output_shape[0]
+            else:
+                shape = layer.output_shape
         elif isinstance(layer.output_shape, list) and len(
                 layer.output_shape) == 1:  # drop dimension for non seq. models
             shape = layer.output_shape[0]
