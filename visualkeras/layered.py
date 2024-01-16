@@ -185,7 +185,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         if font is None:
             font = ImageFont.load_default()
 
-        text_height = font.getsize("Ag")[1]
+        text_height = font.getbbox("Ag")[3]
         cube_size = text_height
 
         de = 0
@@ -196,8 +196,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         for layer_type in layer_types:
             label = layer_type.__name__
-            text_size = font.getsize(label)
-            label_patch_size = (cube_size + de + spacing + text_size[0], cube_size + de)
+            text_size = font.getbbox(label)
+            label_patch_size = (cube_size + de + spacing + text_size[2], cube_size + de)
             # this only works if cube_size is bigger than text height
 
             img_box = Image.new('RGBA', label_patch_size, background_fill)
