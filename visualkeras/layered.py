@@ -82,13 +82,13 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         y = min_xy
         z = min_z
 
-        if isinstance(layer.output_shape, tuple):
-            shape = layer.output_shape
-        elif isinstance(layer.output_shape, list) and len(
-                layer.output_shape) == 1:  # drop dimension for non seq. models
-            shape = layer.output_shape[0]
+        if isinstance(layer.output.shape, tuple):
+            shape = layer.output.shape
+        elif isinstance(layer.output.shape, list) and len(
+                layer.output.shape) == 1:  # drop dimension for non seq. models
+            shape = layer.output.shape[0]
         else:
-            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+            raise RuntimeError(f"not supported tensor shape {layer.output.shape}")
 
         shape = shape[1:]  # drop batch size
 
