@@ -82,13 +82,18 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         y = min_xy
         z = min_z
 
-        if isinstance(layer.output_shape, tuple):
-            shape = layer.output_shape
-        elif isinstance(layer.output_shape, list) and len(
-                layer.output_shape) == 1:  # drop dimension for non seq. models
-            shape = layer.output_shape[0]
+        if hasattr(layer, 'output_shape'):
+            output_shape = layer.output_shape
         else:
-            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+            output_shape = layer.output.shape
+        
+        if isinstance(output_shape, tuple):
+            shape = output_shape
+        elif isinstance(output_shape, list) and len(
+                output_shape) == 1:  # drop dimension for non seq. models
+            shape = output_shape[0]
+        else:
+            raise RuntimeError(f"not supported tensor shape {output_shape}")
 
         shape = shape[1:]  # drop batch size
 
@@ -185,7 +190,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         if font is None:
             font = ImageFont.load_default()
 
-        text_height = font.getbbox("Ag")[3]
+        if hasattr(font, 'getsize'):
+            text_height = font.getsize("Ag")[1]
+        else:
+            text_height = font.getbbox("Ag")[3]
         cube_size = text_height
 
         de = 0
@@ -196,8 +204,11 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         for layer_type in layer_types:
             label = layer_type.__name__
-            text_size = font.getbbox(label)
-            label_patch_size = (cube_size + de + spacing + text_size[2], cube_size + de)
+            if hasattr(font, 'getsize'):
+                text_width = font.getsize(label)[0]
+            else:
+                text_width = font.getbbox(label)[2]
+            label_patch_size = (cube_size + de + spacing + text_width, cube_size + de)
             # this only works if cube_size is bigger than text height
 
             img_box = Image.new('RGBA', label_patch_size, background_fill)
