@@ -107,7 +107,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         x = min(max(shape[0] * scale_xy, x), max_xy)
         y = min(max(shape[1] * scale_xy, y), max_xy)
-        z = min(max(self_multiply(shape[2:]) * scale_z, z), max_z)
+        z = min(max(z), max_z) to z = min(max([z]), max_z)
 
         box = Box()
 
