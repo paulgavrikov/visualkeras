@@ -1,4 +1,3 @@
-from itertools import count
 from PIL import ImageFont
 from math import ceil
 from .utils import *
@@ -37,7 +36,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param legend: Add a legend of the layers to the image
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
-    :param show_dimension: show layer dimension if set legend=True
+    :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.
 
     :return: Generated architecture image.
     """
@@ -80,9 +79,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         if legend and show_dimension:
             layer_types.append(layer_type)
-        else:
-            if layer_type not in layer_types:
-                layer_types.append(layer_type)
+        elif layer_type not in layer_types:
+            layer_types.append(layer_type)
 
         x = min_xy
         y = min_xy
