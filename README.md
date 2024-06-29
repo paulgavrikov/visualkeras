@@ -129,9 +129,8 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
-###### Reversed view and output shapes
-For an encoder-like architecture the above looks good but for a decoder-like architecture we would look at the back of
-each layer. For these type of models we can switch draw_reversed to True. The following two figures show the same model with draw_reversed False and True, respectively.
+###### Reversed view
+In certain use cases, it may be useful to reverse the view of the architecture so we look at the back of each layer. For example, when visualizing a decoder-like architecture. In such cases, we can switch draw_reversed to True. The following two figures show the same model with draw_reversed set to False and True, respectively.
 
 ```python
 visualkeras.layered_view(model, draw_reversed=False) # Default behavior
