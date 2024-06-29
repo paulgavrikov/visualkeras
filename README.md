@@ -131,10 +131,16 @@ _Note: Scaled models may hide the true complexity of a layer, but are visually m
 
 ###### Reversed view and output shapes
 For an encoder-like architecture the above looks good but for a decoder-like architecture we would look at the back of
-each layer. For this type of models we can switch draw_reversed to True. The following two figures show the same model with draw_reversed False and True, respectively.
+each layer. For these type of models we can switch draw_reversed to True. The following two figures show the same model with draw_reversed False and True, respectively.
 
+```python
+visualkeras.layered_view(model, draw_reversed=False) # Default behavior
+```
 ![Default view of a decoder-like model](figures/normal_view.png)
 
+```python
+visualkeras.layered_view(model, draw_reversed=True)
+```
 ![Reversed view of a decoder-like model](figures/reversed_view.png)
 
 ## FAQ
