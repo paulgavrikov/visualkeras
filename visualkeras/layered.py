@@ -108,7 +108,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         elif len(shape) == 3:
             x = min(max(shape[1] * scale_xy, x), max_xy)
             y = min(max(shape[2] * scale_xy, y), max_xy)
-            z = min(max(z), max_z)
+            z = min(max(self_multiply(shape[2:]) * scale_z, z), max_z)
         elif len(shape) == 2:
             if one_dim_orientation == 'x':
                 x = min(max(shape[1] * scale_xy, x), max_xy)
