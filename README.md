@@ -24,7 +24,7 @@ Networks), and a graph style architecture, which works great for most models inc
 We currently only support Keras versions 2 and above. We plan to add support for Keras version 1 in the coming updates.
 
 ## Installation
-To install published releases from PyPi execute:
+To install published releases from PyPi (last updated: April 20, 2021) execute:
 ```bash
 pip install visualkeras
 ```
