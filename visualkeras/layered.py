@@ -14,7 +14,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  color_map: dict = None, one_dim_orientation: str = 'z', index_2D: list = [],
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
                  spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
-                 font: ImageFont = None, font_color: Any = 'black') -> Image:
+                 font: ImageFont = None, font_color: Any = 'black', show_dimension=False) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -42,6 +42,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param legend: Add a legend of the layers to the image
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
+    :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.
 
     :return: Generated architecture image.
     """
@@ -55,6 +56,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     x_off = -1
 
     layer_types = list()
+    dimension_list = []
 
     img_height = 0
     max_right = 0
@@ -81,7 +83,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         layer_type = type(layer)
 
-        if layer_type not in layer_types:
+        if legend and show_dimension:
+            layer_types.append(layer_type)
+        elif layer_type not in layer_types:
             layer_types.append(layer_type)
 
         x = min_xy
@@ -92,11 +96,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             output_shape = layer.output_shape
         else:
             output_shape = layer.output.shape
-        
+
         if isinstance(output_shape, tuple):
             shape = output_shape
-        elif isinstance(output_shape, list) and len(
-                output_shape) == 1:  # drop dimension for non seq. models
+        elif isinstance(output_shape, list) and len(output_shape) == 1:  # drop dimension for non seq. models
             shape = output_shape[0]
         else:
             raise RuntimeError(f"not supported tensor shape {output_shape}")
@@ -120,6 +123,15 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                 raise ValueError(f"unsupported orientation {one_dim_orientation}")
         else:
             raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+        
+        if legend and show_dimension:
+            dimension_string = str(shape)
+            dimension_string = dimension_string[1:len(dimension_string)-1].split(", ")
+            dimension = []
+            for i in range(0, len(dimension_string)):
+                if dimension_string[i].isnumeric():
+                    dimension.append(dimension_string[i])
+            dimension_list.append(dimension)
 
         box = Box()
 
@@ -253,13 +265,24 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         patches = list()
 
+        if show_dimension:
+            counter = 0
+
         for layer_type in layer_types:
-            label = layer_type.__name__
+            if show_dimension:
+                label = layer_type.__name__ + "(" + str(dimension_list[counter]) + ")"
+                counter += 1
+            else:
+                label = layer_type.__name__
+
             if hasattr(font, 'getsize'):
                 text_width = font.getsize(label)[0]
             else:
                 text_width = font.getbbox(label)[2]
+                
+            label = layer_type.__name__
             label_patch_size = (cube_size + de + spacing + text_width, cube_size + de)
+
             # this only works if cube_size is bigger than text height
 
             img_box = Image.new('RGBA', label_patch_size, background_fill)
