@@ -13,7 +13,7 @@ Networks), and a graph style architecture, which works great for most models inc
 |  Mode | Sequential  |  Functional |  Subclassed models |
 |---|---|---|---|
 | `visualkeras.layered_view()` | yes<sup>(1)</sup> | partially<sup>(1,2)</sup> |  not tested |
-| `visualkeras.graph_view()` | yes | yes |  not tested |
+| `visualkeras.graph_view()` | [no](https://github.com/paulgavrikov/visualkeras/issues/57) | yes |  not tested |
 
 <sup>1</sup>: Any tensor with more than 3 dimensions will be rendered as 3D tensor with elongated z-axis.
 
