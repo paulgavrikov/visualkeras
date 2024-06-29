@@ -7,7 +7,7 @@ from .layer_utils import *
 def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
                  max_xy: int = 2000,
                  scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = None, index_ignore: list = None,
-                 color_map: dict = None, one_dim_orientation: str = 'z',
+                 color_map: dict = None, one_dim_orientation: str = 'z', index_2D: list = [],
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
                  spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
                  font: ImageFont = None, font_color: Any = 'black') -> Image:
@@ -27,6 +27,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param index_ignore: List of layer indexes in the keras model to ignore during drawing.
     :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for not specified classes.
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
+    :param index_2D: When draw_volume is True, this represents the index of wich layers to plot in 2D.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param padding: Distance in pixel before the first and after the last layer.
@@ -112,7 +113,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         box = Box()
 
         box.de = 0
-        if draw_volume:
+        if draw_volume and index not in index_2D:
             box.de = x / 3
 
         if x_off == -1:
