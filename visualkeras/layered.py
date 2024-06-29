@@ -27,7 +27,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param index_ignore: List of layer indexes in the keras model to ignore during drawing.
     :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for not specified classes.
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
-    :param index_2D: When draw_volume is True, this represents the index of wich layers to plot in 2D.
+    :param index_2D: When draw_volume is True, the indexes in this list will be drawn in 2D.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param padding: Distance in pixel before the first and after the last layer.
