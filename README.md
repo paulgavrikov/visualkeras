@@ -19,6 +19,10 @@ Networks), and a graph style architecture, which works great for most models inc
 
 <sup>2</sup>: Only linear models where each layer has no more than one in or output. Non-linear models will be shown in sequential order.
 
+## Version Support
+
+We currently only support Keras versions 2 and above. We plan to add support for Keras version 1 in the coming updates.
+
 ## Installation
 To install published releases from PyPi execute:
 ```bash
