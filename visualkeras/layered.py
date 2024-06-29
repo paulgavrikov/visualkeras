@@ -10,10 +10,10 @@ from .layer_utils import *
 def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
                  max_xy: int = 2000,
                  scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = None, index_ignore: list = None,
-                 color_map: dict = None, one_dim_orientation: str = 'z',
-                 background_fill: Any = 'white', draw_volume: bool = True,
                  draw_reversed: bool = False,
-                 padding: int = 10, spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
+                 color_map: dict = None, one_dim_orientation: str = 'z', index_2D: list = [],
+                 background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
+                 spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
                  font: ImageFont = None, font_color: Any = 'black') -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
@@ -31,6 +31,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param index_ignore: List of layer indexes in the keras model to ignore during drawing.
     :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for not specified classes.
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
+    :param index_2D: When draw_volume is True, the indexes in this list will be drawn in 2D.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param draw_reversed: Draw 3D boxes reversed, going from front-right to back-left.
@@ -87,13 +88,18 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         y = min_xy
         z = min_z
 
-        if isinstance(layer.output_shape, tuple):
-            shape = layer.output_shape
-        elif isinstance(layer.output_shape, list) and len(
-                layer.output_shape) == 1:  # drop dimension for non seq. models
-            shape = layer.output_shape[0]
+        if hasattr(layer, 'output_shape'):
+            output_shape = layer.output_shape
         else:
-            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+            output_shape = layer.output.shape
+        
+        if isinstance(output_shape, tuple):
+            shape = output_shape
+        elif isinstance(output_shape, list) and len(
+                output_shape) == 1:  # drop dimension for non seq. models
+            shape = output_shape[0]
+        else:
+            raise RuntimeError(f"not supported tensor shape {output_shape}")
 
         if len(shape) >= 4:
             x = min(max(shape[1] * scale_xy, x), max_xy)
@@ -118,7 +124,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         box = Box()
 
         box.de = 0
-        if draw_volume:
+        if draw_volume and index not in index_2D:
             box.de = x / 3
 
         if x_off == -1:
@@ -235,7 +241,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         if font is None:
             font = ImageFont.load_default()
 
-        text_height = font.getsize("Ag")[1]
+        if hasattr(font, 'getsize'):
+            text_height = font.getsize("Ag")[1]
+        else:
+            text_height = font.getbbox("Ag")[3]
         cube_size = text_height
 
         de = 0
@@ -246,8 +255,11 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         for layer_type in layer_types:
             label = layer_type.__name__
-            text_size = font.getsize(label)
-            label_patch_size = (2 * cube_size + de + spacing + text_size[0], cube_size + de)
+            if hasattr(font, 'getsize'):
+                text_width = font.getsize(label)[0]
+            else:
+                text_width = font.getbbox(label)[2]
+            label_patch_size = (cube_size + de + spacing + text_width, cube_size + de)
             # this only works if cube_size is bigger than text height
 
             img_box = Image.new('RGBA', label_patch_size, background_fill)

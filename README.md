@@ -1,7 +1,6 @@
 # visualkeras for Keras / TensorFlow
 
 [![Latest Version](https://img.shields.io/pypi/v/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
-[![Build Status](https://travis-ci.org/paulgavrikov/visualkeras.svg?branch=master)](https://travis-ci.org/paulgavrikov/visualkeras)
 [![Download Count](https://img.shields.io/pypi/dm/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 
 ## Introduction
@@ -20,8 +19,12 @@ Networks), and a graph style architecture, which works great for most models inc
 
 <sup>2</sup>: Only linear models where each layer has no more than one in or output. Non-linear models will be shown in sequential order.
 
+## Version Support
+
+We currently only support Keras versions 2 and above. We plan to add support for Keras version 1 in the coming updates.
+
 ## Installation
-To install published releases from PyPi execute:
+To install published releases from PyPi (last updated: April 20, 2021) execute:
 ```bash
 pip install visualkeras
 ```
