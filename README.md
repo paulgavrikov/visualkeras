@@ -7,6 +7,7 @@
 Visualkeras is a Python package to help visualize Keras (either standalone or included in tensorflow) neural network architectures. It allows easy styling to fit most 
 needs. This module supports layered style architecture generation which is great for CNNs (Convolutional Neural 
 Networks), and a graph style architecture, which works great for most models including plain feed-forward networks.
+For help in citing this project refer [here](#citation-header)
 
 ## Model Support
 
@@ -173,7 +174,7 @@ You have probably not configured your default image viewer. You can install imag
 sudo apt-get install imagemagick
 ```
 
-## Citation
+<h2 id="citation-header"> Citation </h2>
 
 If you find this project helpful for your research please consider citing it in your publication as follows.
 ```
