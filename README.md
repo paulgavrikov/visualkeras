@@ -1,13 +1,13 @@
 # visualkeras for Keras / TensorFlow
 
 [![Latest Version](https://img.shields.io/pypi/v/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
-[![Build Status](https://travis-ci.org/paulgavrikov/visualkeras.svg?branch=master)](https://travis-ci.org/paulgavrikov/visualkeras)
 [![Download Count](https://img.shields.io/pypi/dm/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 
 ## Introduction
 Visualkeras is a Python package to help visualize Keras (either standalone or included in tensorflow) neural network architectures. It allows easy styling to fit most 
 needs. This module supports layered style architecture generation which is great for CNNs (Convolutional Neural 
 Networks), and a graph style architecture, which works great for most models including plain feed-forward networks.
+For help in citing this project refer [here](#citation-header)
 
 ## Model Support
 
@@ -20,8 +20,12 @@ Networks), and a graph style architecture, which works great for most models inc
 
 <sup>2</sup>: Only linear models where each layer has no more than one in or output. Non-linear models will be shown in sequential order.
 
+## Version Support
+
+We currently only support Keras versions 2 and above. We plan to add support for Keras version 1 in the coming updates.
+
 ## Installation
-To install published releases from PyPi execute:
+To install published releases from PyPi (last updated: April 20, 2021) execute:
 ```bash
 pip install visualkeras
 ```
@@ -126,6 +130,7 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
+
 ###### Drawing information text 
 With the `text_callable` argument a function can be passed to the `layered_view` function which can be used to draw text below or above a specific layer. The function should have to following properties:
 
@@ -169,6 +174,30 @@ def text_callable(layer_index, layer):
 _Note: Use the `padding` argument to avoid long text being cut off at the left or right edge of the image. Also use `SpacingDummyLayers` to avoid interleaving text of different layers._
 
 
+###### Reversed view
+In certain use cases, it may be useful to reverse the view of the architecture so we look at the back of each layer. For example, when visualizing a decoder-like architecture. In such cases, we can switch draw_reversed to True. The following two figures show the same model with draw_reversed set to False and True, respectively.
+
+```python
+visualkeras.layered_view(model, draw_reversed=False) # Default behavior
+```
+![Default view of a decoder-like model](figures/normal_view.png)
+
+```python
+visualkeras.layered_view(model, draw_reversed=True)
+```
+![Reversed view of a decoder-like model](figures/reversed_view.png)
+
+###### Show layer dimensions (in the legend)
+It is possible to display layer dimensions in the legend. To do so, set `legend=True` and `show_dimension=True` in `layered_view`. This is a simpler alternative to creating a callable for the `text_callable` argument to display dimensions above or below each layer.
+
+```python
+If you need to show layer dimension you must set `legend=True` and `show_dimension=True` in `layered_view`
+```python
+visualkeras.layered_view(model, legend=True, show_dimension=True)
+```
+
+![Show layer dimension in legend mode](figures/vgg16_legend_show_dimension.png)
+
 ## FAQ
 
 ###### Feature X documented here does not work
@@ -189,7 +218,7 @@ You have probably not configured your default image viewer. You can install imag
 sudo apt-get install imagemagick
 ```
 
-## Citation
+<h2 id="citation-header"> Citation </h2>
 
 If you find this project helpful for your research please consider citing it in your publication as follows.
 ```

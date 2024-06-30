@@ -1,20 +1,32 @@
-from tensorflow.keras import layers
 from typing import Callable
+import aggdraw
 from PIL import ImageFont
 from math import ceil
 from .utils import *
 from .layer_utils import *
+import warnings
 
+try:
+    from tensorflow.keras import layers
+except:
+    try:
+        from tensorflow.python.keras import layers
+    except:
+        try:
+            from keras import layers
+        except:
+            warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
 
 def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
                  max_xy: int = 2000,
                  scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = None, index_ignore: list = None,
-                 color_map: dict = None, one_dim_orientation: str = 'z',
-                 background_fill: Any = 'white', draw_volume: bool = True,
+                 draw_reversed: bool = False,
+                 color_map: dict = None, one_dim_orientation: str = 'z', index_2D: list = [],
+                 background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
                  text_callable: Callable[[int, layers.Layer], tuple] = None,
                  text_vspacing: int = 4,
-                 padding: int = 10, spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
-                 font: ImageFont = None, font_color: Any = 'black') -> Image:
+                 spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
+                 font: ImageFont = None, font_color: Any = 'black', show_dimension=False) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -31,10 +43,12 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param index_ignore: List of layer indexes in the keras model to ignore during drawing.
     :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for not specified classes.
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
+    :param index_2D: When draw_volume is True, the indexes in this list will be drawn in 2D.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
     :param text_callable: update later
     :param text_vspacing: The vertical spacing between lines of text which are drawn as a result of the text_callable.
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
+    :param draw_reversed: Draw 3D boxes reversed, going from front-right to back-left.
     :param padding: Distance in pixel before the first and after the last layer.
     :param spacing: Spacing in pixel between two layers
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
@@ -42,6 +56,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param legend: Add a legend of the layers to the image
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
+    :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.
 
 
     :return: Generated architecture image.
@@ -55,6 +70,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     x_off = -1
 
     layer_types = list()
+    dimension_list = []
 
     img_height = 0
     max_right = 0
@@ -81,39 +97,60 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         layer_type = type(layer)
 
-        if layer_type not in layer_types:
+        if legend and show_dimension:
+            layer_types.append(layer_type)
+        elif layer_type not in layer_types:
             layer_types.append(layer_type)
 
         x = min_xy
         y = min_xy
         z = min_z
 
-        if isinstance(layer.output_shape, tuple):
-            shape = layer.output_shape
-        elif isinstance(layer.output_shape, list) and len(
-                layer.output_shape) == 1:  # drop dimension for non seq. models
-            shape = layer.output_shape[0]
+        if hasattr(layer, 'output_shape'):
+            output_shape = layer.output_shape
+        else:
+            output_shape = layer.output.shape
+
+        if isinstance(output_shape, tuple):
+            shape = output_shape
+        elif isinstance(output_shape, list) and len(output_shape) == 1:  # drop dimension for non seq. models
+            shape = output_shape[0]
+        else:
+            raise RuntimeError(f"not supported tensor shape {output_shape}")
+
+        if len(shape) >= 4:
+            x = min(max(shape[1] * scale_xy, x), max_xy)
+            y = min(max(shape[2] * scale_xy, y), max_xy)
+            z = min(max(self_multiply(shape[3:]) * scale_z, z), max_z)
+        elif len(shape) == 3:
+            x = min(max(shape[1] * scale_xy, x), max_xy)
+            y = min(max(shape[2] * scale_xy, y), max_xy)
+            z = min(max(self_multiply(shape[2:]) * scale_z, z), max_z)
+        elif len(shape) == 2:
+            if one_dim_orientation == 'x':
+                x = min(max(shape[1] * scale_xy, x), max_xy)
+            elif one_dim_orientation == 'y':
+                y = min(max(shape[1] * scale_xy, y), max_xy)
+            elif one_dim_orientation == 'z':
+                z = min(max(shape[1] * scale_z, z), max_z)
+            else:
+                raise ValueError(f"unsupported orientation {one_dim_orientation}")
         else:
             raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
-
-        shape = shape[1:]  # drop batch size
-
-        if len(shape) == 1:
-            if one_dim_orientation in ['x', 'y', 'z']:
-                shape = (1, ) * "xyz".index(one_dim_orientation) + shape
-            else:
-                raise ValueError(f"unsupported orientation: {one_dim_orientation}")
-
-        shape = shape + (1, ) * (4 - len(shape))  # expand 4D.
-
-        x = min(max(shape[0] * scale_xy, x), max_xy)
-        y = min(max(shape[1] * scale_xy, y), max_xy)
-        z = min(max(self_multiply(shape[2:]) * scale_z, z), max_z)
+        
+        if legend and show_dimension:
+            dimension_string = str(shape)
+            dimension_string = dimension_string[1:len(dimension_string)-1].split(", ")
+            dimension = []
+            for i in range(0, len(dimension_string)):
+                if dimension_string[i].isnumeric():
+                    dimension.append(dimension_string[i])
+            dimension_list.append(dimension)
 
         box = Box()
 
         box.de = 0
-        if draw_volume:
+        if draw_volume and index not in index_2D:
             box.de = x / 3
 
         if x_off == -1:
@@ -204,30 +241,68 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     
     draw = aggdraw.Draw(img)
 
+    # Correct x positions of reversed boxes
+    if draw_reversed:
+        for box in boxes:
+            offset = box.de
+            # offset = 0
+            box.x1 = box.x1 + offset
+            box.x2 = box.x2 + offset
+
     # Draw created boxes
 
     last_box = None
 
-    for box in boxes:
+    if draw_reversed:
+        for box in boxes:
+            pen = aggdraw.Pen(get_rgba_tuple(box.outline))
 
-        pen = aggdraw.Pen(get_rgba_tuple(box.outline))
+            if last_box is not None and draw_funnel:
+                # Top connection back
+                draw.line([last_box.x2 - last_box.de, last_box.y1 - last_box.de,
+                           box.x1 - box.de, box.y1 - box.de], pen)
+                # Bottom connection back
+                draw.line([last_box.x2 - last_box.de, last_box.y2 - last_box.de,
+                           box.x1 - box.de, box.y2 - box.de], pen)
 
-        if last_box is not None and draw_funnel:
-            draw.line([last_box.x2 + last_box.de, last_box.y1 - last_box.de,
-                       box.x1 + box.de, box.y1 - box.de], pen)
+            last_box = box
 
-            draw.line([last_box.x2 + last_box.de, last_box.y2 - last_box.de,
-                       box.x1 + box.de, box.y2 - box.de], pen)
+        last_box = None
 
-            draw.line([last_box.x2, last_box.y2,
-                       box.x1, box.y2], pen)
+        for box in reversed(boxes):
+            pen = aggdraw.Pen(get_rgba_tuple(box.outline))
 
-            draw.line([last_box.x2, last_box.y1,
-                       box.x1, box.y1], pen)
+            if last_box is not None and draw_funnel:
+                # Top connection front
+                draw.line([last_box.x1, last_box.y1,
+                           box.x2, box.y1], pen)
 
-        box.draw(draw)
+                # Bottom connection front
+                draw.line([last_box.x1, last_box.y2,
+                           box.x2, box.y2], pen)
 
-        last_box = box
+            box.draw(draw, draw_reversed=True)
+
+            last_box = box
+    else:
+        for box in boxes:
+            pen = aggdraw.Pen(get_rgba_tuple(box.outline))
+
+            if last_box is not None and draw_funnel:
+                draw.line([last_box.x2 + last_box.de, last_box.y1 - last_box.de,
+                           box.x1 + box.de, box.y1 - box.de], pen)
+                draw.line([last_box.x2 + last_box.de, last_box.y2 - last_box.de,
+                           box.x1 + box.de, box.y2 - box.de], pen)
+
+                draw.line([last_box.x2, last_box.y2,
+                           box.x1, box.y2], pen)
+
+                draw.line([last_box.x2, last_box.y1,
+                           box.x1, box.y1], pen)
+
+            box.draw(draw, draw_reversed=False)
+
+            last_box = box
 
     draw.flush()
 
@@ -268,7 +343,10 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
         if font is None:
             font = ImageFont.load_default()
 
-        text_height = font.getsize("Ag")[1]
+        if hasattr(font, 'getsize'):
+            text_height = font.getsize("Ag")[1]
+        else:
+            text_height = font.getbbox("Ag")[3]
         cube_size = text_height
 
         de = 0
@@ -277,10 +355,24 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         patches = list()
 
+        if show_dimension:
+            counter = 0
+
         for layer_type in layer_types:
+            if show_dimension:
+                label = layer_type.__name__ + "(" + str(dimension_list[counter]) + ")"
+                counter += 1
+            else:
+                label = layer_type.__name__
+
+            if hasattr(font, 'getsize'):
+                text_width = font.getsize(label)[0]
+            else:
+                text_width = font.getbbox(label)[2]
+                
             label = layer_type.__name__
-            text_size = font.getsize(label)
-            label_patch_size = (cube_size + de + spacing + text_size[0], cube_size + de)
+            label_patch_size = (cube_size + de + spacing + text_width, cube_size + de)
+
             # this only works if cube_size is bigger than text height
 
             img_box = Image.new('RGBA', label_patch_size, background_fill)
@@ -289,7 +381,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             draw_text = ImageDraw.Draw(img_text)
 
             box = Box()
-            box.x1 = 0
+            box.x1 = cube_size
             box.x2 = box.x1 + cube_size
             box.y1 = de
             box.y2 = box.y1 + cube_size
@@ -297,7 +389,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             box.shade = shade_step
             box.fill = color_map.get(layer_type, {}).get('fill', "#000000")
             box.outline = color_map.get(layer_type, {}).get('outline', "#000000")
-            box.draw(draw_box)
+            box.draw(draw_box, draw_reversed)
 
             text_x = box.x2 + box.de + spacing
             text_y = (label_patch_size[1] - text_height) / 2  # 2D center; use text_height and not the current label!
@@ -307,7 +399,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             img_box.paste(img_text, mask=img_text)
             patches.append(img_box)
 
-        legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding, spacing=spacing,
+        legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding,
+                                     spacing=spacing,
                                      background_fill=background_fill, horizontal=True)
         img = vertical_image_concat(img, legend_image, background_fill=background_fill)
 
