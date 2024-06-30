@@ -1,11 +1,21 @@
+from typing import Callable
 import aggdraw
 from PIL import ImageFont
 from math import ceil
 from .utils import *
 from .layer_utils import *
+import warnings
 
-# TODO: Add example file for reversed view
-# TODO: Add section in README for reversed view
+try:
+    from tensorflow.keras import layers
+except:
+    try:
+        from tensorflow.python.keras import layers
+    except:
+        try:
+            from keras import layers
+        except:
+            warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
 
 def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
                  max_xy: int = 2000,
@@ -13,6 +23,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  draw_reversed: bool = False,
                  color_map: dict = None, one_dim_orientation: str = 'z', index_2D: list = [],
                  background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
+                 text_callable: Callable[[int, layers.Layer], tuple] = None,
+                 text_vspacing: int = 4,
                  spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
                  font: ImageFont = None, font_color: Any = 'black', show_dimension=False) -> Image:
     """
@@ -33,6 +45,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
     :param index_2D: When draw_volume is True, the indexes in this list will be drawn in 2D.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
+    :param text_callable: update later
+    :param text_vspacing: The vertical spacing between lines of text which are drawn as a result of the text_callable.
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param draw_reversed: Draw 3D boxes reversed, going from front-right to back-left.
     :param padding: Distance in pixel before the first and after the last layer.
@@ -44,9 +58,9 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
     :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.
 
+
     :return: Generated architecture image.
     """
-
     # Iterate over the model to compute bounds and generate boxes
 
     boxes = list()
@@ -171,8 +185,41 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     # Generate image
     img_width = max_right + x_off + padding
 
+    # Check if any text will be written above or below and save the maximum text height for adjusting the image height
+    is_any_text_above = False
+    is_any_text_below = False
+    max_box_with_text_height=0
+    max_box_height = 0
+    if text_callable is not None:
+        if font is None:
+            font = ImageFont.load_default()
+        i = -1
+        for index, layer in enumerate(model.layers):
+            if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
+                continue
+            i += 1
+            text, above = text_callable(i, layer)
+            if above:
+                is_any_text_above = True
+            else:
+                is_any_text_below = True
+            
+            text_height = 0
+            for line in text.split('\n'):
+                line_height = font.getsize(line)[1]
+                text_height += line_height
+            text_height += (len(text.split('\n'))-1)*text_vspacing
+            box_height = abs(boxes[i].y2-boxes[i].y1)-boxes[i].de
+            box_with_text_height = box_height + text_height
+            if box_with_text_height > max_box_with_text_height:
+                max_box_with_text_height = box_with_text_height
+            if box_height > max_box_height:
+                max_box_height = box_height
+    
+    if is_any_text_above:
+        img_height += abs(max_box_height - max_box_with_text_height)*2
+    
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
-    draw = aggdraw.Draw(img)
 
     # x, y correction (centering)
     for i, node in enumerate(boxes):
@@ -182,6 +229,17 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
 
         node.x1 += x_off
         node.x2 += x_off
+    
+
+    
+    if is_any_text_above:
+        img_height -= abs(max_box_height - max_box_with_text_height)
+        img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
+    if is_any_text_below:
+        img_height += abs(max_box_height - max_box_with_text_height)
+        img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
+    
+    draw = aggdraw.Draw(img)
 
     # Correct x positions of reversed boxes
     if draw_reversed:
@@ -247,6 +305,38 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             last_box = box
 
     draw.flush()
+
+    if text_callable is not None:
+        draw_text = ImageDraw.Draw(img)
+        i = -1
+        for index, layer in enumerate(model.layers):
+            if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
+                continue
+            i += 1
+            text, above = text_callable(i, layer)
+            text_height = 0
+            text_x_adjust = []
+            for line in text.split('\n'):
+                line_height = font.getsize(line)[1]
+                text_height += line_height
+                text_x_adjust.append(font.getsize(line)[0])
+            text_height += (len(text.split('\n'))-1)*text_vspacing
+
+            box = boxes[i]
+            text_x = box.x1 + (box.x2 - box.x1) / 2
+            text_y = box.y2
+            if above:
+                text_x = box.x1 + box.de + (box.x2 - box.x1) / 2
+                text_y = box.y1 - box.de - text_height
+            
+            text_x -= max(text_x_adjust)/2  # Shift text to the left by half of the text width, so that it is centered
+            # Centering with middle text anchor 'm' does not work with align center
+            anchor = 'la'
+            if above:
+                anchor = 'la'
+            draw_text.multiline_text((text_x, text_y), text, font=font, fill=font_color,
+                                     direction='ltr', anchor=anchor, align='center',
+                                     spacing=text_vspacing)
 
     # Create layer color legend
     if legend:
