@@ -385,8 +385,10 @@ def layered_view(model,
                 text_width = font.getsize(label)[0]
             else:
                 text_width = font.getbbox(label)[2]
+
+            if show_dimension:
+                text_width += 9 # This is needed to account for the offset of the ")]" characters
                 
-            label = layer_type.__name__
             label_patch_size = (cube_size + de + spacing + text_width, cube_size + de)
 
             # this only works if cube_size is bigger than text height
