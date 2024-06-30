@@ -130,17 +130,6 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
-###### Show layer dimensions (in the legend)
-We currently do not support showing the dimensions of each layer directly within the ML architecture. Instead, we can display layer dimensions in the legend. To do so, set `legend=True` and `show_dimension=True` in `layered_view`. Note that this is currently only available for the layered view.
-
-```python
-If you need to show layer dimension you must set `legend=True` and `show_dimension=True` in `layered_view`
-```python
-visualkeras.layered_view(model, legend=True, show_dimension=True)
-```
-
-![Show layer dimension in legend mode](figures/vgg16_legend_show_dimension.png)
-
 ###### Reversed view
 In certain use cases, it may be useful to reverse the view of the architecture so we look at the back of each layer. For example, when visualizing a decoder-like architecture. In such cases, we can switch draw_reversed to True. The following two figures show the same model with draw_reversed set to False and True, respectively.
 
@@ -153,6 +142,17 @@ visualkeras.layered_view(model, draw_reversed=False) # Default behavior
 visualkeras.layered_view(model, draw_reversed=True)
 ```
 ![Reversed view of a decoder-like model](figures/reversed_view.png)
+
+###### Show layer dimensions (in the legend)
+We currently do not support showing the dimensions of each layer directly within the ML architecture. Instead, we can display layer dimensions in the legend. To do so, set `legend=True` and `show_dimension=True` in `layered_view`. Note that this is currently only available for the layered view.
+
+```python
+If you need to show layer dimension you must set `legend=True` and `show_dimension=True` in `layered_view`
+```python
+visualkeras.layered_view(model, legend=True, show_dimension=True)
+```
+
+![Show layer dimension in legend mode](figures/vgg16_legend_show_dimension.png)
 
 ## FAQ
 
