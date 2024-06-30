@@ -133,22 +133,35 @@ With the `text_callable` argument a function can be passed to the `layered_view`
 
 - Returns two arguments: The first return value is a string containing the text to be drawn. The second return value is a bool value indicating if the text is to be drawn above the box representing the layer.
 
-The following function would produce the output shown in the figure below:
+The following function aims to describe the names of layers and their dimensionality. It would produce the output shown in the figure below:
 ```python
 def text_callable(layer_index, layer):
+    # Every other piece of text is drawn above the layer, the first one below
     above = bool(layer_index%2)
+
+    # Get the output shape of the layer
     output_shape = [x for x in list(layer.output_shape) if x is not None]
+
+    # If the output shape is a list of tuples, we only take the first one
     if isinstance(output_shape[0], tuple):
         output_shape = list(output_shape[0])
         output_shape = [x for x in output_shape if x is not None]
+
+    # Variable to store text which will be drawn    
     output_shape_txt = ""
+
+    # Create a string representation of the output shape
     for ii in range(len(output_shape)):
         output_shape_txt += str(output_shape[ii])
-        if ii < len(output_shape) - 2:
+        if ii < len(output_shape) - 2: # Add an x between dimensions, e.g. 3x3
             output_shape_txt += "x"
-        if ii == len(output_shape) - 2:
+        if ii == len(output_shape) - 2: # Add a newline between the last two dimensions, e.g. 3x3 \n 64
             output_shape_txt += "\n"
+
+    # Add the name of the layer to the text, as a new line
     output_shape_txt += f"\n{layer.name}"
+
+    # Return the text value and if it should be drawn above the layer
     return output_shape_txt, above
 ```
 ![Text Callable](figures/draw_text_callable.png)

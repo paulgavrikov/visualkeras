@@ -12,6 +12,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                  color_map: dict = None, one_dim_orientation: str = 'z',
                  background_fill: Any = 'white', draw_volume: bool = True,
                  text_callable: Callable[[int, layers.Layer], tuple] = None,
+                 text_vspacing: int = 4,
                  padding: int = 10, spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
                  font: ImageFont = None, font_color: Any = 'black') -> Image:
     """
@@ -31,6 +32,8 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for not specified classes.
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
+    :param text_callable: update later
+    :param text_vspacing: The vertical spacing between lines of text which are drawn as a result of the text_callable.
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param padding: Distance in pixel before the first and after the last layer.
     :param spacing: Spacing in pixel between two layers
@@ -39,6 +42,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param legend: Add a legend of the layers to the image
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
+
 
     :return: Generated architecture image.
     """
@@ -149,7 +153,6 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     is_any_text_below = False
     max_box_with_text_height=0
     max_box_height = 0
-    text_spacing = 4
     if text_callable is not None:
         if font is None:
             font = ImageFont.load_default()
@@ -168,7 +171,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
             for line in text.split('\n'):
                 line_height = font.getsize(line)[1]
                 text_height += line_height
-            text_height += (len(text.split('\n'))-1)*text_spacing
+            text_height += (len(text.split('\n'))-1)*text_vspacing
             box_height = abs(boxes[i].y2-boxes[i].y1)-boxes[i].de
             box_with_text_height = box_height + text_height
             if box_with_text_height > max_box_with_text_height:
@@ -242,7 +245,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                 line_height = font.getsize(line)[1]
                 text_height += line_height
                 text_x_adjust.append(font.getsize(line)[0])
-            text_height += (len(text.split('\n'))-1)*text_spacing
+            text_height += (len(text.split('\n'))-1)*text_vspacing
 
             box = boxes[i]
             text_x = box.x1 + (box.x2 - box.x1) / 2
@@ -258,7 +261,7 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
                 anchor = 'la'
             draw_text.multiline_text((text_x, text_y), text, font=font, fill=font_color,
                                      direction='ltr', anchor=anchor, align='center',
-                                     spacing=text_spacing)
+                                     spacing=text_vspacing)
 
     # Create layer color legend
     if legend:
