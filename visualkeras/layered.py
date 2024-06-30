@@ -17,16 +17,32 @@ except:
         except:
             warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
 
-def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, max_z: int = 400,
+def layered_view(model, 
+                 to_file: str = None, 
+                 min_z: int = 20, 
+                 min_xy: int = 20, 
+                 max_z: int = 400,
                  max_xy: int = 2000,
-                 scale_z: float = 0.1, scale_xy: float = 4, type_ignore: list = None, index_ignore: list = None,
-                 draw_reversed: bool = False,
-                 color_map: dict = None, one_dim_orientation: str = 'z', index_2D: list = [],
-                 background_fill: Any = 'white', draw_volume: bool = True, padding: int = 10,
+                 scale_z: float = 0.1, 
+                 scale_xy: float = 4, 
+                 type_ignore: list = None, 
+                 index_ignore: list = None,
+                 color_map: dict = None, 
+                 one_dim_orientation: str = 'z', 
+                 index_2D: list = [],
+                 background_fill: Any = 'white', 
+                 draw_volume: bool = True,
+                 draw_reversed: bool = False, 
+                 padding: int = 10,
                  text_callable: Callable[[int, layers.Layer], tuple] = None,
                  text_vspacing: int = 4,
-                 spacing: int = 10, draw_funnel: bool = True, shade_step=10, legend: bool = False,
-                 font: ImageFont = None, font_color: Any = 'black', show_dimension=False) -> Image:
+                 spacing: int = 10, 
+                 draw_funnel: bool = True, 
+                 shade_step=10, 
+                 legend: bool = False,
+                 font: ImageFont = None, 
+                 font_color: Any = 'black', 
+                 show_dimension=False) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -45,11 +61,11 @@ def layered_view(model, to_file: str = None, min_z: int = 20, min_xy: int = 20, 
     :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
     :param index_2D: When draw_volume is True, the indexes in this list will be drawn in 2D.
     :param background_fill: Color for the image background. Can be str or (R,G,B,A).
-    :param text_callable: update later
-    :param text_vspacing: The vertical spacing between lines of text which are drawn as a result of the text_callable.
     :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
     :param draw_reversed: Draw 3D boxes reversed, going from front-right to back-left.
     :param padding: Distance in pixel before the first and after the last layer.
+    :param text_callable: update later
+    :param text_vspacing: The vertical spacing between lines of text which are drawn as a result of the text_callable.
     :param spacing: Spacing in pixel between two layers
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
     :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
