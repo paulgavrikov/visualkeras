@@ -191,8 +191,6 @@ visualkeras.layered_view(model, draw_reversed=True)
 It is possible to display layer dimensions in the legend. To do so, set `legend=True` and `show_dimension=True` in `layered_view`. This is a simpler alternative to creating a callable for the `text_callable` argument to display dimensions above or below each layer.
 
 ```python
-If you need to show layer dimension you must set `legend=True` and `show_dimension=True` in `layered_view`
-```python
 visualkeras.layered_view(model, legend=True, show_dimension=True)
 ```
 
