@@ -1,33 +1,47 @@
 # Changelog
-All notable changes to this project will be documented in this file, starting from version 0.0.2
+All notable changes to this project will be documented in this file, starting from version 0.0.1.
 
-<!--
-## 1.8.0 (unreleased)
+## 0.1.1 (unreleased)
 
-Features:
+Fourth release: More compatibility and documentation fixes. Not yet in Github repo.
 
-  - add support for SVN sources -> [95f32s5b](http://www.google.com)
-  - add metadata allowed_push_host to new gem template -> [95f32s5b](http://www.google.com)
-  - adds a `--no-install` flag to `bundle package` -> [95f32s5b](http://www.google.com)
+Bug fixes:
+- Changed README.md file to use links to images rather than paths - this will allow the images to be displayed on PyPI.
+- Added compatability for Keras version 1.x.x
 
-## 1.7.0 (2014-08-13)
+## 0.1.0 (2024-06-30)
 
-Security:
-
-  - Fix for CVE-2013-0334, installing gems from an unexpected source -> [95f32s5b](http://www.google.com)
+Third release: More customization options and downwards compatability with older versions of packages.
 
 Features:
+- Draw reversed: Added the option to draw 3D networks from the back of each layer. Good for decoder-like architectures.
+- Text callable: Added a callable parameter to determine if and how text is drawn on the network.
+- Vertical padding: Added the option to add padding above and below the network.
+- Padding left: Added the option to add padding to the left of the network.
+- Bigger color palette: Expanded the default color palette to include six more colors.
+- Index 2D: Added option to specify certain layers to be drawn in 2D in a 3D network.
+- Legend dimensions: Added option to display output dimensions of all layers in the legend.
+- Vertical spacing: Added option to specify the vertical spacing between newlines of text.
 
-  - Gemfile `source` calls now take a block containing gems from that source -> [95f32s5b](http://www.google.com)
-  - added the `:source` option to `gem` to specify a source -> [95f32s5b](http://www.google.com)
+Bug fixes:
+- Downwards compatability with newer versions of Pillow.
+- Downards compatability with newer versions of Keras - compatibility with `tensorflow.keras`, `tensorflow.python.keras`, and `keras` in versions greater than 2.
+- Removed features of Pillow which require [libraqm](https://github.com/HOST-Oman/libraqm). This was done because libraqm requires custom installation and is not available for automatic installation as a dependency.
 
-Fix:
+Developer changes:
+- Switched to cleaner method for downwards compatibility with older versions of packages - now using `hasattr` instead of `try` and `except` blocks.
+- Updated documentation and docstrings for better grammar and clarity.
 
-  - warn on ambiguous gems available from more than one source -> [95f32s5b](http://www.google.com)
+*Note: We recognize this is a very large update and may, as a result, cause dependency conflicts. In future updates, we will adhere to [Semantic Versioning](https://semver.org/)*
 
-## 1.6.5 (2014-07-23)
+## 0.0.2 (2021-04-21)
 
-Bugfixes:
+Second release: Expanded the visualization options.
 
-  - require openssl explicitly to fix rare HTTPS request failures -> [95f32s5b](http://www.google.com)
--->
+Features:
+- Added graph_view as an alternative visualization file.
+- Added the option to have a legend in layer_view.
+
+## 0.0.1 (2020-10-05)
+
+Initial release.
