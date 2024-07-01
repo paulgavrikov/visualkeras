@@ -222,7 +222,10 @@ def layered_view(model,
             
             text_height = 0
             for line in text.split('\n'):
-                line_height = font.getsize(line)[1]
+                if hasattr(font, 'getsize'):
+                    line_height = font.getsize(line)[1]
+                else:
+                    line_height = font.getbbox(line)[3]
                 text_height += line_height
             text_height += (len(text.split('\n'))-1)*text_vspacing
             box_height = abs(boxes[i].y2-boxes[i].y1)-boxes[i].de
@@ -333,9 +336,17 @@ def layered_view(model,
             text_height = 0
             text_x_adjust = []
             for line in text.split('\n'):
-                line_height = font.getsize(line)[1]
+                if hasattr(font, 'getsize'):
+                    line_height = font.getsize(line)[1]
+                else:
+                    line_height = font.getbbox(line)[3]
+                
                 text_height += line_height
-                text_x_adjust.append(font.getsize(line)[0])
+
+                if hasattr(font, 'getsize'):
+                    text_x_adjust.append(font.getsize(line)[0])
+                else:
+                    text_x_adjust.append(font.getbbox(line)[2])
             text_height += (len(text.split('\n'))-1)*text_vspacing
 
             box = boxes[i]
