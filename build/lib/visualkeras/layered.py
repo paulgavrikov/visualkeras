@@ -361,9 +361,8 @@ def layered_view(model,
             anchor = 'la'
             if above:
                 anchor = 'la'
-        
             draw_text.multiline_text((text_x, text_y), text, font=font, fill=font_color,
-                                     anchor=anchor, align='center',
+                                     direction='ltr', anchor=anchor, align='center',
                                      spacing=text_vspacing)
 
     # Create layer color legend
