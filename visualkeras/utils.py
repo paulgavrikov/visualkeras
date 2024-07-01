@@ -77,7 +77,7 @@ class Box(RectShape):
                               self.x2 + self.de, self.y2 - self.de
                               ], pen, brush_s2)
 
-            draw.rectangle([self.x1, self.y1, self.x2, self.y2], pen, brush)
+        draw.rectangle([self.x1, self.y1, self.x2, self.y2], pen, brush)
 
 
 class Circle(RectShape):
