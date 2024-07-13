@@ -25,7 +25,7 @@ For help in citing this project, refer [here](#citation-header).
 We currently only support Keras versions 2 and above. We plan to add support for Keras version 1 in the coming updates.
 
 ## Installation
-To install published releases from PyPi (last updated: April 20, 2021) execute:
+To install published releases from PyPi (last updated: June 30, 2024) execute:
 ```bash
 pip install visualkeras
 ```
