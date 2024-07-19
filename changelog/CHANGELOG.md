@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file, starting fr
 
 ## 0.1.1 (unreleased)
 
-Fourth release: More compatibility and documentation fixes. Not yet in Github repo.
+Fourth release: Bug fixes.
 
 Bug fixes:
 - Changed README.md file to use links to images rather than paths - this will allow the images to be displayed on PyPI.
