@@ -7,7 +7,7 @@ Fourth release: More compatibility and documentation fixes. Not yet in Github re
 
 Bug fixes:
 - Changed README.md file to use links to images rather than paths - this will allow the images to be displayed on PyPI.
-- Added compatability for Keras version 1.x.x
+- Fixed bug which caused text in legend to be cut off.
 
 ## 0.1.0 (2024-06-30)
 
