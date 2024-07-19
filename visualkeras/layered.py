@@ -398,11 +398,10 @@ def layered_view(model,
             else:
                 text_width = font.getbbox(label)[2]
 
-            if show_dimension:
-                if hasattr(font, 'getsize'):
-                    text_width += font.getsize('||')[0]
-                else:
-                    text_width += font.getbbox('||')[2]
+            if hasattr(font, 'getsize'):
+                text_width += font.getsize('||')[0]
+            else:
+                text_width += font.getbbox('||')[2]
                 
             label_patch_size = (cube_size + de + spacing + text_width, cube_size + de)
 
