@@ -49,13 +49,13 @@ visualkeras.layered_view(model, to_file='output.png') # write to disk
 visualkeras.layered_view(model, to_file='output.png').show() # write and show
 ```
 
-To help understand some of the most important parameters we are going to use a VGG16 CNN architecture (see [example.py](examples/vgg16.py)).
+To help understand some of the most important parameters we are going to use a VGG16 CNN architecture (see [example.py](https://github.com/paulgavrikov/visualkeras/blob/master/examples/vgg16.py)).
 
 ###### Default
 ```python
 visualkeras.layered_view(model)
 ```
-![Default view of a VGG16 CNN](figures/vgg16.png)
+![Default view of a VGG16 CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16.png)
 
 ###### Legend
 
@@ -69,13 +69,13 @@ from PIL import ImageFont
 font = ImageFont.truetype("arial.ttf", 32)  # using comic sans is strictly prohibited!
 visualkeras.layered_view(model, legend=True, font=font)  # font is optional!
 ```
-![Layered view of a VGG16 CNN with legend](figures/vgg16_legend.png)
+![Layered view of a VGG16 CNN with legend](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_legend.png)
 
 ###### Flat Style
 ```python
 visualkeras.layered_view(model, draw_volume=False)
 ```
-![Flat view of a VGG16 CNN](figures/vgg16_flat.png)
+![Flat view of a VGG16 CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_flat.png)
 
 ###### Spacing and logic grouping
 The global distance between two layers can be controlled with `spacing`. To generate logical groups a special dummy 
@@ -89,7 +89,7 @@ model.add(visualkeras.SpacingDummyLayer(spacing=100))
 
 visualkeras.layered_view(model, spacing=0)
 ```
-![Spaced and grouped view of a VGG16 CNN](figures/vgg16_spacing_layers.png)
+![Spaced and grouped view of a VGG16 CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_spacing_layers.png)
 
 
 ###### Custom color map
@@ -108,7 +108,7 @@ color_map[Flatten]['fill'] = 'teal'
 
 visualkeras.layered_view(model, color_map=color_map)
 ```
-![Custom colored view of a VGG16 CNN](figures/vgg16_color_map.png)
+![Custom colored view of a VGG16 CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_color_map.png)
 
 ###### Hiding layers
 Some models may consist of too many layers to visualize or to comprehend the model. In this case it can be helpful to 
@@ -117,7 +117,7 @@ hide (ignore) certain layers of the keras model without modifying it. Visualkera
 ```python
 visualkeras.layered_view(model, type_ignore=[ZeroPadding2D, Dropout, Flatten])
 ```
-![Simplified view of a VGG16 CNN](figures/vgg16_type_ignore.png)
+![Simplified view of a VGG16 CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_type_ignore.png)
 
 ###### Scaling dimensions
 Visualkeras computes the size of each layer by the output shape. Values are transformed into pixels. Then, scaling is 
@@ -127,7 +127,7 @@ to prevent to small or large options minimum and maximum values can be set (`min
 ```python
 visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ```
-![True scale view of a VGG16 CNN](figures/vgg16_scaling.png)
+![True scale view of a VGG16 CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
 
@@ -169,7 +169,7 @@ def text_callable(layer_index, layer):
     # Return the text value and if it should be drawn above the layer
     return output_shape_txt, above
 ```
-![Text Callable](figures/draw_text_callable.png)
+![Text Callable](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/draw_text_callable.png)
 
 _Note: Use the `padding` argument to avoid long text being cut off at the left or right edge of the image. Also use `SpacingDummyLayers` to avoid interleaving text of different layers._
 
@@ -180,12 +180,12 @@ In certain use cases, it may be useful to reverse the view of the architecture s
 ```python
 visualkeras.layered_view(model, draw_reversed=False) # Default behavior
 ```
-![Default view of a decoder-like model](figures/normal_view.png)
+![Default view of a decoder-like model](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/normal_view.png)
 
 ```python
 visualkeras.layered_view(model, draw_reversed=True)
 ```
-![Reversed view of a decoder-like model](figures/reversed_view.png)
+![Reversed view of a decoder-like model](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/reversed_view.png)
 
 ###### Show layer dimensions (in the legend)
 It is possible to display layer dimensions in the legend. To do so, set `legend=True` and `show_dimension=True` in `layered_view`. This is a simpler alternative to creating a callable for the `text_callable` argument to display dimensions above or below each layer.
@@ -194,7 +194,7 @@ It is possible to display layer dimensions in the legend. To do so, set `legend=
 visualkeras.layered_view(model, legend=True, show_dimension=True)
 ```
 
-![Show layer dimension in legend mode](figures/vgg16_legend_show_dimension.png)
+![Show layer dimension in legend mode](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_legend_show_dimension.png)
 
 ## FAQ
 
