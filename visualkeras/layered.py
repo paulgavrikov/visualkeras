@@ -40,6 +40,7 @@ def layered_view(model,
                  draw_funnel: bool = True, 
                  shade_step=10, 
                  legend: bool = False,
+                 legend_text_spacing_offset = 0,
                  font: ImageFont = None, 
                  font_color: Any = 'black', 
                  show_dimension=False) -> Image:
@@ -70,6 +71,7 @@ def layered_view(model,
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
     :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
     :param legend: Add a legend of the layers to the image
+    :param legend_text_spacing_offset: Offset the amount of space allocated for legend text. Useful when legend text is being cut off
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
     :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.
@@ -394,14 +396,9 @@ def layered_view(model,
                 label = layer_type.__name__
 
             if hasattr(font, 'getsize'):
-                text_width = font.getsize(label)[0]
+                text_width = font.getsize(label)[0] + legend_text_spacing_offset
             else:
-                text_width = font.getbbox(label)[2]
-
-            if hasattr(font, 'getsize'):
-                text_width += font.getsize('||')[0]
-            else:
-                text_width += font.getbbox('||')[2]
+                text_width = font.getbbox(label)[2] + legend_text_spacing_offset
                 
             label_patch_size = (cube_size + de + spacing + text_width, cube_size + de)
 
