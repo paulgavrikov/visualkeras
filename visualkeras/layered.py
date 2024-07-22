@@ -81,6 +81,10 @@ def layered_view(model,
     """
     # Iterate over the model to compute bounds and generate boxes
 
+    # Deprecation warning for legend_text_spacing_offset
+    if legend_text_spacing_offset is not 0:
+        warnings.warn("The legend_text_spacing_offset parameter is deprecated and will be removed in a future release.")
+
     boxes = list()
     layer_y = list()
     color_wheel = ColorWheel()
@@ -395,12 +399,12 @@ def layered_view(model,
             else:
                 label = layer_type.__name__
 
+            
             if hasattr(font, 'getsize'):
-                text_width = font.getsize(label)[0] + legend_text_spacing_offset
+                text_size = font.getsize(label)
             else:
-                text_width = font.getbbox(label)[2] + legend_text_spacing_offset
-                
-            label_patch_size = (cube_size + de + spacing + text_width, cube_size + de)
+                text_size = font.getbbox(label)
+            label_patch_size = (2 * cube_size + de + spacing + text_size[0], cube_size + de)
 
             # this only works if cube_size is bigger than text height
 
