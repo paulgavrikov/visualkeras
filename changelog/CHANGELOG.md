@@ -11,7 +11,7 @@ Bug fixes:
 Deprecations:
 - Began deprecation of `legend_text_spacing_offset` parameter in `layered_view` function. It will be deprecated in a future release.
 
-## 0.1.2 (2024-07-19)
+## 0.1.2 (2024-07-20)
 Fifth release: Bug fix.
 
 Bug fixes:
