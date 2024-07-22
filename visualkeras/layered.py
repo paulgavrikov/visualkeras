@@ -40,7 +40,7 @@ def layered_view(model,
                  draw_funnel: bool = True, 
                  shade_step=10, 
                  legend: bool = False,
-                 legend_text_spacing_offset = 0,
+                 legend_text_spacing_offset = 15,
                  font: ImageFont = None, 
                  font_color: Any = 'black', 
                  show_dimension=False) -> Image:
