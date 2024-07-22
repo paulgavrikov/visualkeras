@@ -1,13 +1,31 @@
 # Changelog
 All notable changes to this project will be documented in this file, starting from version 0.0.1.
 
-## 0.1.1 (unreleased)
+## 0.1.3 (unreleased)
 
-Fourth release: Bug fixes.
+Sixth release: Unreleased.
 
 Bug fixes:
+- Applied full fix to bug which caused text in legend to be cut off.
+
+Deprecations:
+- Began deprecation of `legend_text_spacing_offset` parameter in `layered_view` function. It will be deprecated in a future release.
+
+## 0.1.2 (2024-07-19)
+Fifth release: Bug fix.
+
+Bug fixes:
+- Made temporary fix to bug which caused text in legend to be cut off (added `legend_text_spacing_offset` parameter `layered_view` function). The fix applied in version 0.1.1 only worked for some cases. This fix should work for all cases.
+
+## 0.1.1 (2024-07-19)
+
+Fourth release: Bug fixes and documentation update.
+
+Bug fixes:
+- Made temporary fix to bug which caused text in legend to be cut off.
+
+Documentation:
 - Changed README.md file to use links to images rather than paths - this will allow the images to be displayed on PyPI.
-- Fixed bug which caused text in legend to be cut off.
 
 ## 0.1.0 (2024-06-30)
 
