@@ -1,7 +1,7 @@
 # Changelog
 All notable changes to this project will be documented in this file, starting from version 0.0.1.
 
-## 0.1.3 (unreleased)
+## 0.1.3 (2024-07-27)
 
 Sixth release: Unreleased.
 
