@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file, starting fr
 
 ## 0.1.3 (2024-07-27)
 
-Sixth release: Unreleased.
+Sixth release: Bug fix.
 
 Bug fixes:
 - Applied full fix to bug which caused text in legend to be cut off.
