@@ -20,11 +20,21 @@ class SpacingDummyLayer(Layer):
 
 def get_incoming_layers(layer):
     for i, node in enumerate(layer._inbound_nodes):
-        if isinstance(node.inbound_layers, Iterable):
-            for inbound_layer in node.inbound_layers:
-                yield inbound_layer
-        else:  # for tf 2.3
-            yield node.inbound_layers
+        if hasattr(node, 'inbound_layers'):
+            # Old Node class (TF 2.15 & Keras 2.15 and under)
+            if isinstance(node.inbound_layers, Iterable):
+                for inbound_layer in node.inbound_layers:
+                    yield inbound_layer
+            else:  # For older versions like TF 2.3
+                yield node.inbound_layers
+        else:
+            # New Node class (TF 2.16 and Keras 3 and up)
+            inbound_layers = [parent_node.operation for parent_node in node.parent_nodes]
+            if isinstance(inbound_layers, Iterable):
+                for inbound_layer in inbound_layers:
+                    yield inbound_layer
+            else:
+                yield inbound_layers
 
 
 def get_outgoing_layers(layer):
