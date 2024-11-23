@@ -82,7 +82,7 @@ def layered_view(model,
     # Iterate over the model to compute bounds and generate boxes
 
     # Deprecation warning for legend_text_spacing_offset
-    if legend_text_spacing_offset is not 0:
+    if legend_text_spacing_offset != 0:
         warnings.warn("The legend_text_spacing_offset parameter is deprecated and will be removed in a future release.")
 
     boxes = list()
