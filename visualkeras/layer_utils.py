@@ -171,14 +171,29 @@ def is_internal_input(layer):
         import tensorflow.python.keras.engine.input_layer.InputLayer
         if isinstance(layer, tensorflow.python.keras.engine.input_layer.InputLayer):
             return True
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, AttributeError):
+        pass
+    
+    try:
+        # From versions Keras 2.13+ the Keras module may store all its code in a src subfolder
+        import tensorflow.python.keras.src.keras.engine.input_layer.InputLayer 
+        if isinstance(layer, tensorflow.python.keras.src.engine.input_layer.InputLayer):
+            return True
+    except (ModuleNotFoundError, AttributeError):
         pass
 
     try:
         import keras
         if isinstance(layer, keras.engine.input_layer.InputLayer):
             return True
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, AttributeError):
+        pass
+
+    try:
+        import keras
+        if isinstance(layer, keras.src.engine.input_layer.InputLayer):
+            return True
+    except (ModuleNotFoundError, AttributeError):
         pass
 
     return False
