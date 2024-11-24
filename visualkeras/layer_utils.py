@@ -109,8 +109,17 @@ def find_input_layers(model, id_to_num_mapping=None, adj_matrix=None):
 
 
 def find_output_layers(model):
-    for name in model.output_names:
-        yield model.get_layer(name=name)
+    if hasattr(model, 'output_names'):
+        # For older Keras versions (<3)
+        for name in model.output_names:
+            yield model.get_layer(name=name)
+    else:
+        # For newer Keras versions (>=3)
+        for output in model.outputs:
+            if hasattr(output, '_keras_history'):
+                # Get the layer that produced the output
+                layer = output._keras_history[0]
+                yield layer
 
 
 def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
