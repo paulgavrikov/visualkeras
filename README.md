@@ -216,6 +216,14 @@ You have probably not configured your default image viewer. You can install imag
 sudo apt-get install imagemagick
 ```
 
+## Future Features
+These are features we plan to add in the future. If you're up for it, open an issue about a feature and code up a PR to add it!
+- [ ] Multi-modal model support
+- [ ] ResNet / Concatenation visualizations
+- [ ] More professional and academic visualizations for `graph_view` ([example](https://github.com/paulgavrikov/visualkeras/blob/master/figures/professional_diagram_sample.png))
+- [ ] Annotate repeated layers or blocks (e.g., overarching double-arrow line w/ "3x" over it)
+- [ ] Automated testing with GitHub actions
+
 <h2 id="citation-header"> Citation </h2>
 
 If you find this project helpful for your research please consider citing it in your publication as follows.
