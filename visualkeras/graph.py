@@ -53,13 +53,36 @@ def graph_view(model, to_file: str = None,
     layers = list()
     layer_y = list()
 
+    # Determine output names compatible with both Keras versions
+    if hasattr(model, 'output_names'):
+        # Older versions of Keras
+        output_names = model.output_names
+    else:
+        # Newer versions of Keras
+        output_names = []
+        for output in model.outputs:
+            if hasattr(output, '_keras_history'):
+                # Get the layer that produced the output
+                layer = output._keras_history[0]
+                output_names.append(layer.name)
+            else:
+                # Fallback
+                # Use the tensor's name or a default name if keras_history is not available
+                output_names.append(getattr(output, 'name', f'output_{len(output_names)}'))
+
     # Attach helper layers
 
     id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
     model_layers = model_to_hierarchy_lists(model, id_to_num_mapping, adj_matrix)
 
-    # add fake output layers
-    model_layers.append([_DummyLayer(model.output_names[i], None if inout_as_tensor else self_multiply(model.output_shape[i])) for i in range(len(model.outputs))])
+    # Add fake output layers
+    model_layers.append([
+        _DummyLayer(
+            output_names[i],
+            None if inout_as_tensor else self_multiply(model.output_shape[i])
+        )
+        for i in range(len(model.outputs))
+    ])
     id_to_num_mapping, adj_matrix = augment_output_layers(model, model_layers[-1], id_to_num_mapping, adj_matrix)
 
     # Create architecture

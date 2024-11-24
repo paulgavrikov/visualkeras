@@ -20,11 +20,21 @@ class SpacingDummyLayer(Layer):
 
 def get_incoming_layers(layer):
     for i, node in enumerate(layer._inbound_nodes):
-        if isinstance(node.inbound_layers, Iterable):
-            for inbound_layer in node.inbound_layers:
-                yield inbound_layer
-        else:  # for tf 2.3
-            yield node.inbound_layers
+        if hasattr(node, 'inbound_layers'):
+            # Old Node class (TF 2.15 & Keras 2.15 and under)
+            if isinstance(node.inbound_layers, Iterable):
+                for inbound_layer in node.inbound_layers:
+                    yield inbound_layer
+            else:  # For older versions like TF 2.3
+                yield node.inbound_layers
+        else:
+            # New Node class (TF 2.16 and Keras 3 and up)
+            inbound_layers = [parent_node.operation for parent_node in node.parent_nodes]
+            if isinstance(inbound_layers, Iterable):
+                for inbound_layer in inbound_layers:
+                    yield inbound_layer
+            else:
+                yield inbound_layers
 
 
 def get_outgoing_layers(layer):
@@ -99,8 +109,17 @@ def find_input_layers(model, id_to_num_mapping=None, adj_matrix=None):
 
 
 def find_output_layers(model):
-    for name in model.output_names:
-        yield model.get_layer(name=name)
+    if hasattr(model, 'output_names'):
+        # For older Keras versions (<3)
+        for name in model.output_names:
+            yield model.get_layer(name=name)
+    else:
+        # For newer Keras versions (>=3)
+        for output in model.outputs:
+            if hasattr(output, '_keras_history'):
+                # Get the layer that produced the output
+                layer = output._keras_history[0]
+                yield layer
 
 
 def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
@@ -152,14 +171,29 @@ def is_internal_input(layer):
         import tensorflow.python.keras.engine.input_layer.InputLayer
         if isinstance(layer, tensorflow.python.keras.engine.input_layer.InputLayer):
             return True
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, AttributeError):
+        pass
+    
+    try:
+        # From versions Keras 2.13+ the Keras module may store all its code in a src subfolder
+        import tensorflow.python.keras.src.keras.engine.input_layer.InputLayer 
+        if isinstance(layer, tensorflow.python.keras.src.engine.input_layer.InputLayer):
+            return True
+    except (ModuleNotFoundError, AttributeError):
         pass
 
     try:
         import keras
         if isinstance(layer, keras.engine.input_layer.InputLayer):
             return True
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, AttributeError):
+        pass
+
+    try:
+        import keras
+        if isinstance(layer, keras.src.engine.input_layer.InputLayer):
+            return True
+    except (ModuleNotFoundError, AttributeError):
         pass
 
     return False
