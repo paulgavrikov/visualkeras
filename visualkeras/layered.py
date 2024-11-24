@@ -403,7 +403,10 @@ def layered_view(model,
             if hasattr(font, 'getsize'):
                 text_size = font.getsize(label)
             else:
-                text_size = font.getbbox(label)
+                # Get last two values of the bounding box
+                # getbbox returns 4 dimensions in total, where the first two are always zero, 
+                # So we fetch the last two dimensions to match the behavior of getsize
+                text_size = font.getbbox(label)[2:]
             label_patch_size = (2 * cube_size + de + spacing + text_size[0], cube_size + de)
 
             # this only works if cube_size is bigger than text height
