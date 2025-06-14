@@ -167,13 +167,31 @@ def augment_output_layers(model, output_layers, id_to_num_mapping, adj_matrix):
 
 
 def is_internal_input(layer):
+    # Treat any InputLayer class as internal input
+    if layer.__class__.__name__ == 'InputLayer':
+        return True
+    # Detect tf.keras InputLayer (newer versions)
+    try:
+        from tensorflow.keras.layers import InputLayer as _TfInputLayer
+        if isinstance(layer, _TfInputLayer):
+            return True
+    except (ImportError, ModuleNotFoundError, AttributeError):
+        pass
+    # Detect standalone keras InputLayer
+    try:
+        from keras.layers import InputLayer as _KerasInputLayer
+        if isinstance(layer, _KerasInputLayer):
+            return True
+    except (ImportError, ModuleNotFoundError, AttributeError):
+        pass
+    # Fallback for older internal paths
     try:
         import tensorflow.python.keras.engine.input_layer.InputLayer
         if isinstance(layer, tensorflow.python.keras.engine.input_layer.InputLayer):
             return True
     except (ModuleNotFoundError, AttributeError):
         pass
-    
+
     try:
         # From versions Keras 2.13+ the Keras module may store all its code in a src subfolder
         import tensorflow.python.keras.src.keras.engine.input_layer.InputLayer 
