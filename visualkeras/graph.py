@@ -68,22 +68,47 @@ def graph_view(model, to_file: str = None,
             else:
                 # Fallback
                 # Use the tensor's name or a default name if keras_history is not available
-                output_names.append(getattr(output, 'name', f'output_{len(output_names)}'))
-
-    # Attach helper layers
+                output_names.append(getattr(output, 'name', f'output_{len(output_names)}'))    # Attach helper layers
 
     id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
     model_layers = model_to_hierarchy_lists(model, id_to_num_mapping, adj_matrix)
-
-    # Add fake output layers
-    model_layers.append([
-        _DummyLayer(
-            output_names[i],
-            None if inout_as_tensor else self_multiply(model.output_shape[i])
-        )
-        for i in range(len(model.outputs))
-    ])
-    id_to_num_mapping, adj_matrix = augment_output_layers(model, model_layers[-1], id_to_num_mapping, adj_matrix)
+    
+    # Add fake output layers only when needed
+    # When inout_as_tensor=False, only add dummy layers if output-producing layers
+    # are not in the last hierarchy level (to avoid duplication)
+    should_add_dummy_outputs = inout_as_tensor
+    
+    if not inout_as_tensor:
+        # Check if all output-producing layers are in the last hierarchy level
+        last_level_layers = model_layers[-1] if model_layers else []
+        layers_producing_outputs = []
+        
+        for output_tensor in model.outputs:
+            for layer in model.layers:
+                if hasattr(layer, 'output') and layer.output is output_tensor:
+                    layers_producing_outputs.append(layer)
+                    break
+        
+        # Only add dummy outputs if some output-producing layers are NOT in the last level
+        should_add_dummy_outputs = not all(layer in last_level_layers for layer in layers_producing_outputs)
+    
+    if should_add_dummy_outputs:
+        # Normalize output_shape to always be a list of tuples
+        if isinstance(model.output_shape, tuple):
+            # Single output model: output_shape is a tuple, convert to list of tuples
+            output_shapes = [model.output_shape]
+        else:
+            # Multi-output model: output_shape is already a list of tuples
+            output_shapes = model.output_shape
+        
+        model_layers.append([
+            _DummyLayer(
+                output_names[i],
+                None if inout_as_tensor else self_multiply(output_shapes[i])
+            )
+            for i in range(len(model.outputs))
+        ])
+        id_to_num_mapping, adj_matrix = augment_output_layers(model, model_layers[-1], id_to_num_mapping, adj_matrix)
 
     # Create architecture
 
@@ -95,10 +120,9 @@ def graph_view(model, to_file: str = None,
         current_y = 0
         nodes = []
         for layer in layer_list:
-
             is_box = True
             units = 1
-
+            
             if show_neurons:
                 if hasattr(layer, 'units'):
                     is_box = False
@@ -108,7 +132,15 @@ def graph_view(model, to_file: str = None,
                     units = layer.filters
                 elif is_internal_input(layer) and not inout_as_tensor:
                     is_box = False
-                    units = self_multiply(layer.input_shape)
+                    # Normalize input_shape to handle both tuple and list formats
+                    input_shape = layer.input_shape
+                    if isinstance(input_shape, tuple):
+                        shape = input_shape
+                    elif isinstance(input_shape, list) and len(input_shape) == 1:
+                        shape = input_shape[0]
+                    else:
+                        raise RuntimeError(f"not supported input shape {input_shape}")
+                    units = self_multiply(shape)
 
             n = min(units, ellipsize_after)
             layer_nodes = list()
