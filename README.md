@@ -145,7 +145,17 @@ def text_callable(layer_index, layer):
     above = bool(layer_index%2)
 
     # Get the output shape of the layer
-    output_shape = [x for x in list(layer.output_shape) if x is not None]
+    if hasattr(layer, 'output_shape'):
+        # ───────────────────────────────
+        # Legacy Keras (standalone 2.x) or TF-Keras <2.11
+        # ───────────────────────────────
+        # this will work so long as `layer.output_shape` exists
+        output_shape = [x for x in list(layer.output.shape) if x is not None]
+    else:
+        # ───────────────────────────────
+        # Modern TF-Keras (>= 2.11) – attribute removed
+        # ───────────────────────────────
+        output_shape = layer.output.shape.as_list()
 
     # If the output shape is a list of tuples, we only take the first one
     if isinstance(output_shape[0], tuple):
