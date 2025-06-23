@@ -17,6 +17,61 @@ except:
         except:
             warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
 
+def extract_primary_shape(layer_output_shape):
+    """
+    Extract the primary shape from a layer's output shape to handle multi-output scenarios.
+    
+    This function addresses the issue where some layers (like TransformerBlock in ViT models)
+    have multiple outputs, resulting in a tuple of shapes rather than a single shape tuple.
+    For visualization purposes, we need to extract the primary/main output shape.
+    
+    Args:
+        layer_output_shape: The output shape from a Keras layer. Can be:
+            - A single shape tuple: (None, height, width, channels)
+            - A tuple of shape tuples: ((None, 197, 1024), (None, 16, None, None))
+            - A list of shape tuples: [(None, 197, 1024), (None, 16, None, None)]
+    
+    Returns:
+        tuple: The primary shape tuple to use for visualization. Always returns a single
+               shape tuple in the format (batch_size, dim1, dim2, ...).
+    
+    Examples:
+        >>> # Single output case
+        >>> extract_primary_shape((None, 224, 224, 3))
+        (None, 224, 224, 3)
+        
+        >>> # Multi-output case (TransformerBlock)
+        >>> extract_primary_shape(((None, 197, 1024), (None, 16, None, None)))
+        (None, 197, 1024)
+        
+        >>> # List of outputs case
+        >>> extract_primary_shape([(None, 197, 1024), (None, 16, None, None)])
+        (None, 197, 1024)
+    
+    Notes:
+        - For multi-output layers, the first output is considered the primary output
+        - The function assumes the primary output contains the main feature representations
+        - Secondary outputs (like attention weights) are ignored for visualization purposes
+    """
+    # Handle None or empty cases
+    if layer_output_shape is None:
+        return (None,)
+    
+    # Check if this is a multi-output scenario
+    if isinstance(layer_output_shape, (tuple, list)) and len(layer_output_shape) > 0:
+        # Check if the first element is itself a shape tuple/list
+        first_element = layer_output_shape[0]
+        
+        if isinstance(first_element, (tuple, list)):
+            # Multi-output case: return the first (primary) output shape
+            return first_element
+        else:
+            # Single output case: the whole thing is the shape
+            return layer_output_shape
+    
+    # Fallback for unexpected formats
+    return layer_output_shape
+
 def layered_view(model, 
                  to_file: str = None, 
                  min_z: int = 20, 
@@ -80,6 +135,19 @@ def layered_view(model,
     :return: Generated architecture image.
     """
     # Iterate over the model to compute bounds and generate boxes
+
+    # Debug: Print model information
+    print(f"DEBUG: Model type: {type(model)}")
+    print(f"DEBUG: Model name: {getattr(model, 'name', 'unnamed')}")
+    print(f"DEBUG: Number of layers: {len(model.layers)}")
+    
+    # Debug: Print first few layers' details
+    print("DEBUG: First 5 layers:")
+    for i, layer in enumerate(model.layers[:5]):
+        print(f"  Layer {i}: {layer.__class__.__name__} - {getattr(layer, 'name', 'unnamed')}")
+        print(f"    Input shape: {getattr(layer, 'input_shape', 'N/A')}")
+        print(f"    Output shape: {getattr(layer, 'output_shape', 'N/A')}")
+    print("DEBUG: " + "="*60)
 
     # Deprecation warning for legend_text_spacing_offset
     if legend_text_spacing_offset != 0:
@@ -154,6 +222,19 @@ def layered_view(model,
             elif one_dim_orientation == 'y':
                 y = min(max(shape[1] * scale_xy, y), max_xy)
             elif one_dim_orientation == 'z':
+                # Debug: Debug prints to understand the issue
+                print(f"DEBUG: Processing layer: {layer.__class__.__name__}")
+                print(f"DEBUG: Layer name: {getattr(layer, 'name', 'unnamed')}")
+                print(f"DEBUG: Raw shape: {shape}")
+                print(f"DEBUG: shape type: {type(shape)}")
+                print(f"DEBUG: shape[1]: {shape[1]}")
+                print(f"DEBUG: shape[1] type: {type(shape[1])}")
+                if hasattr(shape[1], '__len__'):
+                    print(f"DEBUG: shape[1] length: {len(shape[1])}")
+                    print(f"DEBUG: shape[1] contents: {list(shape[1]) if hasattr(shape[1], '__iter__') else 'not iterable'}")
+                print(f"DEBUG: scale_z: {scale_z}, scale_z type: {type(scale_z)}")
+                print("DEBUG: " + "="*50)
+
                 z = min(max(shape[1] * scale_z, z), max_z)
             else:
                 raise ValueError(f"unsupported orientation {one_dim_orientation}")
