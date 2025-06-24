@@ -19,35 +19,32 @@ except:
             warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
 
 def layered_view(model, 
-                to_file: str = None, 
-                min_z: int = 20, 
-                min_xy: int = 20, 
-                max_z: int = 400,
-                max_xy: int = 2000,
-                scale_z: float = 0.1, 
-                scale_xy: float = 4, 
-                type_ignore: list = None, 
-                index_ignore: list = None,
-                color_map: dict = None, 
-                one_dim_orientation: str = 'z', 
-                index_2D: list = [],
-                background_fill: Any = 'white', 
-                draw_volume: bool = True,
-                draw_reversed: bool = False, 
-                padding: int = 10,
-                text_callable: Callable[[int, layers.Layer], tuple] = None,
-                text_vspacing: int = 4,
-                spacing: int = 10, 
-                draw_funnel: bool = True, 
-                shade_step=10, 
-                legend: bool = False,
-                legend_text_spacing_offset = 15,
-                font: ImageFont = None, 
-                font_color: Any = 'black', 
-                show_dimension=False,
-                sizing_mode: str = 'accurate',
-                dimension_caps: dict = None,
-                relative_scaling: bool = True) -> Image:
+                 to_file: str = None, 
+                 min_z: int = 20, 
+                 min_xy: int = 20, 
+                 max_z: int = 400,
+                 max_xy: int = 2000,
+                 scale_z: float = 0.1, 
+                 scale_xy: float = 4, 
+                 type_ignore: list = None, 
+                 index_ignore: list = None,
+                 color_map: dict = None, 
+                 one_dim_orientation: str = 'z', 
+                 index_2D: list = [],
+                 background_fill: Any = 'white', 
+                 draw_volume: bool = True,
+                 draw_reversed: bool = False, 
+                 padding: int = 10,
+                 text_callable: Callable[[int, layers.Layer], tuple] = None,
+                 text_vspacing: int = 4,
+                 spacing: int = 10, 
+                 draw_funnel: bool = True, 
+                 shade_step=10, 
+                 legend: bool = False,
+                 legend_text_spacing_offset = 15,
+                 font: ImageFont = None, 
+                 font_color: Any = 'black', 
+                 show_dimension=False) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -79,16 +76,6 @@ def layered_view(model,
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
     :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.
-    :param sizing_mode: Strategy for handling layer dimensions. Options are:
-        1) 'accurate': Use actual dimensions with scaling (default, may create very large visualizations);
-        2) 'balanced': Smart scaling that balances accuracy with visual clarity (recommended for modern models);
-        3) 'capped': Cap dimensions at specified limits while preserving ratios;
-        4) 'logarithmic': Use logarithmic scaling for very large dimensions;
-    :param dimension_caps: Custom dimension limits when using 'capped' mode. Dict with keys:
-        1) 'channels': Maximum size for channel dimensions (default: max_z);
-        2) 'sequence': Maximum size for sequence/spatial dimensions (default: max_xy);
-        3) 'general': Maximum size for other dimensions (default: max(max_z, max_xy));
-    :param relative_scaling: Whether to maintain relative proportions between layers. When True, larger layers will still appear larger than smaller ones, just scaled appropriately.
 
 
     :return: Generated architecture image.
@@ -171,14 +158,39 @@ def layered_view(model,
         # Get the primary shape of the layer's output
         shape = extract_primary_shape(layer.output_shape, layer_name)
 
-        # Calculate dimensions with flexible sizing
-        x, y, z = calculate_layer_dimensions(
-            shape, scale_z, scale_xy,
-            max_z, max_xy, min_z, min_xy,
-            one_dim_orientation, sizing_mode,
-            dimension_caps, relative_scaling
-        )
+        if len(shape) >= 4:
+            x = min(max(shape[1] * scale_xy, x), max_xy)
+            y = min(max(shape[2] * scale_xy, y), max_xy)
+            z = min(max(self_multiply(shape[3:]) * scale_z, z), max_z)
+        elif len(shape) == 3:
+            x = min(max(shape[1] * scale_xy, x), max_xy)
+            y = min(max(shape[2] * scale_xy, y), max_xy)
+            z = min(max(self_multiply(shape[2:]) * scale_z, z), max_z)
+        elif len(shape) == 2:
+            if one_dim_orientation == 'x':
+                x = min(max(shape[1] * scale_xy, x), max_xy)
+            elif one_dim_orientation == 'y':
+                y = min(max(shape[1] * scale_xy, y), max_xy)
+            elif one_dim_orientation == 'z':
+                # Debug: Debug prints to understand the issue
+                print(f"DEBUG: Processing layer: {layer.__class__.__name__}")
+                print(f"DEBUG: Layer name: {getattr(layer, 'name', 'unnamed')}")
+                print(f"DEBUG: Raw shape: {shape}")
+                print(f"DEBUG: shape type: {type(shape)}")
+                print(f"DEBUG: shape[1]: {shape[1]}")
+                print(f"DEBUG: shape[1] type: {type(shape[1])}")
+                if hasattr(shape[1], '__len__'):
+                    print(f"DEBUG: shape[1] length: {len(shape[1])}")
+                    print(f"DEBUG: shape[1] contents: {list(shape[1]) if hasattr(shape[1], '__iter__') else 'not iterable'}")
+                print(f"DEBUG: scale_z: {scale_z}, scale_z type: {type(scale_z)}")
+                print("DEBUG: " + "="*50)
 
+                z = min(max(shape[1] * scale_z, z), max_z)
+            else:
+                raise ValueError(f"unsupported orientation {one_dim_orientation}")
+        else:
+            raise RuntimeError(f"not supported tensor shape {layer.output_shape}")
+        
         if legend and show_dimension:
             dimension_string = str(shape)
             dimension_string = dimension_string[1:len(dimension_string)-1].split(", ")
