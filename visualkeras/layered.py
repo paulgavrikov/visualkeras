@@ -5,6 +5,7 @@ from math import ceil
 from .utils import *
 from .layer_utils import *
 import warnings
+from typing import Union
 
 try:
     from tensorflow.keras import layers
@@ -16,61 +17,6 @@ except:
             from keras import layers
         except:
             warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
-
-def extract_primary_shape(layer_output_shape):
-    """
-    Extract the primary shape from a layer's output shape to handle multi-output scenarios.
-    
-    This function addresses the issue where some layers (like TransformerBlock in ViT models)
-    have multiple outputs, resulting in a tuple of shapes rather than a single shape tuple.
-    For visualization purposes, we need to extract the primary/main output shape.
-    
-    Args:
-        layer_output_shape: The output shape from a Keras layer. Can be:
-            - A single shape tuple: (None, height, width, channels)
-            - A tuple of shape tuples: ((None, 197, 1024), (None, 16, None, None))
-            - A list of shape tuples: [(None, 197, 1024), (None, 16, None, None)]
-    
-    Returns:
-        tuple: The primary shape tuple to use for visualization. Always returns a single
-               shape tuple in the format (batch_size, dim1, dim2, ...).
-    
-    Examples:
-        >>> # Single output case
-        >>> extract_primary_shape((None, 224, 224, 3))
-        (None, 224, 224, 3)
-        
-        >>> # Multi-output case (TransformerBlock)
-        >>> extract_primary_shape(((None, 197, 1024), (None, 16, None, None)))
-        (None, 197, 1024)
-        
-        >>> # List of outputs case
-        >>> extract_primary_shape([(None, 197, 1024), (None, 16, None, None)])
-        (None, 197, 1024)
-    
-    Notes:
-        - For multi-output layers, the first output is considered the primary output
-        - The function assumes the primary output contains the main feature representations
-        - Secondary outputs (like attention weights) are ignored for visualization purposes
-    """
-    # Handle None or empty cases
-    if layer_output_shape is None:
-        return (None,)
-    
-    # Check if this is a multi-output scenario
-    if isinstance(layer_output_shape, (tuple, list)) and len(layer_output_shape) > 0:
-        # Check if the first element is itself a shape tuple/list
-        first_element = layer_output_shape[0]
-        
-        if isinstance(first_element, (tuple, list)):
-            # Multi-output case: return the first (primary) output shape
-            return first_element
-        else:
-            # Single output case: the whole thing is the shape
-            return layer_output_shape
-    
-    # Fallback for unexpected formats
-    return layer_output_shape
 
 def layered_view(model, 
                  to_file: str = None, 
@@ -196,17 +142,21 @@ def layered_view(model,
         y = min_xy
         z = min_z
 
-        if hasattr(layer, 'output_shape'):
-            output_shape = layer.output_shape
-        else:
-            output_shape = layer.output.shape
+        try:
+            # Try to get the layer name, with fallback to class name
+            layer_name = getattr(layer, 'name', None)
+            if not layer_name:
+                layer_name = f'{layer.__class__.__name__}_{index}'
+        except AttributeError:
+            # Fallback if __class__ or __name__ doesn't exist
+            try:
+                layer_name = f'{type(layer).__name__}_{index}'
+            except AttributeError:
+                # Fallback if even type() fails
+                layer_name = f'unknown_layer_{index}'
 
-        if isinstance(output_shape, tuple):
-            shape = output_shape
-        elif isinstance(output_shape, list) and len(output_shape) == 1:  # drop dimension for non seq. models
-            shape = output_shape[0]
-        else:
-            raise RuntimeError(f"not supported tensor shape {output_shape}")
+        # Get the primary shape of the layer's output
+        shape = extract_primary_shape(layer.output_shape, layer_name)
 
         if len(shape) >= 4:
             x = min(max(shape[1] * scale_xy, x), max_xy)
