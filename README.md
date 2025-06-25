@@ -130,8 +130,73 @@ visualkeras.layered_view(model, scale_xy=1, scale_z=1, max_z=1000)
 ![True scale view of a VGG16 CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_scaling.png)
 _Note: Scaled models may hide the true complexity of a layer, but are visually more appealing._
 
+###### Sizing modes
 
-###### Drawing information text 
+Visualkeras provides multiple sizing strategies to handle different model architectures and visualization needs. You can control this behavior using the `sizing_mode` parameter:
+
+**Accurate mode (default)**: Uses actual layer dimensions with scaling
+
+```python
+visualkeras.layered_view(model, sizing_mode='accurate')
+```
+
+![Accurate mode view of a sample architecture](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_accurate.png)
+
+**Balanced mode**: Smart scaling that balances accuracy with visual clarity
+
+```python
+visualkeras.layered_view(model, sizing_mode='balanced')
+```
+
+![Balanced mode view of a sample architecture](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_balanced.png)
+
+**Capped mode**: Caps dimensions at specified limits while preserving ratios
+
+```python
+visualkeras.layered_view(model, sizing_mode='capped', dimension_caps={'channels': 200, 'sequence': 1000, 'general': 400})
+```
+
+Here, `dimension_caps` is a dictionary that allows you to set maximum sizes for different dimensions:
+- `channels`: Maximum size for channel dimensions (default: max_z)
+- `sequence`: Maximum size for sequence/spatial dimensions (default: max_xy)
+- `general`: Maximum size for other dimensions (default: max(max_z, max_xy))
+
+**Logarithmic mode**: Uses logarithmic scaling for very large dimensions
+
+```python
+visualkeras.layered_view(model, sizing_mode='logarithmic')
+```
+
+![Accurate mode view of a sample architecture](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_logarithmic.png)
+
+**Relative mode**: Proportional scaling where each layer's visual size is directly proportional to its dimension count, but scaled by a base size factor.
+
+```python
+# Create a model with decreasing layer sizes for demonstration
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(64, input_shape=(100,)),  # Will be largest
+    tf.keras.layers.Dense(32),                      # Half the size of previous
+    tf.keras.layers.Dense(16),                      # Half the size of previous
+    tf.keras.layers.Dense(8)                        # Half the size of previous
+])
+
+# Each layer will be visually proportional to its actual size
+visualkeras.layered_view(model, sizing_mode='relative', relative_base_size=10)
+```
+
+In relative mode, if one layer has 64 units and the next has 32 units, the second layer will be exactly half the visual height of the first. The `relative_base_size` parameter controls the base scaling factor which represents the visual size (in pixels) that a dimension of size 1 would have. For example:
+
+- `relative_base_size=5`: A 64-unit layer gets 320 pixels, a 32-unit layer gets 160 pixels
+- `relative_base_size=20`: A 64-unit layer gets 1280 pixels, a 32-unit layer gets 640 pixels
+
+**Comparison Example**: Using a model with layers of sizes 64→32→16→8:
+- **Accurate mode**: May show all layers at similar visual sizes (depending on scaling)
+- **Relative mode with base_size=10**: Shows layers at 640→320→160→80 pixels (true proportional scaling)
+
+Below is an example visualization of a different model using the relative sizing mode:
+![Accurate mode view of a sample architecture](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_relative_base_1.png)
+
+###### Drawing information text
 With the `text_callable` argument a function can be passed to the `layered_view` function which can be used to draw text below or above a specific layer. The function should have to following properties:
 
 - Accepts two arguments: First the index of the layer in the model. This index ignores layers listed in `type_ignore`, `index_ignore` and also ignores layers of class `SpacingDummyLayer`. The second arguments is the layer object used in the model at the index given in the first argument
