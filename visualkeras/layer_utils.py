@@ -440,7 +440,9 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
             x = smart_scale(dims[0], scale_xy, min_xy, sequence_cap)
             y = smart_scale(dims[1], scale_xy, min_xy, sequence_cap)
             z = smart_scale(dims[2] if len(dims)>2 else 1, scale_z, min_z, channel_cap)
-            return (int(x), int(y), int(z))    # Logarithmic mode
+            return (int(x), int(y), int(z))
+    
+    # Logarithmic mode
     elif sizing_mode == 'logarithmic':
         if len(dims) == 1:
             if one_dim_orientation == 'y':
@@ -492,6 +494,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
         elif len(dims) == 2:
             x = proportional_scale(dims[0], relative_base_size, min_xy, sequence_cap)
             y = proportional_scale(dims[1], relative_base_size, min_xy, sequence_cap)
+
             # For 2D layers, use the second dimension for z-scaling as well
             z = proportional_scale(dims[1], relative_base_size, min_z, channel_cap)
             return (x, y, z)
@@ -499,6 +502,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
             # 3D+ layers: handle spatial dimensions and channels separately
             x = proportional_scale(dims[0], relative_base_size, min_xy, sequence_cap)
             y = proportional_scale(dims[1], relative_base_size, min_xy, sequence_cap)
+
             # For channels (typically dims[2:]), use product for z-dimension
             channel_product = self_multiply(dims[2:]) if len(dims) > 2 else 1
             z = proportional_scale(channel_product, relative_base_size, min_z, channel_cap)

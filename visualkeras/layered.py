@@ -77,7 +77,8 @@ def layered_view(model,
     :param legend_text_spacing_offset: Offset the amount of space allocated for legend text. Useful when legend text is being cut off
     :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
-    :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.    :param sizing_mode: Strategy for handling layer dimensions. Options are:
+    :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.    
+    :param sizing_mode: Strategy for handling layer dimensions. Options are:
         1) 'accurate': Use actual dimensions with scaling (default, may create very large visualizations);
         2) 'balanced': Smart scaling that balances accuracy with visual clarity (recommended for modern models);
         3) 'capped': Cap dimensions at specified limits while preserving ratios;
@@ -100,8 +101,6 @@ def layered_view(model,
 
     :return: Generated architecture image.
     """
-    # Iterate over the model to compute bounds and generate boxes
-
     # Deprecation warning for legend_text_spacing_offset
     if legend_text_spacing_offset != 0:
         warnings.warn("The legend_text_spacing_offset parameter is deprecated and will be removed in a future release.")
@@ -163,7 +162,9 @@ def layered_view(model,
                 layer_name = f'unknown_layer_{index}'
 
         # Get the primary shape of the layer's output
-        shape = extract_primary_shape(layer.output_shape, layer_name)        # Calculate dimensions with flexible sizing
+        shape = extract_primary_shape(layer.output_shape, layer_name)
+        
+        # Calculate dimensions with flexible sizing
         x, y, z = calculate_layer_dimensions(
             shape, scale_z, scale_xy,
             max_z, max_xy, min_z, min_xy,
