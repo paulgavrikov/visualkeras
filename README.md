@@ -306,7 +306,7 @@ These are features we plan to add in the future. If you're up for it, open an is
 If you find this project helpful for your research please consider citing it in your publication as follows.
 ```
 @misc{Gavrikov2020VisualKeras,
-  author = {Gavrikov, Paul},
+  author = {Gavrikov, Paul and Patapati, Santosh},
   title = {visualkeras},
   year = {2020},
   publisher = {GitHub},
