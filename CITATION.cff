@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Gavrikov"
+    given-names: "Paul"
+  - family-names: "Patapati"
+    given-names: "Santosh"
+title: "visualkeras"
+version: "0.1.4"
+date-released: "2020-10-5"
+url: "https://github.com/paulgavrikov/visualkeras"
