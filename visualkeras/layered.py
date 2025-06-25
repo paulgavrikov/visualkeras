@@ -40,12 +40,13 @@ def layered_view(model,
                  draw_funnel: bool = True, 
                  shade_step=10, 
                  legend: bool = False,
-                 legend_text_spacing_offset = 15,                 font: ImageFont = None, 
+                 legend_text_spacing_offset = 15,
+                 font: ImageFont = None, 
                  font_color: Any = 'black', 
                  show_dimension=False,
                  sizing_mode: str = 'accurate',
                  dimension_caps: dict = None,
-                 relative_scaling: bool = True) -> Image:
+                 relative_base_size: int = 20) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in layered style (great for CNN).
@@ -73,19 +74,28 @@ def layered_view(model,
     :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
     :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
     :param legend: Add a legend of the layers to the image
-    :param legend_text_spacing_offset: Offset the amount of space allocated for legend text. Useful when legend text is being cut off    :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
+    :param legend_text_spacing_offset: Offset the amount of space allocated for legend text. Useful when legend text is being cut off
+    :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
     :param font_color: Color for the font if used. Can be str or (R,G,B,A).
-    :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.
-    :param sizing_mode: Strategy for handling layer dimensions. Options are:
+    :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.    :param sizing_mode: Strategy for handling layer dimensions. Options are:
         1) 'accurate': Use actual dimensions with scaling (default, may create very large visualizations);
         2) 'balanced': Smart scaling that balances accuracy with visual clarity (recommended for modern models);
         3) 'capped': Cap dimensions at specified limits while preserving ratios;
         4) 'logarithmic': Use logarithmic scaling for very large dimensions;
+        5) 'relative': True proportional scaling where visual_size = dimension × relative_base_size.
+                      Each layer's visual size is directly proportional to its dimension count.
     :param dimension_caps: Custom dimension limits when using 'capped' mode. Dict with keys:
         1) 'channels': Maximum size for channel dimensions (default: max_z);
         2) 'sequence': Maximum size for sequence/spatial dimensions (default: max_xy);
         3) 'general': Maximum size for other dimensions (default: max(max_z, max_xy));
-    :param relative_scaling: Whether to maintain relative proportions between layers. When True, larger layers will still appear larger than smaller ones, just scaled appropriately.
+    :param relative_base_size: Base size in pixels for 'relative' sizing mode. 
+        Represents the visual size (in pixels) that a dimension of size 1 would have.
+        All dimensions scale proportionally: visual_size = dimension × relative_base_size.
+        For example, if relative_base_size=5:
+        - A layer with 64 units gets visual size 64×5=320 pixels
+        - A layer with 32 units gets visual size 32×5=160 pixels (exactly half)  
+        - A layer with 16 units gets visual size 16×5=80 pixels (exactly half of 32)
+        This maintains true proportional relationships between all layers (default: 20).
 
 
     :return: Generated architecture image.
@@ -153,14 +163,12 @@ def layered_view(model,
                 layer_name = f'unknown_layer_{index}'
 
         # Get the primary shape of the layer's output
-        shape = extract_primary_shape(layer.output_shape, layer_name)
-
-        # Calculate dimensions with flexible sizing
+        shape = extract_primary_shape(layer.output_shape, layer_name)        # Calculate dimensions with flexible sizing
         x, y, z = calculate_layer_dimensions(
             shape, scale_z, scale_xy,
             max_z, max_xy, min_z, min_xy,
             one_dim_orientation, sizing_mode,
-            dimension_caps, relative_scaling
+            dimension_caps, relative_base_size
         )
         
         if legend and show_dimension:

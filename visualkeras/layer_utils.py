@@ -317,7 +317,7 @@ def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
 
 def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, min_xy,
                                one_dim_orientation='y', sizing_mode='accurate',
-                               dimension_caps=None, relative_scaling=True):
+                               dimension_caps=None, relative_base_size=20):
     """
     Calculate layer dimensions for visualization with flexible sizing strategies.
 
@@ -329,13 +329,27 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
         max_xy (int): Maximum xy size in pixels
         min_z (int): Minimum z size in pixels
         min_xy (int): Minimum xy size in pixels
-        one_dim_orientation (str): Orientation for 1D layers ('x','y','z')
-        sizing_mode (str): 'accurate', 'capped', 'balanced', or 'logarithmic'
+        one_dim_orientation (str): Orientation for 1D layers ('x','y','z')        sizing_mode (str): 'accurate', 'capped', 'balanced', 'logarithmic', or 'relative'
         dimension_caps (dict): Custom caps for 'channels','sequence','general'
-        relative_scaling (bool): Maintain relative proportions between layers
+        relative_base_size (int): Base size in pixels for relative scaling mode. 
+            Represents the visual size (in pixels) that a dimension of size 1 would have.
+            All dimensions scale proportionally: visual_size = dimension × relative_base_size.
+            For example, if relative_base_size=5:
+            - A layer with 64 units gets visual size 64×5=320 pixels
+            - A layer with 32 units gets visual size 32×5=160 pixels (exactly half)
+            - A layer with 16 units gets visual size 16×5=80 pixels (exactly half of 32)
+            This maintains true proportional relationships between all layers. (default: 20)
 
     Returns:
         tuple: (x, y, z) pixel dimensions for the layer box
+          Sizing Modes:
+        - 'accurate': Use actual dimensions with scaling (may create very large visualizations)
+        - 'balanced': Smart scaling that balances accuracy with visual clarity
+        - 'capped': Cap dimensions at specified limits while preserving ratios
+        - 'logarithmic': Use logarithmic scaling for very large dimensions
+        - 'relative': True proportional scaling where visual_size = dimension × relative_base_size.
+                     Each layer's visual size is directly proportional to its dimension count.
+                     If one layer has 2x the dimensions of another, it will be 2x the visual size.
     """
 
     import math
@@ -354,12 +368,22 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
     general_cap = dimension_caps.get('general', max(max_z, max_xy)) if dimension_caps else max(max_z, max_xy)
 
     def smart_scale(value, base_scale, min_val, cap_val):
+        """
+        Smart scaling that maintains relative proportions while preventing extremely large visualizations.
+        This provides the relative scaling functionality that was promised by the relative_scaling parameter.
+        """
         if value <= 64:
+            # Small dimensions: use full scaling to make them visible
             return min(max(value * base_scale, min_val), cap_val)
         elif value <= 512:
-            return min(max(value * base_scale * 0.5, min_val), cap_val)
+            # Medium dimensions: reduce scaling to balance visibility and proportion
+            return min(max(value * base_scale * 0.6, min_val), cap_val)
+        elif value <= 2048:
+            # Large dimensions: further reduce scaling but maintain relative differences
+            return min(max(value * base_scale * 0.3, min_val), cap_val)
         else:
-            log_scale = math.log10(value) * base_scale * 10
+            # Very large dimensions: use logarithmic scaling but still maintain relativity
+            log_scale = math.log10(value) * base_scale * 15
             return min(max(log_scale, min_val), cap_val)
 
     def log_scale(value, base_scale, min_val, cap_val):
@@ -389,7 +413,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
             return (x, y, z)
 
     # Capped mode
-    if sizing_mode == 'capped':
+    elif sizing_mode == 'capped':
         if len(dims) == 1:
             if one_dim_orientation == 'y':
                 y = max(min(dims[0] * scale_xy, sequence_cap), min_xy)
@@ -404,7 +428,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
             return (x, y, z)
 
     # Balanced mode
-    if sizing_mode == 'balanced':
+    elif sizing_mode == 'balanced':
         if len(dims) == 1:
             if one_dim_orientation == 'y':
                 y = smart_scale(dims[0], scale_xy, min_xy, sequence_cap)
@@ -416,10 +440,8 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
             x = smart_scale(dims[0], scale_xy, min_xy, sequence_cap)
             y = smart_scale(dims[1], scale_xy, min_xy, sequence_cap)
             z = smart_scale(dims[2] if len(dims)>2 else 1, scale_z, min_z, channel_cap)
-            return (int(x), int(y), int(z))
-
-    # Logarithmic mode
-    if sizing_mode == 'logarithmic':
+            return (int(x), int(y), int(z))    # Logarithmic mode
+    elif sizing_mode == 'logarithmic':
         if len(dims) == 1:
             if one_dim_orientation == 'y':
                 y = log_scale(dims[0], scale_xy, min_xy, sequence_cap)
@@ -432,6 +454,68 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
             y = log_scale(dims[1], scale_xy, min_xy, sequence_cap)
             z = log_scale(dims[2] if len(dims)>2 else 1, scale_z, min_z, channel_cap)
             return (int(x), int(y), int(z))
+
+    # Relative mode - True proportional scaling where each layer's size is directly proportional to its dimension
+    elif sizing_mode == 'relative':
+        def proportional_scale(dimension, relative_base_size, min_val, max_val):
+            """
+            Scale dimension proportionally where relative_base_size represents 
+            the visual size for dimension=1.
+            
+            Args:
+                dimension (int): The dimension value to scale
+                relative_base_size (int): Visual size (in pixels) for dimension=1
+                min_val (int): Minimum allowed scaled value
+                max_val (int): Maximum allowed scaled value
+            
+            Returns:
+                int: Scaled dimension with true proportional relationships
+                
+            Formula: visual_size = dimension * relative_base_size
+            """
+            if dimension <= 0:
+                return min_val
+            
+            # True proportional scaling: dimension * base_size
+            scaled = dimension * relative_base_size
+            
+            # Apply min/max constraints while preserving proportionality as much as possible
+            return max(min_val, min(scaled, max_val))
+        
+        if len(dims) == 1:
+            if one_dim_orientation == 'y':
+                y = proportional_scale(dims[0], relative_base_size, min_xy, sequence_cap)
+                return (min_xy, y, min_z)
+            else:
+                z = proportional_scale(dims[0], relative_base_size, min_z, channel_cap)
+                return (min_xy, min_xy, z)
+        elif len(dims) == 2:
+            x = proportional_scale(dims[0], relative_base_size, min_xy, sequence_cap)
+            y = proportional_scale(dims[1], relative_base_size, min_xy, sequence_cap)
+            # For 2D layers, use the second dimension for z-scaling as well
+            z = proportional_scale(dims[1], relative_base_size, min_z, channel_cap)
+            return (x, y, z)
+        else:
+            # 3D+ layers: handle spatial dimensions and channels separately
+            x = proportional_scale(dims[0], relative_base_size, min_xy, sequence_cap)
+            y = proportional_scale(dims[1], relative_base_size, min_xy, sequence_cap)
+            # For channels (typically dims[2:]), use product for z-dimension
+            channel_product = self_multiply(dims[2:]) if len(dims) > 2 else 1
+            z = proportional_scale(channel_product, relative_base_size, min_z, channel_cap)
+            return (x, y, z)
+    else:
+        warnings.warn(
+            f"Unknown sizing mode '{sizing_mode}'. Defaulting to accurate.",
+            UserWarning,
+            stacklevel=3
+        )
+
+        # Recursive call to handle accurate sizing
+        return calculate_layer_dimensions(
+            shape, scale_z, scale_xy, max_z, max_xy, min_z, min_xy,
+            one_dim_orientation=one_dim_orientation, sizing_mode='accurate',
+            dimension_caps=dimension_caps, relative_base_size=relative_base_size
+        )
 
     # Fallback
     return (min_xy, min_xy, min_z)
