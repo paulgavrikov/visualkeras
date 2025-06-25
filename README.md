@@ -9,6 +9,20 @@ needs. This module supports layered style architecture generation which is great
 Networks), and a graph style architecture, which works great for most models including plain feed-forward networks.
 For help in citing this project, refer [here](#citation-header).
 
+<h2 id="citation-header"> Citation </h2>
+
+If you find this project helpful for your research please consider citing it in your publication as follows.
+```
+@misc{Gavrikov2020VisualKeras,
+  author = {Gavrikov, Paul and Patapati, Santosh},
+  title = {visualkeras},
+  year = {2020},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/paulgavrikov/visualkeras}},
+}
+```
+
 ## Model Support
 
 |  Mode | Sequential  |  Functional |  Subclassed models |
@@ -300,17 +314,3 @@ These are features we plan to add in the future. If you're up for it, open an is
 - [ ] More professional and academic visualizations for `graph_view` ([example](https://github.com/paulgavrikov/visualkeras/blob/master/figures/professional_diagram_sample.png))
 - [ ] Annotate repeated layers or blocks (e.g., overarching double-arrow line w/ "3x" over it)
 - [ ] Automated testing with GitHub actions
-
-<h2 id="citation-header"> Citation </h2>
-
-If you find this project helpful for your research please consider citing it in your publication as follows.
-```
-@misc{Gavrikov2020VisualKeras,
-  author = {Gavrikov, Paul and Patapati, Santosh},
-  title = {visualkeras},
-  year = {2020},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/paulgavrikov/visualkeras}},
-}
-```
