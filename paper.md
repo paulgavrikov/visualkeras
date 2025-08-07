@@ -48,7 +48,7 @@ Rendering options can be toggled between three-dimensional (volumetric) and two-
 
 Layout control is further refined by adjusting `spacing` (inter-layer gaps), `padding` (margins at the beginning and end), and orientation settings. One-dimensional layers can be oriented using `one_dim_orientation`, and individual layers can be constrained to 2D rendering via `index_2D`. An entire model can be rendered flat by disabling volumetric rendering. Support for better visualizing decoder-like architectures is available through the `draw_reversed` option.
 
-A configurable legend can be added, with options for adjusting text spacing (`legend_text_spacing_offset`), font properties (`font`, `font_color`), and whether to show dimensions at each layer (`show_dimension`). Finally, users can control scaling across the x-y plane and z-axis using `scale_xy` and `scale_z`. These dimensions can be explicitly capped or floored using `max_xy`, `max_z`, `min_xy`, and `min_z` parameters.
+A configurable legend can be added, with options for adjusting text spacing (using `legend_text_spacing_offset`), font properties (`font`, `font_color`), and whether to show dimensions at each layer (`show_dimension`). Finally, users can control scaling across the x-y plane and z-axis using `scale_xy` and `scale_z`. These dimensions can be explicitly capped or floored using `max_xy`, `max_z`, `min_xy`, and `min_z` parameters.
 
 The final visualization is produced as a Pillow `Image` object [@Clark2015], which can be displayed in Jupyter notebooks or saved to disk.
 
@@ -62,8 +62,6 @@ Node coloring is fully customizable via the `color_map` parameter which maps lay
 Like the Layered View, the Graph View produces a Pillow `Image` object [@Clark2015] that can be displayed in Jupyter notebooks or saved to disk.
 
 # Usage Examples
-/*In this section, we provide examples of how to use visualkeras to visualize Keras models in different ways. The examples shown in Figure 1, Figure 2, Figure 3, and Figure 4 demonstrate the flexibility and customization options available in the package. The generated graphical visualizations can be displayed in Jupyter notebooks or saved as image files for use in publications or presentations.*/
-
 In this section, we provide examples of Keras model visualizations that were generated using visualkeras. The examples shown in Figure 1, Figure 2, Figure 3, and Figure 4 demonstrate the flexibility and customization options available in the package. Code snippets used to generate these examples are written in the visualkeras GitHub repository's [usage_examples.md file](https://github.com/paulgavrikov/visualkeras/blob/master/examples/usage_examples.md). Generated graphical visualizations can be displayed inline in Jupyter notebooks or saved as image files for use in publications or presentations.
 
 ## Layered View
@@ -87,7 +85,7 @@ In this section, we provide examples of Keras model visualizations that were gen
 ![An example of a more complex model's Graph View with custom styling](joss_figures/figure4_graph_advanced.png)
 
 # Acknowledgements
-We thanks and acknowledge the contributions of the open-source community which has supported the development of visualkeras over the years through their feature requests, ideas, bug reports, issue discussions, and pull requests.  These contributions have allowed us to continuously improve the package and adapt it to the needs of the community. We are grateful for the collaborative spirit that has made visualkeras a valuable tool for visualizing Keras and TensorFlow models.
+We thank and acknowledge the contributions of the open-source community which has supported the development of visualkeras over the years through their feature requests, ideas, bug reports, issue discussions, and pull requests.  These contributions have allowed us to continuously improve the package and adapt it to the needs of the community. We are grateful for the collaborative spirit that has made visualkeras a valuable tool for visualizing Keras and TensorFlow models.
 
 Namely, we thank Alejandro Lorenzo, Erik Schultheis, Alessio G. Monti, Willy Fitra Hendria [@Hendria2024], Krzysztof Mizgała, Cosmin M. Marina, Martin Kubovčík, and others who have contributed to the project through their feedback and contributions.
 
