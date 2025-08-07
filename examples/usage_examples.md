@@ -28,6 +28,8 @@ basic_layered_img = visualkeras.layered_view(simple_sequential_model, draw_funne
 basic_layered_img.show()
 ```
 
+![An example of layered style visualization on a simple sequential model with little styling](https://raw.githubusercontent.com/paulgavrikov/visualkeras/refs/heads/master/figures/figure1_layered_basic.png)
+
 ### Advanced Usage
 ```python
 import visualkeras
@@ -92,6 +94,8 @@ advanced_layered_img = visualkeras.layered_view(
 advanced_layered_img.show()
 ```
 
+![An example of a more complex model's Layered View with custom styling](https://raw.githubusercontent.com/paulgavrikov/visualkeras/refs/heads/master/figures/figure2_layered_advanced.png)
+
 ## Graph View
 
 ### Basic Usage
@@ -119,6 +123,8 @@ basic_graph_img = visualkeras.graph_view(simple_sequential_model)
 # Display the image
 basic_graph_img.show()
 ```
+
+![An example of Graph View visualization on a simple sequential model with little styling](https://raw.githubusercontent.com/paulgavrikov/visualkeras/refs/heads/master/figures/figure3_graph_basic.png)
 
 ### Advanced Usage
 ```python
@@ -181,3 +187,5 @@ advanced_graph_img = visualkeras.graph_view(
 # Display the image
 advanced_graph_img.show()
 ```
+
+![An example of a more complex model's Graph View with custom styling](https://raw.githubusercontent.com/paulgavrikov/visualkeras/refs/heads/master/figures/figure4_graph_advanced.png)
