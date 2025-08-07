@@ -64,7 +64,7 @@ Like the Layered View, the Graph View produces a Pillow `Image` object [@Clark20
 # Usage Examples
 /*In this section, we provide examples of how to use visualkeras to visualize Keras models in different ways. The examples shown in Figure 1, Figure 2, Figure 3, and Figure 4 demonstrate the flexibility and customization options available in the package. The generated graphical visualizations can be displayed in Jupyter notebooks or saved as image files for use in publications or presentations.*/
 
-In this section, we provide examples of Keras model visualizations that were generated using visualkeras. The examples shown in Figure 1, Figure 2, Figure 3, and Figure 4 demonstrate the flexibility and customization options available in the package. Code snippets used to generate these examples are written in the visualkeras GitHub repository's [examples.md file](LINK). Generated graphical visualizations can be displayed inline in Jupyter notebooks or saved as image files for use in publications or presentations.
+In this section, we provide examples of Keras model visualizations that were generated using visualkeras. The examples shown in Figure 1, Figure 2, Figure 3, and Figure 4 demonstrate the flexibility and customization options available in the package. Code snippets used to generate these examples are written in the visualkeras GitHub repository's [usage_examples.md file](https://github.com/paulgavrikov/visualkeras/blob/master/examples/usage_examples.md). Generated graphical visualizations can be displayed inline in Jupyter notebooks or saved as image files for use in publications or presentations.
 
 ## Layered View
 
