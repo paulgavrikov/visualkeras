@@ -17,9 +17,9 @@ authors:
     orcid: 0009-0007-4780-2624
     affiliation: '3'
 affiliations:
- - name: IMLA, Offenburg University
+ - name: Tübingen AI Center
    index: 1
- - name: University of Mannheim
+ - name: Goethe University Frankfurt
    index: 2
  - name: Cyrion Labs
    index: 3
