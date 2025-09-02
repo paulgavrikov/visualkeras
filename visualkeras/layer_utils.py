@@ -19,7 +19,42 @@ class SpacingDummyLayer(Layer):
         self.spacing = spacing
 
 
+def get_layers(model):
+    """Return the list of layers tracked by a Keras/TF model.
+
+    Handles both classic Sequential/Functional models and newer Keras/TensorFlow
+    tracking attributes.
+
+    Args:
+        model: A `keras` or `tf.keras` model instance.
+
+    Returns:
+        list: The sequence of layers tracked by the model.
+
+    Raises:
+        RuntimeError: If the model does not expose known layer containers
+            (neither `_layers` nor `_self_tracked_trackables`).
+    """
+    if hasattr(model, '_layers'):
+        return model._layers
+    if hasattr(model, '_self_tracked_trackables'):
+        return model._self_tracked_trackables
+    raise RuntimeError('Model does not expose _layers or _self_tracked_trackables')
+
+
 def get_incoming_layers(layer):
+    """Yield incoming (parent) layers for a given layer.
+
+    Supports both legacy Node API (TF/Keras <= 2.15) and the new Node API
+    (TF >= 2.16 / Keras >= 3). This provides a uniform iterator of inbound
+    layers regardless of backend/version differences.
+
+    Args:
+        layer: A Keras/TensorFlow layer instance.
+
+    Yields:
+        Layer objects that directly connect to the provided layer.
+    """
     for i, node in enumerate(layer._inbound_nodes):
         if hasattr(node, 'inbound_layers'):
             # Old Node class (TF 2.15 & Keras 2.15 and under)
@@ -39,20 +74,30 @@ def get_incoming_layers(layer):
 
 
 def get_outgoing_layers(layer):
+    """Yield outgoing (child) layers for a given layer."""
     for i, node in enumerate(layer._outbound_nodes):
         yield node.outbound_layer
 
 
 def model_to_adj_matrix(model):
+    """Build an adjacency matrix of layer connectivity for a model.
+
+    Ensures the model is built, then maps each layer to a unique index and
+    records incoming->outgoing connections as a matrix.
+
+    Args:
+        model: A `keras` or `tf.keras` model instance.
+
+    Returns:
+        tuple: `(id_to_num_mapping, adj_matrix)` where `id_to_num_mapping` maps
+        Python `id(layer)` to a numeric index (column/row), and `adj_matrix` is
+        a square NumPy array counting edges between layers.
+    """
     if hasattr(model, 'built'):
         if not model.built:
             model.build()
             
-    layers = []
-    if hasattr(model, '_layers'):
-        layers = model._layers
-    elif hasattr(model, '_self_tracked_trackables'):
-        layers = model._self_tracked_trackables
+    layers = get_layers(model)
 
     adj_matrix = np.zeros((len(layers), len(layers)))
     id_to_num_mapping = dict()
@@ -76,32 +121,51 @@ def model_to_adj_matrix(model):
 
 
 def find_layer_by_id(model, _id):
-    layers = []
-    if hasattr(model, '_layers'):
-        layers = model._layers
-    elif hasattr(model, '_self_tracked_trackables'):
-        layers = model._self_tracked_trackables
-    
-    for layer in layers: # manually because get_layer does not access model._layers
-            if id(layer) == _id:
-                return layer
+    """Find a layer by its Python object id.
+
+    Args:
+        model: A `keras` or `tf.keras` model instance.
+        _id: The result of `id(layer)` for the layer to find.
+
+    Returns:
+        The matching layer instance, or `None` if not found.
+    """
+    for layer in get_layers(model):  # manually because get_layer may not access model._layers
+        if id(layer) == _id:
+            return layer
     return None
 
 
 def find_layer_by_name(model, name):
-    layers = []
-    if hasattr(model, '_layers'):
-        layers = model._layers
-    elif hasattr(model, '_self_tracked_trackables'):
-        layers = model._self_tracked_trackables
-    
-    for layer in layers:
+    """Find a layer by its name attribute.
+
+    Args:
+        model: A `keras` or `tf.keras` model instance.
+        name: Layer name to search for.
+
+    Returns:
+        The matching layer instance, or `None` if not found.
+    """
+    for layer in get_layers(model):
         if layer.name == name:
             return layer
     return None
 
 
 def find_input_layers(model, id_to_num_mapping=None, adj_matrix=None):
+    """Yield model input layers based on zero in-degree in the graph.
+
+    If an adjacency matrix is not provided, it is constructed via
+    `model_to_adj_matrix`.
+
+    Args:
+        model: Model whose inputs should be discovered.
+        id_to_num_mapping: Optional precomputed id->index mapping.
+        adj_matrix: Optional precomputed adjacency matrix.
+
+    Yields:
+        Layer objects that represent graph inputs.
+    """
     if adj_matrix is None:
         id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
     for i in np.where(np.sum(adj_matrix, axis=0) == 0)[0]:  # find all nodes with 0 inputs
@@ -110,6 +174,11 @@ def find_input_layers(model, id_to_num_mapping=None, adj_matrix=None):
 
 
 def find_output_layers(model):
+    """Yield model output layers for both legacy and modern Keras APIs.
+
+    For older Keras (<3), uses `model.output_names`. For newer versions, walks
+    `model.outputs` to find the producing layers via `_keras_history`.
+    """
     if hasattr(model, 'output_names'):
         # For older Keras versions (<3)
         for name in model.output_names:
@@ -124,6 +193,14 @@ def find_output_layers(model):
 
 
 def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
+    """Topologically group layers into hierarchy levels.
+
+    Starting from input layers (zero in-degree), iteratively adds layers whose
+    inbound dependencies are satisfied by previously seen layers.
+
+    Returns:
+        list[list[Layer]]: A list of layers per hierarchy level.
+    """
     if adj_matrix is None:
         id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
     hierarchy = [set(find_input_layers(model, id_to_num_mapping, adj_matrix))]
@@ -152,6 +229,12 @@ def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
 
 
 def augment_output_layers(model, output_layers, id_to_num_mapping, adj_matrix):
+    """Append dummy output layers and connect real outputs to them.
+
+    Useful to ensure terminal nodes exist for visualization that expects explicit
+    sinks. Extends both the mapping and adjacency matrix in place and returns
+    the updated structures.
+    """
 
     adj_matrix = np.pad(adj_matrix, ((0, len(output_layers)), (0, len(output_layers))), mode='constant', constant_values=0)
 
@@ -168,6 +251,11 @@ def augment_output_layers(model, output_layers, id_to_num_mapping, adj_matrix):
 
 
 def is_internal_input(layer):
+    """Return True if a layer represents an internal Input layer across Keras/TF versions.
+
+    This checks several possible class paths to be compatible with legacy and
+    modern backends.
+    """
     # Treat any InputLayer class as internal input
     if layer.__class__.__name__ == 'InputLayer':
         return True
