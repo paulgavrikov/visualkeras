@@ -36,7 +36,7 @@ visualkeras is a Python package designed to facilitate the visualization of Kera
 
 The visualization of Artificial Intelligence (AI) and Machine Learning (ML) models plays a crucial role for understanding and communicating their architecture. The effectiveness of such visualizations plays a key role in the scientific process. Although detailed descriptions of model architectures and mathematics are often provided in research papers, architectural diagrams are essential for conveying complex structures and relationships in a more accessible manner.
 
-The Keras package [@Chollet2015] provides a high-level API for building and training deep learning models. Keras and its underlying framework, TensorFlow [@Abadi2016], have been widely adopted in the AI and ML community . However, the built-in visualization tools in Keras are primitive and do not provide the flexibility needed for proper architectural representation. Images generated using Keras's built-in visualization tools require significant effort for readers to understand and are simply not suitable for scientific publication or communication purposes. visualkeras addresses this gap by providing a comprehensive set of tools for visualizing Keras models in a way that is both informative and visually appealing.
+The Keras package [@Chollet2015] provides a high-level API for building and training deep learning models. Keras and its underlying framework, TensorFlow [@Abadi2016], have been widely adopted in the AI and ML community. Although helpful for inspection, the built-in utilities are not aimed at publication-ready figures and provide limited flexibility. They therefore leave opportunity for pblank]. Before visualkeras, the Keras ecosystem lacked a high-quality visualizer like PyTorch’s visualtorch [@Hendria2024]. visualkeras addresses this gap by providing a comprehensive set of tools for visualizing Keras models in a way that is both informative and visually appealing.
 
 # Key Features
 visualkeras offers a range of visualization features and customization options. The framework is split into two main components.
@@ -88,5 +88,7 @@ In this section, we provide examples of Keras model visualizations that were gen
 We thank and acknowledge the contributions of the open-source community which has supported the development of visualkeras over the years through their feature requests, ideas, bug reports, issue discussions, and pull requests.  These contributions have allowed us to continuously improve the package and adapt it to the needs of the community. We are grateful for the collaborative spirit that has made visualkeras a valuable tool for visualizing Keras and TensorFlow models.
 
 Namely, we thank Alejandro Lorenzo, Erik Schultheis, Alessio G. Monti, Willy Fitra Hendria [@Hendria2024], Krzysztof Mizgała, Cosmin M. Marina, Martin Kubovčík, and others who have contributed to the project through their feedback and contributions.
+
+We also acknowledge the creators and contributors of Numpy [@harris2020array] and aggdraw [@aggdraw], which are used extensively in the visualkeras library.
 
 # References
