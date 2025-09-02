@@ -95,6 +95,8 @@ Notes:
 - Several tests construct small Keras models; TensorFlow/Keras must be installed for these to run.
 - If you cannot install TensorFlow locally, run only non-TF tests or skip them selectively.
 
+For an overview of the test layout, fixtures, and expected assertions, see `tests/README.md`. We prefer that major new changes include at least a smoke test and, where feasible, assertions on stable properties (e.g., sizes, counts, or names).
+
 ### Linting and formatting
 
 Please follow PEP 8 and keep imports organized. We recommend the following tools (installed via `requirements-dev.txt`):
