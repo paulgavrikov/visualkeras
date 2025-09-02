@@ -58,24 +58,92 @@ We also have a list of improvements that we would like to see in the project, wh
 
 ## Your First Code Contribution
 
-To get started with development, clone the repository and install the required dependencies:
+### Development setup
+
+Clone the repository and set up a virtual environment (recommended):
 
 ```bash
-git clone https://github.com/yourusername/visualkeras.git
+git clone https://github.com/paulgavrikov/visualkeras.git
 cd visualkeras
-pip install -r requirements.txt
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 ```
 
-Make sure to run the tests under the `tests/` folder to ensure everything is working correctly.
+Install the package in editable mode and recommended dev tools:
 
-After making your changes and running the tests, you can submit a pull request. Please ensure that your code has somewhat clear commits and introduces appropriate tests for any new features or bug fixes.
+```bash
+pip install -e .
+pip install -r requirements-dev.txt
+```
+
+Some tests and examples require TensorFlow/Keras. To run all the tests:
+
+```bash
+pip install tensorflow keras  # or tensorflow-cpu for CPU-only
+```
+
+Newer Python versions almost always work with visualkeras, particularly because our underlying packages are constantly being updated. However, we only guarantee functionality for 3.6-3.8.
+
+### Running tests
+
+We use `pytest` for tests located under `tests/`.
+
+```bash
+python -m pytest -v
+```
+
+Notes:
+- Several tests construct small Keras models; TensorFlow/Keras must be installed for these to run.
+- If you cannot install TensorFlow locally, run only non-TF tests or skip them selectively.
+
+### Linting and formatting
+
+Please follow PEP 8 and keep imports organized. We recommend the following tools (installed via `requirements-dev.txt`):
+
+```bash
+# Code style & static checks
+ruff check .
+
+# Auto-format code
+black .
+
+# Sort imports
+isort .
+```
+
+Optionally, you can install our recommended git hooks to run checks before commits:
+
+```bash
+pre-commit install
+```
+
+Before opening a PR, we recommend you:
+- Run `black .` (or ensure your editor auto-formats on save)
+- Run `ruff check .` and address warnings
+- Run `python -m pytest -v`
+
+Don't get too stressed over linting issues, you should focus on the functionality of your code first. We can help with fixing linting issues throughout the PR review process.
+
+### Docstrings and documentation style
+
+Docstrings in this project use Google-style conventions (compatible with Sphinx via the Napoleon extension). Please use concise, descriptive docstrings with `Args:`, `Returns:`, and `Raises:` where appropriate.
+
+References for contributors:
+
+- PEP 8: https://peps.python.org/pep-0008/
+- Google Python Style Guide (Docstrings): https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings
+- Sphinx Napoleon (Google/NumPy docstrings): https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
+
+### Submitting a pull request
+
+After making your changes and running the tests, you can submit a pull request. Please ensure that your code has clear commits and adds/updates tests for new features or bug fixes.
 
 When submitting a pull request, please include:
-- A clear description of the changes you made.
-- The issue number that your pull request addresses, if applicable.
-- Any relevant documentation updates.
-- Screenshots or examples of the changes, if applicable.
-- Any additional context that might help the maintainers review your changes.
+
+- A clear description of the changes you made
+- The issue number your pull request addresses, if applicable
+- Any relevant documentation updates
+- Screenshots or examples of the changes, if applicable
+- Any additional context that might help the maintainers review your changes
 
 @Soontosh or @paulgavrikov will review your pull request, rerun the tests on their end, and provide feedback. Please be patient, as it may take some time to get to your contribution.
 
