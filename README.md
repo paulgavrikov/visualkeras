@@ -80,7 +80,7 @@ you may need to provide the full path of the desired font depending on your OS.
 ```python
 from PIL import ImageFont
 
-font = ImageFont.truetype("arial.ttf", 32)  # using comic sans is strictly prohibited!
+font = ImageFont.truetype("arial.ttf", 32)  # using comic sans is strictly prohibited! (just joking)
 visualkeras.layered_view(model, legend=True, font=font)  # font is optional!
 ```
 ![Layered view of a VGG16 CNN with legend](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_legend.png)
@@ -284,6 +284,22 @@ visualkeras.layered_view(model, legend=True, show_dimension=True)
 ```
 
 ![Show layer dimension in legend mode](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_legend_show_dimension.png)
+
+###### Graph-Based View
+The following code snippet an example of generating graph-based visualizations for a simple Convolutional Neural Network (CNN):
+```python
+# Define a simple sequential model
+simple_sequential_model = Sequential([
+    Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)),
+    MaxPooling2D((2, 2)),
+    Dense(10, activation='softmax')
+])
+
+# Basic usage of visualkeras to create a graph view
+basic_graph_img = visualkeras.graph_view(simple_sequential_model)
+```
+
+![Default graph-based view of a simple CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/basic_graph.png)
 
 ## FAQ
 
