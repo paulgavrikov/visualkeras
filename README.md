@@ -63,13 +63,31 @@ visualkeras.layered_view(model, to_file='output.png') # write to disk
 visualkeras.layered_view(model, to_file='output.png').show() # write and show
 ```
 
-To help understand some of the most important parameters we are going to use a VGG16 CNN architecture (see [example.py](https://github.com/paulgavrikov/visualkeras/blob/master/examples/vgg16.py)).
-
-###### Default
+#### Layered View
+To help understand some of the most important parameters we are going to use a VGG16 CNN architecture using `layered_view` (see [example.py](https://github.com/paulgavrikov/visualkeras/blob/master/examples/vgg16.py)).
 ```python
 visualkeras.layered_view(model)
 ```
 ![Default view of a VGG16 CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16.png)
+
+#### Graph-Based View
+The following code snippet an example of generating graph-based visualizations for a simple Convolutional Neural Network (CNN):
+```python
+# Define a simple sequential model
+simple_sequential_model = Sequential([
+    Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)),
+    MaxPooling2D((2, 2)),
+    Dense(10, activation='softmax')
+])
+
+# Basic usage of visualkeras to create a graph view
+basic_graph_img = visualkeras.graph_view(simple_sequential_model)
+```
+
+![Default graph-based view of a simple CNN](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/basic_graph.png)
+
+#### Additional Customization
+The following section provides more examples of customization for `layered_view` within visualkeras.
 
 ###### Legend
 
@@ -80,7 +98,7 @@ you may need to provide the full path of the desired font depending on your OS.
 ```python
 from PIL import ImageFont
 
-font = ImageFont.truetype("arial.ttf", 32)  # using comic sans is strictly prohibited!
+font = ImageFont.truetype("arial.ttf", 32)  # using comic sans is strictly prohibited! (just joking)
 visualkeras.layered_view(model, legend=True, font=font)  # font is optional!
 ```
 ![Layered view of a VGG16 CNN with legend](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_legend.png)
@@ -154,7 +172,7 @@ Visualkeras provides multiple sizing strategies to handle different model archit
 visualkeras.layered_view(model, sizing_mode='accurate')
 ```
 
-![Accurate mode view of a sample architecture](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_accurate.png)
+<img src="https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_accurate.png" height="400"/>
 
 **Balanced mode**: Smart scaling that balances accuracy with visual clarity
 
@@ -162,7 +180,7 @@ visualkeras.layered_view(model, sizing_mode='accurate')
 visualkeras.layered_view(model, sizing_mode='balanced')
 ```
 
-![Balanced mode view of a sample architecture](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_balanced.png)
+<img src="https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_balanced.pn" height="400"/>
 
 **Capped mode**: Caps dimensions at specified limits while preserving ratios
 
@@ -208,7 +226,8 @@ In relative mode, if one layer has 64 units and the next has 32 units, the secon
 - **Relative mode with base_size=10**: Shows layers at 640→320→160→80 pixels (true proportional scaling)
 
 Below is an example visualization of a different model using the relative sizing mode:
-![Accurate mode view of a sample architecture](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_relative_base_1.png)
+
+<img src="https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_relative_base_1.png" height="400"/>
 
 ###### Drawing information text
 With the `text_callable` argument a function can be passed to the `layered_view` function which can be used to draw text below or above a specific layer. The function should have to following properties:
