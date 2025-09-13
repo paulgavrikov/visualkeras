@@ -17,6 +17,9 @@ except:
         except:
             warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
 
+# Apply local compatibility patch (idempotent)
+ensure_singleton_sequence_unwrap_patched()
+
 def layered_view(model, 
                  to_file: str = None, 
                  min_z: int = 20, 
@@ -161,9 +164,10 @@ def layered_view(model,
                 # Fallback if even type() fails
                 layer_name = f'unknown_layer_{index}'
 
-        # Get the primary shape of the layer's output
-        shape = extract_primary_shape(layer.output_shape, layer_name)
-        
+        # Get the primary shape of the layer's output using a robust accessor (Keras 2/3 compatible)
+        raw_shape = get_layer_output_shape(layer)
+        shape = extract_primary_shape(raw_shape, layer_name)
+
         # Calculate dimensions with flexible sizing
         x, y, z = calculate_layer_dimensions(
             shape, scale_z, scale_xy,

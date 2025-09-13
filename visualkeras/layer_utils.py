@@ -2,6 +2,7 @@ import numpy as np
 from .utils import get_keys_by_value
 from collections.abc import Iterable
 import warnings
+from typing import List, Tuple, Union, Optional
 
 try:
     from tensorflow.keras.layers import Layer
@@ -74,9 +75,18 @@ def get_incoming_layers(layer):
 
 
 def get_outgoing_layers(layer):
-    """Yield outgoing (child) layers for a given layer."""
+    """Yield outgoing (child) layers for a given layer.
+
+    Supports both legacy Node API (TF/Keras <= 2.15) and the new Node API
+    (TF >= 2.16 / Keras >= 3).
+    """
     for i, node in enumerate(layer._outbound_nodes):
-        yield node.outbound_layer
+        if hasattr(node, 'outbound_layer'):
+            # Old Node API
+            yield node.outbound_layer
+        else:
+            # New Node API (Keras 3): node.operation is the target layer
+            yield node.operation
 
 
 def model_to_adj_matrix(model):
@@ -304,6 +314,176 @@ def is_internal_input(layer):
         pass
 
     return False
+
+
+# ----------------------------
+# Shape utilities (Keras 2/3)
+# ----------------------------
+
+def _tensor_shape_to_tuple(shape_obj) -> Optional[Tuple]:
+    """Convert TensorShape/KerasTensor.shape to a Python tuple of ints/None.
+
+    Returns None if conversion is not possible.
+    """
+    if shape_obj is None:
+        return None
+    # TensorFlow TensorShape has as_list
+    if hasattr(shape_obj, 'as_list'):
+        try:
+            return tuple(shape_obj.as_list())
+        except Exception:
+            pass
+    # Otherwise assume iterable of dims
+    try:
+        dims = []
+        for d in shape_obj:
+            # Some dims are Dimension-like; try int() with fallback to None
+            if d is None:
+                dims.append(None)
+            else:
+                try:
+                    dims.append(int(d))
+                except Exception:
+                    dims.append(None)
+        return tuple(dims)
+    except TypeError:
+        return None
+
+
+def get_layer_output_shape(layer) -> Union[Tuple, List[Tuple], None]:
+    """Best-effort retrieval of a layer's output shape as tuple(s).
+
+    Works across Keras/TF versions where `.output_shape` might not be present
+    (e.g., Keras 3 InputLayer).
+    """
+    # 1) Direct attribute (older versions)
+    s = getattr(layer, 'output_shape', None)
+    if s is not None:
+        return s
+
+    # 2) From `output` tensor(s)
+    out = getattr(layer, 'output', None)
+    if out is not None:
+        if isinstance(out, (list, tuple)):
+            shapes = [_tensor_shape_to_tuple(t.shape) for t in out]
+            return shapes
+        else:
+            return _tensor_shape_to_tuple(out.shape)
+
+    # 3) Fallbacks for Input-like layers
+    for attr in ('batch_shape', 'batch_input_shape', 'input_shape', 'shape'):
+        s = getattr(layer, attr, None)
+        if s is not None:
+            # Ensure tuple(s)
+            if isinstance(s, (list, tuple)) and len(s) > 0 and isinstance(s[0], (list, tuple)):
+                return [tuple(x) for x in s]
+            if hasattr(s, 'as_list'):
+                try:
+                    return tuple(s.as_list())
+                except Exception:
+                    pass
+            # Single tuple
+            if isinstance(s, (list, tuple)):
+                return tuple(s)
+            # Unknown format
+            break
+    return None
+
+
+def get_layer_input_shape(layer) -> Union[Tuple, List[Tuple], None]:
+    """Best-effort retrieval of a layer's input shape as tuple(s)."""
+    # 1) Direct attribute
+    s = getattr(layer, 'input_shape', None)
+    if s is not None:
+        return s
+
+    # 2) From `input` tensor(s)
+    inp = getattr(layer, 'input', None)
+    if inp is not None:
+        if isinstance(inp, (list, tuple)):
+            shapes = [_tensor_shape_to_tuple(t.shape) for t in inp]
+            return shapes
+        else:
+            return _tensor_shape_to_tuple(inp.shape)
+
+    # 3) Fallbacks common for InputLayer
+    for attr in ('batch_input_shape', 'batch_shape', 'shape'):
+        s = getattr(layer, attr, None)
+        if s is not None:
+            if isinstance(s, (list, tuple)) and len(s) > 0 and isinstance(s[0], (list, tuple)):
+                return [tuple(x) for x in s]
+            if hasattr(s, 'as_list'):
+                try:
+                    return tuple(s.as_list())
+                except Exception:
+                    pass
+            if isinstance(s, (list, tuple)):
+                return tuple(s)
+            break
+    return None
+
+
+def get_model_output_shapes(model) -> List[Tuple]:
+    """Return list of output shape tuples for a model across Keras versions."""
+    shapes = getattr(model, 'output_shape', None)
+    if shapes is not None:
+        if isinstance(shapes, tuple):
+            return [shapes]
+        # Assume already list-like of tuples
+        return list(shapes)
+    # Derive from model.outputs tensors
+    outputs = getattr(model, 'outputs', None) or []
+    result: List[Tuple] = []
+    for t in outputs:
+        result.append(_tensor_shape_to_tuple(getattr(t, 'shape', None)))
+    return result
+
+
+def ensure_singleton_sequence_unwrap_patched():
+    """Patch keras/tf.keras Model.__call__ to unwrap single-item outputs.
+
+    This is a precise workaround for Keras 3 nested-model calls where a model
+    with a single output may return a 1-element sequence which then causes
+    downstream Layers to receive a tuple instead of a tensor.
+
+    The patch unwraps only when the returned value is a list/tuple of length 1.
+    It does not affect multi-output models.
+    """
+    # Patch standalone keras.Model
+    try:
+        import keras  # type: ignore
+        from keras.models import Model as _KModel  # type: ignore
+        if not getattr(_KModel.__call__, '__vk_patched__', False):
+            _orig_call = _KModel.__call__
+
+            def _vk_model_call(self, *args, **kwargs):
+                out = _orig_call(self, *args, **kwargs)
+                if isinstance(out, (list, tuple)) and len(out) == 1:
+                    return out[0]
+                return out
+
+            _vk_model_call.__vk_patched__ = True
+            _KModel.__call__ = _vk_model_call  # type: ignore
+    except Exception:
+        pass
+
+    # Patch tf.keras.Model
+    try:
+        import tensorflow as _tf  # type: ignore
+        _TfModel = _tf.keras.Model
+        if not getattr(_TfModel.__call__, '__vk_patched__', False):
+            _orig_tf_call = _TfModel.__call__
+
+            def _vk_tf_model_call(self, *args, **kwargs):
+                out = _orig_tf_call(self, *args, **kwargs)
+                if isinstance(out, (list, tuple)) and len(out) == 1:
+                    return out[0]
+                return out
+
+            _vk_tf_model_call.__vk_patched__ = True
+            _TfModel.__call__ = _vk_tf_model_call  # type: ignore
+    except Exception:
+        pass
 
 def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
     """
