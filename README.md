@@ -180,7 +180,7 @@ visualkeras.layered_view(model, sizing_mode='accurate')
 visualkeras.layered_view(model, sizing_mode='balanced')
 ```
 
-<img src="https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_balanced.pn" height="400"/>
+<img src="https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/sizing_balanced.png" height="400"/>
 
 **Capped mode**: Caps dimensions at specified limits while preserving ratios
 
