@@ -1,4 +1,5 @@
 import numpy as np
+from functools import wraps
 from .utils import get_keys_by_value
 from collections.abc import Iterable
 import warnings
@@ -439,49 +440,58 @@ def get_model_output_shapes(model) -> List[Tuple]:
     return result
 
 
+def _wrap_model_call(method):
+    """Return a wrapper that unwraps singleton sequences while preserving metadata."""
+
+    @wraps(method)
+    def _wrapped(self, *args, **kwargs):
+        out = method(self, *args, **kwargs)
+        if isinstance(out, (list, tuple)) and len(out) == 1:
+            return out[0]
+        return out
+
+    _wrapped.__vk_patched__ = True
+    _wrapped.__vk_original__ = method
+    if hasattr(method, "__dict__"):
+        _wrapped.__dict__.update(method.__dict__)
+    return _wrapped
+
+
+def _apply_model_call_patch(model_cls) -> bool:
+    """Patch ``model_cls.__call__`` if it is not already patched.
+
+    Returns ``True`` when the patch is applied.
+    """
+
+    call_impl = getattr(model_cls, "__call__", None)
+    if call_impl is None or getattr(call_impl, "__vk_patched__", False):
+        return False
+
+    wrapped = _wrap_model_call(call_impl)
+    setattr(model_cls, "__call__", wrapped)
+    return True
+
+
 def ensure_singleton_sequence_unwrap_patched():
-    """Patch keras/tf.keras Model.__call__ to unwrap single-item outputs.
+    """Patch keras/tf.keras ``Model.__call__`` to unwrap single-item outputs.
 
-    This is a precise workaround for Keras 3 nested-model calls where a model
-    with a single output may return a 1-element sequence which then causes
-    downstream Layers to receive a tuple instead of a tensor.
-
-    The patch unwraps only when the returned value is a list/tuple of length 1.
-    It does not affect multi-output models.
+    The patch is idempotent and now preserves the original ``__call__``
+    metadata (e.g. ``get_concrete_function``) so downstream TensorFlow APIs
+    continue to work. Call this only if you explicitly need the legacy
+    single-output behaviour.
     """
     # Patch standalone keras.Model
     try:
         import keras  # type: ignore
         from keras.models import Model as _KModel  # type: ignore
-        if not getattr(_KModel.__call__, '__vk_patched__', False):
-            _orig_call = _KModel.__call__
-
-            def _vk_model_call(self, *args, **kwargs):
-                out = _orig_call(self, *args, **kwargs)
-                if isinstance(out, (list, tuple)) and len(out) == 1:
-                    return out[0]
-                return out
-
-            _vk_model_call.__vk_patched__ = True
-            _KModel.__call__ = _vk_model_call  # type: ignore
+        _apply_model_call_patch(_KModel)
     except Exception:
         pass
 
     # Patch tf.keras.Model
     try:
         import tensorflow as _tf  # type: ignore
-        _TfModel = _tf.keras.Model
-        if not getattr(_TfModel.__call__, '__vk_patched__', False):
-            _orig_tf_call = _TfModel.__call__
-
-            def _vk_tf_model_call(self, *args, **kwargs):
-                out = _orig_tf_call(self, *args, **kwargs)
-                if isinstance(out, (list, tuple)) and len(out) == 1:
-                    return out[0]
-                return out
-
-            _vk_tf_model_call.__vk_patched__ = True
-            _TfModel.__call__ = _vk_tf_model_call  # type: ignore
+        _apply_model_call_patch(_tf.keras.Model)
     except Exception:
         pass
 
