@@ -17,51 +17,7 @@ except:
             from keras import layers
         except:
             warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
-
 _BUILT_IN_TEXT_CALLABLES = tuple(LAYERED_TEXT_CALLABLES.values())
-
-
-def _resolve_layer_output_shape(layer) -> Any:
-    """
-    Attempt to retrieve a layer's output shape across keras/tensorflow versions.
-
-    Prefers an explicit ``output_shape`` attribute, falls back to the tensor's
-    shape, and finally tries ``compute_output_shape`` when available.
-    """
-    shape = getattr(layer, "output_shape", None)
-    if shape is not None:
-        return _shape_to_tuple(shape)
-
-    output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
-    if tensor_shape is not None:
-        return _shape_to_tuple(tensor_shape)
-
-    compute_output_shape = getattr(layer, "compute_output_shape", None)
-    if callable(compute_output_shape):
-        input_shape = getattr(layer, "input_shape", None)
-        if input_shape is not None:
-            try:
-                return _shape_to_tuple(compute_output_shape(input_shape))
-            except Exception:  # noqa: BLE001
-                pass
-
-    return None
-
-
-def _shape_to_tuple(shape: Any) -> Any:
-    if shape is None:
-        return None
-    if isinstance(shape, tuple):
-        return shape
-    if hasattr(shape, "as_list"):
-        try:
-            return tuple(shape.as_list())
-        except Exception:  # noqa: BLE001
-            return tuple(shape)
-    if isinstance(shape, list):
-        return tuple(shape)
-    return shape
 
 def layered_view(model, 
                  to_file: str = None, 
@@ -415,9 +371,8 @@ def layered_view(model,
                 layer_name = f'unknown_layer_{index}'
 
         # Get the primary shape of the layer's output
-        raw_shape = _resolve_layer_output_shape(layer)
+        raw_shape = get_layer_output_shape(layer)
         shape = extract_primary_shape(raw_shape, layer_name)
-        
         # Calculate dimensions with flexible sizing
         x, y, z = calculate_layer_dimensions(
             shape, scale_z, scale_xy,

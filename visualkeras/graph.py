@@ -189,34 +189,15 @@ def graph_view(model, to_file: str = None,
     id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
     model_layers = model_to_hierarchy_lists(model, id_to_num_mapping, adj_matrix)
     
-    # Add fake output layers only when needed
-    # When inout_as_tensor=False, only add dummy layers if output-producing layers
-    # are not in the last hierarchy level (to avoid duplication)
-    should_add_dummy_outputs = inout_as_tensor
-    
-    if not inout_as_tensor:
-        # Check if all output-producing layers are in the last hierarchy level
-        last_level_layers = model_layers[-1] if model_layers else []
-        layers_producing_outputs = []
-        
-        for output_tensor in model.outputs:
-            for layer in model.layers:
-                if hasattr(layer, 'output') and layer.output is output_tensor:
-                    layers_producing_outputs.append(layer)
-                    break
-        
-        # Only add dummy outputs if some output-producing layers are NOT in the last level
-        should_add_dummy_outputs = not all(layer in last_level_layers for layer in layers_producing_outputs)
+    # Add fake output layers to provide explicit sinks so connectors always end
+    # in a visible node column. This matches the reference renderer outputs and
+    # keeps tensor/neuron views consistent.
+    should_add_dummy_outputs = True
     
     if should_add_dummy_outputs:
-        # Normalize output_shape to always be a list of tuples
-        if isinstance(model.output_shape, tuple):
-            # Single output model: output_shape is a tuple, convert to list of tuples
-            output_shapes = [model.output_shape]
-        else:
-            # Multi-output model: output_shape is already a list of tuples
-            output_shapes = model.output_shape
-        
+        # Normalize output_shape using helper to handle Keras 3
+        output_shapes = get_model_output_shapes(model)
+
         model_layers.append([
             _DummyLayer(
                 output_names[i],
@@ -238,6 +219,7 @@ def graph_view(model, to_file: str = None,
         for layer in layer_list:
             is_box = True
             units = 1
+            node_scale_override = None  # optional per-node scale for circles to normalize column height
             
             if show_neurons:
                 if hasattr(layer, 'units'):
@@ -248,15 +230,21 @@ def graph_view(model, to_file: str = None,
                     units = layer.filters
                 elif is_internal_input(layer) and not inout_as_tensor:
                     is_box = False
-                    # Normalize input_shape to handle both tuple and list formats
-                    input_shape = layer.input_shape
-                    if isinstance(input_shape, tuple):
-                        shape = input_shape
-                    elif isinstance(input_shape, list) and len(input_shape) == 1:
+                    # Normalize input shape using helper
+                    input_shape = get_layer_input_shape(layer)
+                    if isinstance(input_shape, (list, tuple)) and len(input_shape) > 0 and isinstance(input_shape[0], (list, tuple)):
                         shape = input_shape[0]
                     else:
-                        raise RuntimeError(f"not supported input shape {input_shape}")
+                        shape = input_shape
                     units = self_multiply(shape)
+                    # Keep the overall column height similar to the default box height (3*node_size)
+                    # Compute per-node scale so that: units * scale * node_size + (units-1)*node_spacing ≈ 3*node_size
+                    if units and units > 0:
+                        target = 3 * node_size
+                        numerator = target - max(units - 1, 0) * node_spacing
+                        denom = units * node_size
+                        s = max(0.2, min(1.0, numerator / denom)) if denom > 0 else 1.0
+                        node_scale_override = s
 
             n = min(units, ellipsize_after)
             layer_nodes = list()
@@ -275,7 +263,9 @@ def graph_view(model, to_file: str = None,
                 c.x1 = current_x
                 c.y1 = current_y
                 c.x2 = c.x1 + node_size
-                c.y2 = c.y1 + node_size * scale
+                # For neuron circles, allow per-layer scale override to normalize column height
+                eff_scale = node_scale_override if (node_scale_override is not None and not is_box) else scale
+                c.y2 = c.y1 + node_size * eff_scale
 
                 current_y = c.y2 + node_spacing
 
@@ -296,6 +286,11 @@ def graph_view(model, to_file: str = None,
 
     img_width = len(layers) * node_size + (len(layers) - 1) * layer_spacing + 2 * padding
     img_height = max(*layer_y) + 2 * padding
+    # Keep height comparable between tensor and flattened views
+    if not inout_as_tensor and show_neurons:
+        baseline = 3 * node_size + 2 * padding
+        if img_height < baseline:
+            img_height = baseline
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
 
     draw = aggdraw.Draw(img)
