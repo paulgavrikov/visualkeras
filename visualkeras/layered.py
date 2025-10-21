@@ -370,7 +370,7 @@ def layered_view(model,
                 # Fallback if even type() fails
                 layer_name = f'unknown_layer_{index}'
 
-        # Get the primary shape of the layer's output using a robust accessor (Keras 2/3 compatible)
+        # Get the primary shape of the layer's output
         raw_shape = get_layer_output_shape(layer)
         shape = extract_primary_shape(raw_shape, layer_name)
         # Calculate dimensions with flexible sizing

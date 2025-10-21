@@ -1,5 +1,4 @@
 import numpy as np
-from functools import wraps
 from .utils import get_keys_by_value
 from collections.abc import Iterable
 import warnings
@@ -439,61 +438,6 @@ def get_model_output_shapes(model) -> List[Tuple]:
         result.append(_tensor_shape_to_tuple(getattr(t, 'shape', None)))
     return result
 
-
-def _wrap_model_call(method):
-    """Return a wrapper that unwraps singleton sequences while preserving metadata."""
-
-    @wraps(method)
-    def _wrapped(self, *args, **kwargs):
-        out = method(self, *args, **kwargs)
-        if isinstance(out, (list, tuple)) and len(out) == 1:
-            return out[0]
-        return out
-
-    _wrapped.__vk_patched__ = True
-    _wrapped.__vk_original__ = method
-    if hasattr(method, "__dict__"):
-        _wrapped.__dict__.update(method.__dict__)
-    return _wrapped
-
-
-def _apply_model_call_patch(model_cls) -> bool:
-    """Patch ``model_cls.__call__`` if it is not already patched.
-
-    Returns ``True`` when the patch is applied.
-    """
-
-    call_impl = getattr(model_cls, "__call__", None)
-    if call_impl is None or getattr(call_impl, "__vk_patched__", False):
-        return False
-
-    wrapped = _wrap_model_call(call_impl)
-    setattr(model_cls, "__call__", wrapped)
-    return True
-
-
-def ensure_singleton_sequence_unwrap_patched():
-    """Patch keras/tf.keras ``Model.__call__`` to unwrap single-item outputs.
-
-    The patch is idempotent and now preserves the original ``__call__``
-    metadata (e.g. ``get_concrete_function``) so downstream TensorFlow APIs
-    continue to work. Call this only if you explicitly need the legacy
-    single-output behaviour.
-    """
-    # Patch standalone keras.Model
-    try:
-        import keras  # type: ignore
-        from keras.models import Model as _KModel  # type: ignore
-        _apply_model_call_patch(_KModel)
-    except Exception:
-        pass
-
-    # Patch tf.keras.Model
-    try:
-        import tensorflow as _tf  # type: ignore
-        _apply_model_call_patch(_tf.keras.Model)
-    except Exception:
-        pass
 
 def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
     """
