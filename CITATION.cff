@@ -6,8 +6,8 @@ authors:
   - family-names: "Patapati"
     given-names: "Santosh"
 title: "visualkeras"
-version: "0.1.4"
-date-released: "2020-10-5"
+version: "0.2.0"
+date-released: "2025-10-13"
 url: "https://github.com/paulgavrikov/visualkeras"
 preferred-citation:
   authors:
@@ -16,7 +16,7 @@ preferred-citation:
     - family-names: "Patapati"
       given-names: "Santosh"
   title: "visualkeras"
-  version: "0.1.4"
-  date-released: "2020-10-5"
+  version: "0.2.0"
+  date-released: "2025-10-13"
   url: "https://github.com/paulgavrikov/visualkeras"
   type: "generic"

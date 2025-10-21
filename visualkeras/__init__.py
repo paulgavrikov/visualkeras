@@ -23,3 +23,11 @@ PyPi: https://pypi.org/project/visualkeras/
 
 from visualkeras.layered import *
 from visualkeras.graph import *
+from visualkeras.options import (
+    LayeredOptions,
+    GraphOptions,
+    LAYERED_PRESETS,
+    GRAPH_PRESETS,
+    LAYERED_TEXT_CALLABLES,
+)
+from visualkeras.show import show

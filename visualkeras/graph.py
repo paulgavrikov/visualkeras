@@ -1,10 +1,11 @@
+from typing import Any, Mapping, Union
 import aggdraw
 from PIL import Image, ImageDraw
 from math import ceil
+import warnings
 from .utils import *
 from .layer_utils import *
-ensure_singleton_sequence_unwrap_patched()
-
+from .options import GraphOptions, GRAPH_PRESETS
 
 class _DummyLayer:
 
@@ -19,7 +20,9 @@ def graph_view(model, to_file: str = None,
                background_fill: Any = 'white', padding: int = 10,
                layer_spacing: int = 250, node_spacing: int = 10, connector_fill: Any = 'gray',
                connector_width: int = 1, ellipsize_after: int = 10,
-               inout_as_tensor: bool = True, show_neurons: bool = True) -> Image:
+               inout_as_tensor: bool = True, show_neurons: bool = True,
+               *, options: Union[GraphOptions, Mapping[str, Any], None] = None,
+               preset: Union[str, None] = None) -> Image:
     """
     Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
     layer) in graph style.
@@ -42,9 +45,121 @@ def graph_view(model, to_file: str = None,
     flattened and one node for each scalar will be created (e.g. a (10, 10) shape will be represented by 100 nodes)
     :param show_neurons: If True a node for each neuron in supported layers is created (constrained by ellipsize_after),
     else each layer is represented by a node
+    :param options: Optional ``GraphOptions`` (or mapping) providing a configuration bundle.
+        Explicit keyword arguments override the bundle.
+    :param preset: Name of a preset from ``visualkeras.GRAPH_PRESETS`` to use as the base style.
 
     :return: Generated architecture image.
     """
+    using_presets = options is not None or preset is not None
+
+    if not using_presets:
+        defaults = GraphOptions().to_kwargs()
+        defaults.update({
+            "to_file": None,
+            "color_map": None,
+            "node_size": 50,
+            "background_fill": 'white',
+            "padding": 10,
+            "layer_spacing": 250,
+            "node_spacing": 10,
+            "connector_fill": 'gray',
+            "connector_width": 1,
+            "ellipsize_after": 10,
+            "inout_as_tensor": True,
+            "show_neurons": True,
+        })
+
+        current_params = {
+            "to_file": to_file,
+            "color_map": color_map,
+            "node_size": node_size,
+            "background_fill": background_fill,
+            "padding": padding,
+            "layer_spacing": layer_spacing,
+            "node_spacing": node_spacing,
+            "connector_fill": connector_fill,
+            "connector_width": connector_width,
+            "ellipsize_after": ellipsize_after,
+            "inout_as_tensor": inout_as_tensor,
+            "show_neurons": show_neurons,
+        }
+
+        custom_keys = [
+            key for key, value in current_params.items()
+            if key in defaults and value != defaults[key]
+        ]
+
+        if len(custom_keys) >= 4:
+            warnings.warn(
+                "graph_view received many custom keyword arguments. "
+                "Consider using visualkeras.show(..., mode='graph', preset=...) and the GraphOptions dataclass for a simpler workflow.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    if preset is not None or options is not None:
+        defaults = GraphOptions().to_kwargs()
+        defaults["color_map"] = None
+
+        resolved = dict(defaults)
+
+        if preset is not None:
+            try:
+                resolved.update(GRAPH_PRESETS[preset].to_kwargs())
+            except KeyError as exc:
+                available = ", ".join(sorted(GRAPH_PRESETS.keys()))
+                raise ValueError(
+                    f"Unknown graph preset '{preset}'. Available presets: {available}"
+                ) from exc
+
+        if options is not None:
+            if isinstance(options, GraphOptions):
+                option_values = options.to_kwargs()
+            elif isinstance(options, Mapping):
+                option_values = dict(options)
+            else:
+                raise TypeError(
+                    "options must be a GraphOptions instance or a mapping of keyword arguments."
+                )
+            resolved.update(option_values)
+
+        explicit_values = {
+            "to_file": to_file,
+            "color_map": color_map,
+            "node_size": node_size,
+            "background_fill": background_fill,
+            "padding": padding,
+            "layer_spacing": layer_spacing,
+            "node_spacing": node_spacing,
+            "connector_fill": connector_fill,
+            "connector_width": connector_width,
+            "ellipsize_after": ellipsize_after,
+            "inout_as_tensor": inout_as_tensor,
+            "show_neurons": show_neurons,
+        }
+
+        for key, value in explicit_values.items():
+            if key not in defaults:
+                continue
+            if value != defaults[key]:
+                resolved[key] = value
+
+        to_file = resolved["to_file"]
+        color_map = resolved["color_map"]
+        node_size = resolved["node_size"]
+        background_fill = resolved["background_fill"]
+        padding = resolved["padding"]
+        layer_spacing = resolved["layer_spacing"]
+        node_spacing = resolved["node_spacing"]
+        connector_fill = resolved["connector_fill"]
+        connector_width = resolved["connector_width"]
+        ellipsize_after = resolved["ellipsize_after"]
+        inout_as_tensor = resolved["inout_as_tensor"]
+        show_neurons = resolved["show_neurons"]
+
+        if color_map is not None and not isinstance(color_map, dict):
+            color_map = dict(color_map)
 
     if color_map is None:
         color_map = dict()
@@ -74,13 +189,10 @@ def graph_view(model, to_file: str = None,
     id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
     model_layers = model_to_hierarchy_lists(model, id_to_num_mapping, adj_matrix)
     
-    # Add fake output layers only when needed
-    # When inout_as_tensor=False, only add dummy layers if output-producing layers
-    # are not in the last hierarchy level (to avoid duplication)
-    # For test expectations: when flattening scalars (inout_as_tensor=False),
-    # add dummy output layers to create an extra column and increase width.
-    # For the default tensor view, don't add dummies.
-    should_add_dummy_outputs = not inout_as_tensor
+    # Add fake output layers to provide explicit sinks so connectors always end
+    # in a visible node column. This matches the reference renderer outputs and
+    # keeps tensor/neuron views consistent.
+    should_add_dummy_outputs = True
     
     if should_add_dummy_outputs:
         # Normalize output_shape using helper to handle Keras 3

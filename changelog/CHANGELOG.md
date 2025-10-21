@@ -1,8 +1,38 @@
 # Changelog
 All notable changes to this project will be documented in this file, starting from version 0.0.1.
 
+## 0.2.0 (2025-10-13)
+
+Ninth release: Easier preset options and structured API.
+
+Features:
+- Added typed `LayeredOptions` and `GraphOptions` dataclasses with preset arguments for `layered_view` and `graph_view`
+- Added presets for `text_callable` for common use cases with regards to captions under layers
+- Extended `layered_view` and `graph_view` to accept `options=` and `preset=` keyword arguments so that the new dataclasses can be used without breaking backwards compatibility.
+- We now raise `RuntimeError` for unsupported model structures to avoid confusing tracebacks.
+- Created a `.help()` docstring on the initialization file to allow easier understanding on certain IDEs.
+
+Developer changes:
+- Re-exported options and preset defaults from the package root to make the structured API easy to import.
+- Added `get_layers` to simplify extracting layers from a Keras/TF model.
+- Added significant amount of docstrings throughout the codebase
+- Add slight clarifications around formatting for CONTRIBUTING.md
+- Misc. improvements to README.md
+
+## 0.1.5 (2025-9-2)
+Eighth release
+
+- Custom Scaling Features: Added new functions and options for custom scaling of layer dimension sin visualizations.
+- Bug fixes:
+    - Fixed InputLayer detection in `layer_utils.py`, as detailed in Issue #82 
+    - Resolved duplicate output layers and major bugs in graph_view
+    - Improved handling of input/output layers when `inout_as_tensor` is false
+    - Better docstrings + cleanliness
+
+We also added new documentation with usage examples and associated figures. We have created a `CONTRIBUTING.md` file for new contributors to reference.
+
 ## 0.1.4 (2024-11-24)
-Seventh release: Compatability with newer versions of packages
+Seventh release: Compatibility with newer versions of packages
 
 Bug fixes:
 - Added compatability with Keras versions >=3 (Tensorflow >= 2.16) for `graph_view`, see issue [#79](https://github.com/paulgavrikov/visualkeras/issues/79)

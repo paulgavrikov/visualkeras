@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="visualkeras",
-    version="0.1.4",
+    version="0.2.0",
     author="Paul Gavrikov",
     author_email="paul.gavrikov@hs-offenburg.de",
     description="Architecture visualization of Keras models",
