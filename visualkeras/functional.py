@@ -679,6 +679,7 @@ def _assign_component_positions(
 ) -> int:
     node_set = set(node_ids)
     max_height = 0
+    column_heights: Dict[int, int] = {}
 
     for rank, ordered_ids in rank_nodes.items():
         filtered = [node_id for node_id in ordered_ids if node_id in node_set]
@@ -687,13 +688,28 @@ def _assign_component_positions(
         column_width = column_widths.get(rank, 0)
         if column_width <= 0:
             column_width = max(graph.nodes[node_id].width for node_id in filtered)
-        y_cursor = base_y
+        column_height = sum(graph.nodes[node_id].height for node_id in filtered)
+        if len(filtered) > 1:
+            column_height += row_spacing * (len(filtered) - 1)
+        column_heights[rank] = column_height
+        max_height = max(max_height, column_height)
+
+    for rank, ordered_ids in rank_nodes.items():
+        filtered = [node_id for node_id in ordered_ids if node_id in node_set]
+        if not filtered:
+            continue
+        column_width = column_widths.get(rank, 0)
+        if column_width <= 0:
+            column_width = max(graph.nodes[node_id].width for node_id in filtered)
+        column_height = column_heights.get(rank, 0)
+        y_cursor = base_y + int((max_height - column_height) / 2)
         for node_id in filtered:
             node = graph.nodes[node_id]
             node.x = x_positions.get(rank, 0) + int((column_width - node.width) / 2)
             node.y = y_cursor
             y_cursor += node.height + row_spacing
-        max_height = max(max_height, y_cursor - base_y - row_spacing)
+        if column_height:
+            max_height = max(max_height, y_cursor - base_y - row_spacing)
 
     return max_height
 
@@ -761,7 +777,14 @@ def _render_graph(
         box.outline = outline if outline is not None else "black"
         boxes[node.node_id] = box
 
-    _draw_connectors(draw, graph.edges, boxes, connector_fill, connector_width)
+    _draw_connectors(
+        draw,
+        graph.edges,
+        graph.nodes,
+        render_virtual_nodes,
+        connector_fill,
+        connector_width,
+    )
 
     for node_id, box in boxes.items():
         node = graph.nodes[node_id]
@@ -806,27 +829,116 @@ def _render_graph(
 def _draw_connectors(
     draw: aggdraw.Draw,
     edges: Iterable[FunctionalEdge],
-    boxes: Mapping[int, Box],
+    nodes: Mapping[int, FunctionalNode],
+    render_virtual_nodes: bool,
     connector_fill: Any,
     connector_width: int,
 ) -> None:
     pen = aggdraw.Pen(connector_fill, connector_width)
+    outgoing = _outgoing_map(edges)
+    incoming = _incoming_map(edges)
+    visited: set[Tuple[int, int]] = set()
+    paths_by_src: Dict[int, List[List[int]]] = {}
+
+    def append_path(start_id: int, next_id: int) -> None:
+        path = [start_id]
+        prev_id = start_id
+        current_id = next_id
+        while True:
+            path.append(current_id)
+            visited.add((prev_id, current_id))
+            node = nodes.get(current_id)
+            if node is None:
+                break
+            if node.kind != "virtual" or render_virtual_nodes:
+                break
+            if len(outgoing.get(current_id, [])) != 1 or len(incoming.get(current_id, [])) != 1:
+                break
+            next_ids = outgoing.get(current_id, [])
+            if not next_ids:
+                break
+            prev_id = current_id
+            current_id = next_ids[0]
+            if (prev_id, current_id) in visited:
+                break
+        paths_by_src.setdefault(start_id, []).append(path)
+
     for edge in edges:
-        start = boxes.get(edge.src)
-        end = boxes.get(edge.dst)
-        if start is None or end is None:
+        if edge.src not in nodes or edge.dst not in nodes:
             continue
-        x1 = start.x2
-        y1 = start.y1 + (start.y2 - start.y1) / 2
-        x2 = end.x1
-        y2 = end.y1 + (end.y2 - end.y1) / 2
-        if x2 <= x1:
-            draw.line([x1, y1, x2, y2], pen)
+        if (edge.src, edge.dst) in visited:
             continue
-        mid_x = x1 + (x2 - x1) / 2
-        draw.line([x1, y1, mid_x, y1], pen)
-        draw.line([mid_x, y1, mid_x, y2], pen)
-        draw.line([mid_x, y2, x2, y2], pen)
+        src_node = nodes.get(edge.src)
+        if src_node is None:
+            continue
+        if src_node.kind == "virtual" and not render_virtual_nodes and len(incoming.get(edge.src, [])) == 1:
+            continue
+        append_path(edge.src, edge.dst)
+
+    def anchor(node: FunctionalNode, role: str) -> Tuple[int, int]:
+        if node.kind == "virtual" and not render_virtual_nodes:
+            x = node.x + node.width / 2
+        elif role == "start":
+            x = node.x + node.width
+        elif role == "end":
+            x = node.x
+        else:
+            x = node.x + node.width / 2
+        y = node.y + node.height / 2
+        return int(round(x)), int(round(y))
+
+    def add_point(points: List[Tuple[int, int]], x: int, y: int) -> None:
+        if not points or points[-1] != (x, y):
+            points.append((x, y))
+
+    for src_id, paths in paths_by_src.items():
+        start_node = nodes.get(src_id)
+        if start_node is None:
+            continue
+        paths.sort(key=lambda path: nodes[path[-1]].y + nodes[path[-1]].height / 2)
+        count = len(paths)
+        spread = max(4, connector_width * 2)
+
+        for index, path in enumerate(paths):
+            offset = 0
+            if count > 1:
+                offset = int((index - (count - 1) / 2) * spread)
+
+            points: List[Tuple[int, int]] = []
+            for idx, node_id in enumerate(path):
+                node = nodes.get(node_id)
+                if node is None:
+                    continue
+                role = "mid"
+                if idx == 0:
+                    role = "start"
+                elif idx == len(path) - 1:
+                    role = "end"
+                x, y = anchor(node, role)
+                if not points:
+                    add_point(points, x, y)
+                    continue
+
+                x1, y1 = points[-1]
+                x2, y2 = x, y
+                if x2 <= x1 + 1:
+                    add_point(points, x2, y2)
+                    continue
+
+                mid_x = int(round(x1 + (x2 - x1) / 2)) + offset
+                min_mid = x1 + 2
+                max_mid = x2 - 2
+                if min_mid < max_mid:
+                    mid_x = max(min_mid, min(max_mid, mid_x))
+                else:
+                    mid_x = int(round((x1 + x2) / 2))
+
+                add_point(points, mid_x, y1)
+                add_point(points, mid_x, y2)
+                add_point(points, x2, y2)
+
+            if len(points) >= 2:
+                draw.line([coord for point in points for coord in point], pen)
 
 
 def _incoming_map(edges: Sequence[FunctionalEdge]) -> Dict[int, List[int]]:
