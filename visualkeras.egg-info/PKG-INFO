@@ -29,6 +29,7 @@ Dynamic: summary
 
 [![Latest Version](https://img.shields.io/pypi/v/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 [![Download Count](https://img.shields.io/pypi/dm/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
+<!--[![CI](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml/badge.svg)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)-->
 
 ## Introduction
 Visualkeras is a Python package to help visualize Keras (either standalone or included in tensorflow) neural network architectures. It allows easy styling to fit most 
@@ -248,9 +249,9 @@ In relative mode, if one layer has 64 units and the next has 32 units, the secon
 - `relative_base_size=5`: A 64-unit layer gets 320 pixels, a 32-unit layer gets 160 pixels
 - `relative_base_size=20`: A 64-unit layer gets 1280 pixels, a 32-unit layer gets 640 pixels
 
-**Comparison Example**: Using a model with layers of sizes 64â†’32â†’16â†’8:
+**Comparison Example**: Using a model with layers of sizes 64→32→16→8:
 - **Accurate mode**: May show all layers at similar visual sizes (depending on scaling)
-- **Relative mode with base_size=10**: Shows layers at 640â†’320â†’160â†’80 pixels (true proportional scaling)
+- **Relative mode with base_size=10**: Shows layers at 640→320→160→80 pixels (true proportional scaling)
 
 Below is an example visualization of a different model using the relative sizing mode:
 
@@ -271,15 +272,15 @@ def text_callable(layer_index, layer):
 
     # Get the output shape of the layer
     if hasattr(layer, 'output_shape'):
-        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ───────────────────────────────
         # Legacy Keras (standalone 2.x) or TF-Keras <2.11
-        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ───────────────────────────────
         # this will work so long as `layer.output_shape` exists
         output_shape = [x for x in list(layer.output.shape) if x is not None]
     else:
-        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        # Modern TF-Keras (>= 2.11) â€“ attribute removed
-        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ───────────────────────────────
+        # Modern TF-Keras (>= 2.11) – attribute removed
+        # ───────────────────────────────
         output_shape = layer.output.shape.as_list()
 
     # If the output shape is a list of tuples, we only take the first one

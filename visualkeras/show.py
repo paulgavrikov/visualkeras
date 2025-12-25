@@ -13,9 +13,12 @@ from PIL import Image
 
 from .layered import layered_view
 from .graph import graph_view
+from .functional import functional_view
 from .options import (
+    FunctionalOptions,
     GraphOptions,
     LayeredOptions,
+    FUNCTIONAL_PRESETS,
     GRAPH_PRESETS,
     LAYERED_PRESETS,
     LAYERED_TEXT_CALLABLES,
@@ -23,6 +26,7 @@ from .options import (
 
 _LayeredOptionsType = Union[LayeredOptions, Mapping[str, Any], None]
 _GraphOptionsType = Union[GraphOptions, Mapping[str, Any], None]
+_FunctionalOptionsType = Union[FunctionalOptions, Mapping[str, Any], None]
 
 
 def show(
@@ -39,9 +43,10 @@ def show(
     ----------
     model :
         A Keras or TensorFlow model instance to visualize.
-    mode : {"layered", "graph"}, default "layered"
+    mode : {"layered", "graph", "functional"}, default "layered"
         Selects which renderer to use. ``"layered"`` produces the classic CNN
-        block diagram, while ``"graph"`` builds a node/edge plot.
+        block diagram, ``"graph"`` builds a node/edge plot, and ``"functional"``
+        renders a graph-aware layered layout.
     preset : str, optional
         Name of a preset from :data:`visualkeras.LAYERED_PRESETS` or
         :data:`visualkeras.GRAPH_PRESETS`. Presets provide curated defaults for
@@ -86,8 +91,8 @@ def show(
     """
 
     mode = mode.lower()
-    if mode not in {"layered", "graph"}:
-        raise ValueError("mode must be 'layered' or 'graph'")
+    if mode not in {"layered", "graph", "functional"}:
+        raise ValueError("mode must be 'layered', 'graph', or 'functional'")
 
     if mode == "layered":
         params: MutableMapping[str, Any] = {}
@@ -118,6 +123,36 @@ def show(
                 ) from exc
 
         return layered_view(model, **params)
+
+    if mode == "functional":
+        params = {}
+        if preset is not None:
+            try:
+                params.update(FUNCTIONAL_PRESETS[preset].to_kwargs())
+            except KeyError as exc:  # pragma: no cover - defensive
+                available = ", ".join(sorted(FUNCTIONAL_PRESETS))
+                raise ValueError(
+                    f"Unknown functional preset '{preset}'. "
+                    f"Available presets: {available}"
+                ) from exc
+
+        if options is not None:
+            params.update(_coerce_functional_options(options))
+
+        params.update(overrides)
+
+        text_callable = params.get("text_callable")
+        if isinstance(text_callable, str):
+            try:
+                params["text_callable"] = LAYERED_TEXT_CALLABLES[text_callable]
+            except KeyError as exc:
+                available = ", ".join(sorted(LAYERED_TEXT_CALLABLES))
+                raise ValueError(
+                    f"Unknown text callable preset '{text_callable}'. "
+                    f"Available presets: {available}"
+                ) from exc
+
+        return functional_view(model, **params)
 
     # mode == "graph"
     params = {}
@@ -163,3 +198,16 @@ def _coerce_graph_options(options: _GraphOptionsType) -> MutableMapping[str, Any
         "Graph visualizations require a GraphOptions instance or a mapping."
     )
 
+
+def _coerce_functional_options(
+    options: _FunctionalOptionsType,
+) -> MutableMapping[str, Any]:
+    if options is None:
+        return {}
+    if isinstance(options, FunctionalOptions):
+        return options.to_kwargs()
+    if isinstance(options, Mapping):
+        return dict(options)
+    raise TypeError(
+        "Functional visualizations require a FunctionalOptions instance or a mapping."
+    )

@@ -120,6 +120,71 @@ class GraphOptions:
         }
 
 
+@dataclass(frozen=True)
+class FunctionalOptions:
+    """Configuration bundle for ``functional_view`` rendering."""
+
+    to_file: Optional[str] = None
+    color_map: Mapping[type, Mapping[str, Any]] = field(default_factory=dict)
+    background_fill: Any = "white"
+    padding: int = 20
+    column_spacing: int = 80
+    row_spacing: int = 40
+    component_spacing: int = 80
+    connector_fill: Any = "gray"
+    connector_width: int = 2
+    min_z: int = 20
+    min_xy: int = 20
+    max_z: int = 400
+    max_xy: int = 2000
+    scale_z: float = 1.5
+    scale_xy: float = 4.0
+    one_dim_orientation: str = "z"
+    sizing_mode: str = "balanced"
+    dimension_caps: Optional[Mapping[str, int]] = None
+    relative_base_size: int = 20
+    text_callable: Optional[Callable[[int, Any], Tuple[str, bool]]] = None
+    text_vspacing: int = 4
+    font: Any = None
+    font_color: Any = "black"
+    add_output_nodes: bool = False
+    layout_iterations: int = 4
+    virtual_node_size: int = 12
+    render_virtual_nodes: bool = False
+
+    def to_kwargs(self) -> Dict[str, Any]:
+        """Return a shallow dict compatible with ``functional_view``."""
+        return {
+            "to_file": self.to_file,
+            "color_map": self.color_map,
+            "background_fill": self.background_fill,
+            "padding": self.padding,
+            "column_spacing": self.column_spacing,
+            "row_spacing": self.row_spacing,
+            "component_spacing": self.component_spacing,
+            "connector_fill": self.connector_fill,
+            "connector_width": self.connector_width,
+            "min_z": self.min_z,
+            "min_xy": self.min_xy,
+            "max_z": self.max_z,
+            "max_xy": self.max_xy,
+            "scale_z": self.scale_z,
+            "scale_xy": self.scale_xy,
+            "one_dim_orientation": self.one_dim_orientation,
+            "sizing_mode": self.sizing_mode,
+            "dimension_caps": self.dimension_caps,
+            "relative_base_size": self.relative_base_size,
+            "text_callable": self.text_callable,
+            "text_vspacing": self.text_vspacing,
+            "font": self.font,
+            "font_color": self.font_color,
+            "add_output_nodes": self.add_output_nodes,
+            "layout_iterations": self.layout_iterations,
+            "virtual_node_size": self.virtual_node_size,
+            "render_virtual_nodes": self.render_virtual_nodes,
+        }
+
+
 # --- Text callable templates ----------------------------------------------- #
 
 def _layer_name(index: int, layer: Any) -> str:
@@ -226,3 +291,18 @@ GRAPH_PRESETS: Dict[str, GraphOptions] = {
     ),
 }
 """Curated presets for graph renderings keyed by human-friendly names."""
+
+
+FUNCTIONAL_PRESETS: Dict[str, FunctionalOptions] = {
+    "default": FunctionalOptions(),
+    "compact": FunctionalOptions(column_spacing=60, row_spacing=30, connector_width=1, component_spacing=60),
+    "presentation": FunctionalOptions(
+        column_spacing=120,
+        row_spacing=50,
+        connector_width=2,
+        component_spacing=100,
+        sizing_mode="balanced",
+        text_callable=LAYERED_TEXT_CALLABLES["name_shape"],
+    ),
+}
+"""Curated presets for functional renderings keyed by human-friendly names."""

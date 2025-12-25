@@ -6,6 +6,7 @@ layered or graph-style diagrams.
 Main entry points:
 - layered_view(model, ...): Render a layered (CNN-style) diagram
 - graph_view(model, ...): Render a graph-based diagram for general models
+- functional_view(model, ...): Render a graph-aware layered diagram
 - SpacingDummyLayer(...): Add logical spacing/grouping in layered views
 
 Quick start:
@@ -23,9 +24,12 @@ PyPi: https://pypi.org/project/visualkeras/
 
 from visualkeras.layered import *
 from visualkeras.graph import *
+from visualkeras.functional import *
 from visualkeras.options import (
+    FunctionalOptions,
     LayeredOptions,
     GraphOptions,
+    FUNCTIONAL_PRESETS,
     LAYERED_PRESETS,
     GRAPH_PRESETS,
     LAYERED_TEXT_CALLABLES,
