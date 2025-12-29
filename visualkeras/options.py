@@ -131,8 +131,10 @@ class FunctionalOptions:
     column_spacing: int = 80
     row_spacing: int = 40
     component_spacing: int = 80
-    connector_fill: Any = "gray"
+    connector_fill: Any = "gray" # used to be "black"
     connector_width: int = 2
+    connector_arrow: bool = False
+    connector_padding: int = 5
     min_z: int = 20
     min_xy: int = 20
     max_z: int = 400
@@ -164,6 +166,8 @@ class FunctionalOptions:
             "component_spacing": self.component_spacing,
             "connector_fill": self.connector_fill,
             "connector_width": self.connector_width,
+            "connector_arrow": self.connector_arrow,
+            "connector_padding": self.connector_padding,
             "min_z": self.min_z,
             "min_xy": self.min_xy,
             "max_z": self.max_z,

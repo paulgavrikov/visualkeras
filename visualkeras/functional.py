@@ -11,7 +11,7 @@ output structures. The pipeline is:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 from collections import deque
 import warnings
@@ -47,6 +47,7 @@ class FunctionalNode:
     y: int = 0
     kind: str = "layer"  # layer, input, output, virtual
     component: int = 0
+    style: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -79,8 +80,10 @@ def functional_view(
     column_spacing: int = 80,
     row_spacing: int = 40,
     component_spacing: int = 80,
-    connector_fill: Any = "gray",
+    connector_fill: Any = "gray", # used to be "black"
     connector_width: int = 2,
+    connector_arrow: bool = False,
+    connector_padding: int = 5, # used to be 0; now padding is applied by default
     min_z: int = 20,
     min_xy: int = 20,
     max_z: int = 400,
@@ -99,6 +102,7 @@ def functional_view(
     layout_iterations: int = 4,
     virtual_node_size: int = 12,
     render_virtual_nodes: bool = False,
+    styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
     preset: Union[str, None] = None,
@@ -118,6 +122,8 @@ def functional_view(
             "component_spacing": component_spacing,
             "connector_fill": connector_fill,
             "connector_width": connector_width,
+            "connector_arrow": connector_arrow,
+            "connector_padding": connector_padding,
             "min_z": min_z,
             "min_xy": min_xy,
             "max_z": max_z,
@@ -187,6 +193,8 @@ def functional_view(
             "component_spacing": component_spacing,
             "connector_fill": connector_fill,
             "connector_width": connector_width,
+            "connector_arrow": connector_arrow,
+            "connector_padding": connector_padding,
             "min_z": min_z,
             "min_xy": min_xy,
             "max_z": max_z,
@@ -222,6 +230,8 @@ def functional_view(
         component_spacing = resolved["component_spacing"]
         connector_fill = resolved["connector_fill"]
         connector_width = resolved["connector_width"]
+        connector_arrow = resolved["connector_arrow"]
+        connector_padding = resolved["connector_padding"]
         min_z = resolved["min_z"]
         min_xy = resolved["min_xy"]
         max_z = resolved["max_z"]
@@ -258,9 +268,22 @@ def functional_view(
 
     if color_map is None:
         color_map = {}
+        
+    if styles is None:
+        styles = {}
+
+    global_defaults = {
+        "connector_fill": connector_fill,
+        "connector_width": connector_width,
+        "connector_arrow": connector_arrow,
+        "connector_padding": connector_padding,
+        "padding": 0,  # separate from global image padding
+    }
 
     graph = _build_graph(
         model,
+        styles=styles,
+        global_defaults=global_defaults,
         min_z=min_z,
         min_xy=min_xy,
         max_z=max_z,
@@ -319,6 +342,8 @@ def functional_view(
         padding=padding,
         connector_fill=connector_fill,
         connector_width=connector_width,
+        connector_arrow=connector_arrow,
+        connector_padding=connector_padding,
         text_callable=text_callable,
         text_vspacing=text_vspacing,
         font=font,
@@ -334,6 +359,8 @@ def functional_view(
 def _build_graph(
     model,
     *,
+    styles: Mapping[Union[str, type], Dict[str, Any]],
+    global_defaults: Dict[str, Any],
     min_z: int,
     min_xy: int,
     max_z: int,
@@ -347,6 +374,21 @@ def _build_graph(
     add_output_nodes: bool,
     virtual_node_size: int,
 ) -> FunctionalGraph:
+    
+    def resolve_style(layer, name) -> Dict[str, Any]:
+        # Apply styles in order based on what is most specific
+        # The attributes are provided in the styles mapping
+        final_style = global_defaults.copy()
+        
+        for cls in type(layer).__mro__:
+            if cls in styles:
+                final_style.update(styles[cls])
+        
+        if name in styles:
+            final_style.update(styles[name])
+            
+        return final_style
+    
     layers = list(get_layers(model))
     order_map = {id(layer): index for index, layer in enumerate(layers)}
     nodes: Dict[int, FunctionalNode] = {}
@@ -370,6 +412,10 @@ def _build_graph(
         )
         width = max(min_xy, int(dims[2]))
         height = max(min_xy, int(dims[1]))
+
+        # Resolve all properties at once
+        node_style = resolve_style(layer, name)
+
         nodes[node_id] = FunctionalNode(
             layer=layer,
             node_id=node_id,
@@ -380,6 +426,7 @@ def _build_graph(
             width=width,
             height=height,
             order=order_map[node_id],
+            style=node_style
         )
 
     edges = _collect_edges(nodes)
@@ -743,6 +790,8 @@ def _render_graph(
     padding: int,
     connector_fill: Any,
     connector_width: int,
+    connector_arrow: bool,
+    connector_padding: int,
     text_callable: Optional[Callable[[int, Any], Tuple[str, bool]]],
     text_vspacing: int,
     font: Optional[ImageFont.ImageFont],
@@ -785,6 +834,8 @@ def _render_graph(
         render_virtual_nodes,
         connector_fill,
         connector_width,
+        connector_arrow,
+        connector_padding,
     )
 
     for node_id, box in boxes.items():
@@ -832,7 +883,10 @@ def _straighten_layout(
     row_spacing: int
 ) -> None:
     """
-    Adjusts y-positions to align linear connections straight.
+    Adjusts y positions to align linear connections straight. Uses 
+    a Forward pass (Parent --> Child) followed by a Backward pass 
+    (Child --> Parent) to handle spacing constraints that propagate
+    in either direction.
     """
     nodes_by_rank = {}
     for node in graph.nodes.values():
@@ -847,32 +901,12 @@ def _straighten_layout(
         outgoing[edge.src].append(edge.dst)
         incoming[edge.dst].append(edge.src)
 
-    for rank in sorted_ranks:
-        col_nodes = nodes_by_rank[rank]
+    def resolve_collisions(col_nodes: List[FunctionalNode]):
         col_nodes.sort(key=lambda n: n.y)
-        
-        proposed_centers = {}
-        for node in col_nodes:
-            parents = incoming[node.node_id]
-
-            if len(parents) == 1:
-                parent_id = parents[0]
-                if len(outgoing[parent_id]) == 1:
-                    parent = graph.nodes[parent_id]
-                    # Calculate center alignment
-                    parent_center = parent.y + parent.height / 2
-                    proposed_centers[node.node_id] = parent_center
-
         if not col_nodes:
-            continue
+            return
 
         current_y_map = {n.node_id: n.y for n in col_nodes}
-        
-        for node in col_nodes:
-            if node.node_id in proposed_centers:
-                desired_center = proposed_centers[node.node_id]
-                new_y = desired_center - node.height / 2
-                current_y_map[node.node_id] = int(new_y)
 
         for i in range(1, len(col_nodes)):
             prev_node = col_nodes[i-1]
@@ -884,6 +918,33 @@ def _straighten_layout(
         for node in col_nodes:
             node.y = int(current_y_map[node.node_id])
 
+    # Backward pass
+    for rank in sorted_ranks:
+        col_nodes = nodes_by_rank[rank]
+        for node in col_nodes:
+            parents = incoming[node.node_id]
+            if len(parents) == 1:
+                parent_id = parents[0]
+                if len(outgoing[parent_id]) == 1:
+                    parent = graph.nodes[parent_id]
+                    desired_center = parent.y + parent.height / 2
+                    node.y = int(desired_center - node.height / 2)
+        
+        resolve_collisions(col_nodes)
+
+    for rank in reversed(sorted_ranks):
+        col_nodes = nodes_by_rank[rank]
+        for node in col_nodes:
+            children = outgoing[node.node_id]
+            if len(children) == 1:
+                child_id = children[0]
+                if len(incoming[child_id]) == 1:
+                    child = graph.nodes[child_id]
+                    desired_center = child.y + child.height / 2
+                    node.y = int(desired_center - node.height / 2)
+        
+        resolve_collisions(col_nodes)
+
 
 def _draw_connectors(
     draw: aggdraw.Draw,
@@ -892,12 +953,51 @@ def _draw_connectors(
     render_virtual_nodes: bool,
     connector_fill: Any,
     connector_width: int,
+    connector_arrow: bool,
+    connector_padding: int,
 ) -> None:
     pen = aggdraw.Pen(connector_fill, connector_width)
+    brush = aggdraw.Brush(connector_fill)
+    
     outgoing = _outgoing_map(edges)
     incoming = _incoming_map(edges)
     visited: set[Tuple[int, int]] = set()
     paths_by_src: Dict[int, List[List[int]]] = {}
+
+    def anchor(node: FunctionalNode, role: str) -> Tuple[int, int]:
+        # Use the node's specific style, fallback to the global arg
+        padding = node.style.get("connector_padding", connector_padding)
+        
+        if node.kind == "virtual" and not render_virtual_nodes:
+            x = node.x + node.width / 2
+        elif role == "start":
+            x = node.x + node.width + padding
+        elif role == "end":
+            x = node.x - padding
+        else:
+            x = node.x + node.width / 2
+        y = node.y + node.height / 2
+        return int(round(x)), int(round(y))
+
+    shared_merge_x: Dict[int, int] = {}
+    for dst_node_id, src_node_ids in incoming.items():
+        if len(src_node_ids) > 1:
+            max_start_x = -1
+            valid_merge = True
+            for src_id in src_node_ids:
+                if src_id not in nodes: 
+                    valid_merge = False
+                    break
+                s_node = nodes[src_id]
+                sx, _ = anchor(s_node, "start")
+                if sx > max_start_x:
+                    max_start_x = sx
+            
+            if valid_merge and dst_node_id in nodes:
+                d_node = nodes[dst_node_id]
+                dx, _ = anchor(d_node, "end")
+                # Calculate the shared elbow based on the widest source
+                shared_merge_x[dst_node_id] = int(round(max_start_x + (dx - max_start_x) / 2))
 
     def append_path(start_id: int, next_id: int) -> None:
         path = [start_id]
@@ -934,18 +1034,6 @@ def _draw_connectors(
             continue
         append_path(edge.src, edge.dst)
 
-    def anchor(node: FunctionalNode, role: str) -> Tuple[int, int]:
-        if node.kind == "virtual" and not render_virtual_nodes:
-            x = node.x + node.width / 2
-        elif role == "start":
-            x = node.x + node.width
-        elif role == "end":
-            x = node.x
-        else:
-            x = node.x + node.width / 2
-        y = node.y + node.height / 2
-        return int(round(x)), int(round(y))
-
     def add_point(points: List[Tuple[int, int]], x: int, y: int) -> None:
         if not points or points[-1] != (x, y):
             points.append((x, y))
@@ -956,51 +1044,40 @@ def _draw_connectors(
             continue
         paths.sort(key=lambda path: nodes[path[-1]].y + nodes[path[-1]].height / 2)
         count = len(paths)
-        spread = max(4, connector_width * 2)
-
-        # When a node fans out to multiple downstream nodes, using per-edge offsets
-        # in the first elbow ("mid_x") causes forks to originate from different x
-        # positions. Compute a shared first elbow so the branching looks consistent.
-        shared_mid_x: Optional[int] = None
+        
+        shared_branch_x: Optional[int] = None
         if count > 1:
             x_start, _ = anchor(start_node, "start")
             next_xs: List[int] = []
             for path in paths:
-                if len(path) < 2:
-                    continue
+                if len(path) < 2: continue
                 next_node = nodes.get(path[1])
-                if next_node is None:
-                    continue
-                next_role = "end" if len(path) == 2 else "mid"
-                x_next, _ = anchor(next_node, next_role)
-                next_xs.append(x_next)
+                if next_node:
+                    next_role = "end" if len(path) == 2 else "mid"
+                    x_next, _ = anchor(next_node, next_role)
+                    next_xs.append(x_next)
             if next_xs:
                 min_x_next = min(next_xs)
-                shared_mid_x = int(round(x_start + (min_x_next - x_start) / 2))
+                shared_branch_x = int(round(x_start + (min_x_next - x_start) / 2))
                 min_mid = x_start + 2
                 max_mid = min_x_next - 2
                 if min_mid < max_mid:
-                    shared_mid_x = max(min_mid, min(max_mid, shared_mid_x))
+                    shared_branch_x = max(min_mid, min(max_mid, shared_branch_x))
                 else:
-                    shared_mid_x = int(round((x_start + min_x_next) / 2))
-                if shared_mid_x <= x_start + 1:
-                    shared_mid_x = None
+                    shared_branch_x = int(round((x_start + min_x_next) / 2))
+                if shared_branch_x <= x_start + 1:
+                    shared_branch_x = None
 
         for index, path in enumerate(paths):
-            offset = 0
-            if count > 1:
-                offset = int((index - (count - 1) / 2) * spread)
-
             points: List[Tuple[int, int]] = []
             for idx, node_id in enumerate(path):
                 node = nodes.get(node_id)
-                if node is None:
-                    continue
+                if node is None: continue
+                
                 role = "mid"
-                if idx == 0:
-                    role = "start"
-                elif idx == len(path) - 1:
-                    role = "end"
+                if idx == 0: role = "start"
+                elif idx == len(path) - 1: role = "end"
+                
                 x, y = anchor(node, role)
                 if not points:
                     add_point(points, x, y)
@@ -1012,10 +1089,16 @@ def _draw_connectors(
                     add_point(points, x2, y2)
                     continue
 
-                if shared_mid_x is not None:
-                    mid_x = shared_mid_x
+                mid_x = 0
+                
+                if idx == len(path) - 1 and node_id in shared_merge_x:
+                     mid_x = shared_merge_x[node_id]
+
+                elif idx == 1 and shared_branch_x is not None:
+                     mid_x = shared_branch_x
+                
                 else:
-                    mid_x = int(round(x1 + (x2 - x1) / 2)) + offset
+                    mid_x = int(round(x1 + (x2 - x1) / 2))
 
                 min_mid = x1 + 2
                 max_mid = x2 - 2
@@ -1027,9 +1110,42 @@ def _draw_connectors(
                 add_point(points, mid_x, y1)
                 add_point(points, mid_x, y2)
                 add_point(points, x2, y2)
+            
+            src_node = nodes[path[0]]
+            use_arrow = src_node.style.get("connector_arrow", connector_arrow)
+            use_width = src_node.style.get("connector_width", connector_width)
+            
+            current_pen = aggdraw.Pen(connector_fill, use_width)
 
             if len(points) >= 2:
-                draw.line([coord for point in points for coord in point], pen)
+                # Draw the Line
+                draw.line([coord for point in points for coord in point], current_pen)
+
+                # Draw the Arrowhead (if enabled)
+                if use_arrow:
+                    end_x, end_y = points[-1]
+                    prev_x, prev_y = points[-2]
+                    
+                    arrow_size = max(8, use_width * 3)
+                    
+                    if end_x > prev_x:   # Right
+                        p1 = (end_x, end_y)
+                        p2 = (end_x - arrow_size, end_y - arrow_size // 2)
+                        p3 = (end_x - arrow_size, end_y + arrow_size // 2)
+                    elif end_x < prev_x: # Left
+                        p1 = (end_x, end_y)
+                        p2 = (end_x + arrow_size, end_y - arrow_size // 2)
+                        p3 = (end_x + arrow_size, end_y + arrow_size // 2)
+                    elif end_y > prev_y: # Down
+                        p1 = (end_x, end_y)
+                        p2 = (end_x - arrow_size // 2, end_y - arrow_size)
+                        p3 = (end_x + arrow_size // 2, end_y - arrow_size)
+                    else:                # Up
+                        p1 = (end_x, end_y)
+                        p2 = (end_x - arrow_size // 2, end_y + arrow_size)
+                        p3 = (end_x + arrow_size // 2, end_y + arrow_size)
+
+                    draw.polygon([p1[0], p1[1], p2[0], p2[1], p3[0], p3[1]], current_pen, brush)
 
 
 def _incoming_map(edges: Sequence[FunctionalEdge]) -> Dict[int, List[int]]:
