@@ -70,7 +70,6 @@ class _SyntheticLayer:
         self.name = name
         self.output_shape = output_shape
 
-
 def functional_view(
     model,
     to_file: Optional[str] = None,
@@ -310,6 +309,8 @@ def functional_view(
         if component_height <= 0:
             continue
         y_offset += component_height + component_spacing
+
+    _straighten_layout(graph, ranks, row_spacing)
 
     img = _render_graph(
         graph,
@@ -825,6 +826,64 @@ def _render_graph(
 
     return img
 
+def _straighten_layout(
+    graph: FunctionalGraph,
+    ranks: Dict[int, int],
+    row_spacing: int
+) -> None:
+    """
+    Adjusts y-positions to align linear connections straight.
+    """
+    nodes_by_rank = {}
+    for node in graph.nodes.values():
+        r = ranks.get(node.node_id, 0)
+        nodes_by_rank.setdefault(r, []).append(node)
+
+    sorted_ranks = sorted(nodes_by_rank.keys())
+    
+    outgoing = {n: [] for n in graph.nodes}
+    incoming = {n: [] for n in graph.nodes}
+    for edge in graph.edges:
+        outgoing[edge.src].append(edge.dst)
+        incoming[edge.dst].append(edge.src)
+
+    for rank in sorted_ranks:
+        col_nodes = nodes_by_rank[rank]
+        col_nodes.sort(key=lambda n: n.y)
+        
+        proposed_centers = {}
+        for node in col_nodes:
+            parents = incoming[node.node_id]
+
+            if len(parents) == 1:
+                parent_id = parents[0]
+                if len(outgoing[parent_id]) == 1:
+                    parent = graph.nodes[parent_id]
+                    # Calculate center alignment
+                    parent_center = parent.y + parent.height / 2
+                    proposed_centers[node.node_id] = parent_center
+
+        if not col_nodes:
+            continue
+
+        current_y_map = {n.node_id: n.y for n in col_nodes}
+        
+        for node in col_nodes:
+            if node.node_id in proposed_centers:
+                desired_center = proposed_centers[node.node_id]
+                new_y = desired_center - node.height / 2
+                current_y_map[node.node_id] = int(new_y)
+
+        for i in range(1, len(col_nodes)):
+            prev_node = col_nodes[i-1]
+            curr_node = col_nodes[i]
+            min_y = current_y_map[prev_node.node_id] + prev_node.height + row_spacing
+            if current_y_map[curr_node.node_id] < min_y:
+                current_y_map[curr_node.node_id] = min_y
+
+        for node in col_nodes:
+            node.y = int(current_y_map[node.node_id])
+
 
 def _draw_connectors(
     draw: aggdraw.Draw,
@@ -899,6 +958,34 @@ def _draw_connectors(
         count = len(paths)
         spread = max(4, connector_width * 2)
 
+        # When a node fans out to multiple downstream nodes, using per-edge offsets
+        # in the first elbow ("mid_x") causes forks to originate from different x
+        # positions. Compute a shared first elbow so the branching looks consistent.
+        shared_mid_x: Optional[int] = None
+        if count > 1:
+            x_start, _ = anchor(start_node, "start")
+            next_xs: List[int] = []
+            for path in paths:
+                if len(path) < 2:
+                    continue
+                next_node = nodes.get(path[1])
+                if next_node is None:
+                    continue
+                next_role = "end" if len(path) == 2 else "mid"
+                x_next, _ = anchor(next_node, next_role)
+                next_xs.append(x_next)
+            if next_xs:
+                min_x_next = min(next_xs)
+                shared_mid_x = int(round(x_start + (min_x_next - x_start) / 2))
+                min_mid = x_start + 2
+                max_mid = min_x_next - 2
+                if min_mid < max_mid:
+                    shared_mid_x = max(min_mid, min(max_mid, shared_mid_x))
+                else:
+                    shared_mid_x = int(round((x_start + min_x_next) / 2))
+                if shared_mid_x <= x_start + 1:
+                    shared_mid_x = None
+
         for index, path in enumerate(paths):
             offset = 0
             if count > 1:
@@ -925,7 +1012,11 @@ def _draw_connectors(
                     add_point(points, x2, y2)
                     continue
 
-                mid_x = int(round(x1 + (x2 - x1) / 2)) + offset
+                if shared_mid_x is not None:
+                    mid_x = shared_mid_x
+                else:
+                    mid_x = int(round(x1 + (x2 - x1) / 2)) + offset
+
                 min_mid = x1 + 2
                 max_mid = x2 - 2
                 if min_mid < max_mid:
