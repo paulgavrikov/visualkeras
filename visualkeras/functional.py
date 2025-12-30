@@ -960,10 +960,8 @@ def _straighten_layout(
     row_spacing: int
 ) -> None:
     """
-    Adjusts y positions to align linear connections straight. Uses 
-    a Forward pass (Parent --> Child) followed by a Backward pass 
-    (Child --> Parent) to handle spacing constraints that propagate
-    in either direction.
+    Adjusts y positions to align linear connections straight. 
+    Accounts for 3D depth (de) to ensure visual centers align.
     """
     nodes_by_rank = {}
     for node in graph.nodes.values():
@@ -978,6 +976,22 @@ def _straighten_layout(
         outgoing[edge.src].append(edge.dst)
         incoming[edge.dst].append(edge.src)
 
+    def get_visual_center(node: FunctionalNode) -> float:
+        # Visual Center = Top of Front Face + Half Height of Front Face
+        # Top of Front Face = node.y + node.de
+        # Height of Front Face = node.height - node.de
+        # Center = (node.y + node.de) + (node.height - node.de) / 2
+        # Simplified: node.y + (node.height + node.de) / 2
+        de = getattr(node, 'de', 0)
+        return node.y + (node.height + de) / 2.0
+
+    def set_visual_center(node: FunctionalNode, center_y: float):
+        de = getattr(node, 'de', 0)
+        # Inverse of get_visual_center
+        # node.y = center_y - (node.height + de) / 2
+        new_y = center_y - (node.height + de) / 2.0
+        node.y = int(new_y)
+
     def resolve_collisions(col_nodes: List[FunctionalNode]):
         col_nodes.sort(key=lambda n: n.y)
         if not col_nodes:
@@ -985,9 +999,11 @@ def _straighten_layout(
 
         current_y_map = {n.node_id: n.y for n in col_nodes}
 
+        # Forward sweep (push down)
         for i in range(1, len(col_nodes)):
             prev_node = col_nodes[i-1]
             curr_node = col_nodes[i]
+            # Ensure spacing between Bounding Boxes
             min_y = current_y_map[prev_node.node_id] + prev_node.height + row_spacing
             if current_y_map[curr_node.node_id] < min_y:
                 current_y_map[curr_node.node_id] = min_y
@@ -995,7 +1011,7 @@ def _straighten_layout(
         for node in col_nodes:
             node.y = int(current_y_map[node.node_id])
 
-    # Backward pass
+    # Forward pass (Align Child to Parent)
     for rank in sorted_ranks:
         col_nodes = nodes_by_rank[rank]
         for node in col_nodes:
@@ -1004,11 +1020,13 @@ def _straighten_layout(
                 parent_id = parents[0]
                 if len(outgoing[parent_id]) == 1:
                     parent = graph.nodes[parent_id]
-                    desired_center = parent.y + parent.height / 2
-                    node.y = int(desired_center - node.height / 2)
+                    # Align to Parent's Visual Center
+                    target_center = get_visual_center(parent)
+                    set_visual_center(node, target_center)
         
         resolve_collisions(col_nodes)
 
+    # Backward pass (Align Parent to Child)
     for rank in reversed(sorted_ranks):
         col_nodes = nodes_by_rank[rank]
         for node in col_nodes:
@@ -1017,8 +1035,9 @@ def _straighten_layout(
                 child_id = children[0]
                 if len(incoming[child_id]) == 1:
                     child = graph.nodes[child_id]
-                    desired_center = child.y + child.height / 2
-                    node.y = int(desired_center - node.height / 2)
+                    # Align to Child's Visual Center
+                    target_center = get_visual_center(child)
+                    set_visual_center(node, target_center)
         
         resolve_collisions(col_nodes)
 
