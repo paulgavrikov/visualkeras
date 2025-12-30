@@ -48,6 +48,8 @@ class FunctionalNode:
     kind: str = "layer"  # layer, input, output, virtual
     component: int = 0
     style: Dict[str, Any] = field(default_factory=dict)
+    de: int = 0
+    shade: int = 0
 
 
 @dataclass(frozen=True)
@@ -80,10 +82,10 @@ def functional_view(
     column_spacing: int = 80,
     row_spacing: int = 40,
     component_spacing: int = 80,
-    connector_fill: Any = "gray", # used to be "black"
+    connector_fill: Any = "gray",
     connector_width: int = 2,
     connector_arrow: bool = False,
-    connector_padding: int = 5, # used to be 0; now padding is applied by default
+    connector_padding: int = 5,
     min_z: int = 20,
     min_xy: int = 20,
     max_z: int = 400,
@@ -102,6 +104,8 @@ def functional_view(
     layout_iterations: int = 4,
     virtual_node_size: int = 12,
     render_virtual_nodes: bool = False,
+    draw_volume: bool = False,
+    shade_step: int = 10,
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
@@ -142,6 +146,8 @@ def functional_view(
             "layout_iterations": layout_iterations,
             "virtual_node_size": virtual_node_size,
             "render_virtual_nodes": render_virtual_nodes,
+            "draw_volume": draw_volume,
+            "shade_step": shade_step,
         }
         custom_keys = [
             key for key, value in current_params.items()
@@ -213,6 +219,8 @@ def functional_view(
             "layout_iterations": layout_iterations,
             "virtual_node_size": virtual_node_size,
             "render_virtual_nodes": render_virtual_nodes,
+            "draw_volume": draw_volume,
+            "shade_step": shade_step,
         }
 
         for key, value in explicit_values.items():
@@ -250,6 +258,8 @@ def functional_view(
         layout_iterations = resolved["layout_iterations"]
         virtual_node_size = resolved["virtual_node_size"]
         render_virtual_nodes = resolved["render_virtual_nodes"]
+        draw_volume = resolved["draw_volume"]
+        shade_step = resolved["shade_step"]
 
         if color_map is not None and not isinstance(color_map, dict):
             color_map = dict(color_map)
@@ -277,6 +287,8 @@ def functional_view(
         "connector_width": connector_width,
         "connector_arrow": connector_arrow,
         "connector_padding": connector_padding,
+        "draw_volume": draw_volume,
+        "shade_step": shade_step,
         "padding": 0,  # separate from global image padding
     }
 
@@ -296,6 +308,8 @@ def functional_view(
         relative_base_size=relative_base_size,
         add_output_nodes=add_output_nodes,
         virtual_node_size=virtual_node_size,
+        draw_volume=draw_volume,
+        shade_step=shade_step,
     )
 
     ranks = _assign_ranks(graph.nodes, graph.edges)
@@ -373,20 +387,17 @@ def _build_graph(
     relative_base_size: int,
     add_output_nodes: bool,
     virtual_node_size: int,
+    draw_volume: bool,
+    shade_step: int,
 ) -> FunctionalGraph:
     
     def resolve_style(layer, name) -> Dict[str, Any]:
-        # Apply styles in order based on what is most specific
-        # The attributes are provided in the styles mapping
         final_style = global_defaults.copy()
-        
         for cls in type(layer).__mro__:
             if cls in styles:
                 final_style.update(styles[cls])
-        
         if name in styles:
             final_style.update(styles[name])
-            
         return final_style
     
     layers = list(get_layers(model))
@@ -415,6 +426,20 @@ def _build_graph(
 
         # Resolve all properties at once
         node_style = resolve_style(layer, name)
+        
+        # Calculate Depth (de) if volume drawing is enabled by style or global default
+        use_volume = node_style.get('draw_volume', draw_volume)
+        de = 0
+        if use_volume:
+            de = int(width / 3)
+            
+        # Inflate dimensions to reserve space for the 3D projection
+        # The layout engine sees the "Total Visual Footprint"
+        total_width = width + de
+        total_height = height + de
+        
+        # Retrieve shade step from style
+        shade = node_style.get('shade_step', shade_step)
 
         nodes[node_id] = FunctionalNode(
             layer=layer,
@@ -423,10 +448,12 @@ def _build_graph(
             layer_type=type(layer),
             shape=shape,
             dims=(int(dims[0]), int(dims[1]), int(dims[2])),
-            width=width,
-            height=height,
+            width=total_width,
+            height=total_height,
             order=order_map[node_id],
-            style=node_style
+            style=node_style,
+            de=de,
+            shade=shade
         )
 
     edges = _collect_edges(nodes)
@@ -581,6 +608,8 @@ def _expand_long_edges(
                 order=order_base,
                 rank=rank,
                 kind="virtual",
+                de=0,  # Virtual nodes are always flat
+                shade=0
             )
             ranks[node_id] = rank
             new_edges.append(FunctionalEdge(prev_id, node_id))
@@ -808,25 +837,7 @@ def _render_graph(
     draw = aggdraw.Draw(img)
     color_wheel = ColorWheel()
 
-    boxes: Dict[int, Box] = {}
-    for node in graph.nodes.values():
-        box = Box()
-        box.x1 = node.x
-        box.y1 = node.y
-        box.x2 = node.x + node.width
-        box.y2 = node.y + node.height
-        box.de = 0
-        box.shade = 0
-        fill = color_map.get(node.layer_type, {}).get("fill")
-        outline = color_map.get(node.layer_type, {}).get("outline")
-        if node.kind == "virtual":
-            bg = get_rgba_tuple(background_fill)
-            fill = fade_color(bg, 10)
-            outline = fade_color(get_rgba_tuple(connector_fill), 10)
-        box.fill = fill if fill is not None else color_wheel.get_color(node.layer_type)
-        box.outline = outline if outline is not None else "black"
-        boxes[node.node_id] = box
-
+    # Draw connectors FIRST (so they appear behind 3D boxes)
     _draw_connectors(
         draw,
         graph.edges,
@@ -838,10 +849,56 @@ def _render_graph(
         connector_padding,
     )
 
-    for node_id, box in boxes.items():
-        node = graph.nodes[node_id]
+    boxes: Dict[int, Box] = {}
+    
+    # Create and draw boxes
+    # Note: For simple 2.5D projection (up/right), Z-order sorting isn't strictly necessary 
+    # if columns are spaced well, but technically items further right/up should be drawn later?
+    # Actually, items 'deeper' (more back/right) should be drawn first.
+    # The 'Back' of a box is at x+de, y-de.
+    # Standard iteration order is usually fine for these graphs, but we stick to order.
+    
+    for node in graph.nodes.values():
         if node.kind == "virtual" and not render_virtual_nodes:
             continue
+            
+        box = Box()
+        # Retrieve properties from node
+        box.de = getattr(node, 'de', 0)
+        box.shade = getattr(node, 'shade', 0)
+
+        # Calculate coordinates for the "Front Face"
+        # The node.x, node.y from layout represents the Top-Left of the allocated space.
+        # The front face is shifted down by 'de' so that the back face (which is up by 'de')
+        # stays within the top boundary.
+        box.x1 = node.x
+        box.y1 = node.y + box.de
+        
+        # The node.width and node.height are the "Total Visual Footprint" (real_w + de).
+        # We need to recover the real width/height of the face.
+        real_width = node.width - box.de
+        real_height = node.height - box.de
+        
+        box.x2 = box.x1 + real_width
+        box.y2 = box.y1 + real_height
+        
+        # Fill/Outline logic
+        fill = color_map.get(node.layer_type, {}).get("fill")
+        outline = color_map.get(node.layer_type, {}).get("outline")
+        if node.kind == "virtual":
+            bg = get_rgba_tuple(background_fill)
+            fill = fade_color(bg, 10)
+            outline = fade_color(get_rgba_tuple(connector_fill), 10)
+            
+        box.fill = fill if fill is not None else color_wheel.get_color(node.layer_type)
+        box.outline = outline if outline is not None else "black"
+        
+        # Apply style overrides if present (e.g. from Styles API)
+        if node.style.get('fill'):
+            box.fill = node.style.get('fill')
+        if node.style.get('outline'):
+            box.outline = node.style.get('outline')
+
         box.draw(draw, draw_reversed=False)
 
     draw.flush()
@@ -865,8 +922,28 @@ def _render_graph(
                     text_widths.append(bbox[2])
                     text_height += bbox[3]
             text_height += (len(text.split("\n")) - 1) * text_vspacing
-            text_x = node.x + node.width / 2 - max(text_widths or [0]) / 2
-            text_y = node.y - text_height - 4 if above else node.y + node.height + 4
+            
+            # Center text relative to the Front Face
+            de = getattr(node, 'de', 0)
+            real_width = node.width - de
+            real_height = node.height - de
+            
+            # Center X = node.x + real_width / 2
+            # Center Y = node.y + de + real_height / 2 (approx center of face)
+            # Text Y is relative to top/bottom of the face
+            
+            face_x = node.x
+            face_y = node.y + de
+            
+            text_x = face_x + real_width / 2 - max(text_widths or [0]) / 2
+            
+            if above:
+                # Above the top of the front face
+                text_y = face_y - text_height - 4
+            else:
+                # Below the bottom of the front face
+                text_y = face_y + real_height + 4
+                
             draw_text.multiline_text(
                 (text_x, text_y),
                 text,
@@ -967,16 +1044,26 @@ def _draw_connectors(
     def anchor(node: FunctionalNode, role: str) -> Tuple[int, int]:
         # Use the node's specific style, fallback to the global arg
         padding = node.style.get("connector_padding", connector_padding)
+        de = getattr(node, 'de', 0)
+        
+        # Calculate "Real" dimensions (the front face)
+        real_width = node.width - de
+        real_height = node.height - de
+        
+        # Front face top-left
+        face_x = node.x
+        face_y = node.y + de
         
         if node.kind == "virtual" and not render_virtual_nodes:
-            x = node.x + node.width / 2
+            x = face_x + real_width / 2
         elif role == "start":
-            x = node.x + node.width + padding
+            x = face_x + real_width + padding
         elif role == "end":
-            x = node.x - padding
+            x = face_x - padding
         else:
-            x = node.x + node.width / 2
-        y = node.y + node.height / 2
+            x = face_x + real_width / 2
+            
+        y = face_y + real_height / 2
         return int(round(x)), int(round(y))
 
     shared_merge_x: Dict[int, int] = {}

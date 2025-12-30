@@ -3,11 +3,6 @@
 These dataclasses mirror the existing keyword arguments accepted by
 ``layered_view`` and ``graph_view`` while providing a typed, documented surface
 that is easier to compose, reason about, and share.
-
-The module intentionally avoids importing TensorFlow/Keras at import time so
-that configuration can be created even in environments where those heavy
-dependencies are unavailable. Any callable or type hints that depend on the
-backend therefore use ``typing.Any`` rather than backend-specific types.
 """
 
 from __future__ import annotations
@@ -131,7 +126,7 @@ class FunctionalOptions:
     column_spacing: int = 80
     row_spacing: int = 40
     component_spacing: int = 80
-    connector_fill: Any = "gray" # used to be "black"
+    connector_fill: Any = "gray"
     connector_width: int = 2
     connector_arrow: bool = False
     connector_padding: int = 5
@@ -153,6 +148,8 @@ class FunctionalOptions:
     layout_iterations: int = 4
     virtual_node_size: int = 12
     render_virtual_nodes: bool = False
+    draw_volume: bool = False
+    shade_step: int = 10
 
     def to_kwargs(self) -> Dict[str, Any]:
         """Return a shallow dict compatible with ``functional_view``."""
@@ -186,6 +183,8 @@ class FunctionalOptions:
             "layout_iterations": self.layout_iterations,
             "virtual_node_size": self.virtual_node_size,
             "render_virtual_nodes": self.render_virtual_nodes,
+            "draw_volume": self.draw_volume,
+            "shade_step": self.shade_step,
         }
 
 
