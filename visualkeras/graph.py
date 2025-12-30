@@ -1,4 +1,4 @@
-from typing import Any, Mapping, Union
+from typing import Any, Dict, Mapping, Optional, Union
 import aggdraw
 from PIL import Image, ImageDraw
 from math import ceil
@@ -21,6 +21,7 @@ def graph_view(model, to_file: str = None,
                layer_spacing: int = 250, node_spacing: int = 10, connector_fill: Any = 'gray',
                connector_width: int = 1, ellipsize_after: int = 10,
                inout_as_tensor: bool = True, show_neurons: bool = True,
+               styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
                *, options: Union[GraphOptions, Mapping[str, Any], None] = None,
                preset: Union[str, None] = None) -> Image:
     """
@@ -45,6 +46,9 @@ def graph_view(model, to_file: str = None,
     flattened and one node for each scalar will be created (e.g. a (10, 10) shape will be represented by 100 nodes)
     :param show_neurons: If True a node for each neuron in supported layers is created (constrained by ellipsize_after),
     else each layer is represented by a node
+    :param styles: Mapping keyed by layer class or layer name. Values override defaults on a per-layer basis.
+        Supported keys include: fill, outline, node_size, node_spacing, layer_spacing,
+        connector_fill, connector_width, ellipsize_after, show_neurons, box_scale.
     :param options: Optional ``GraphOptions`` (or mapping) providing a configuration bundle.
         Explicit keyword arguments override the bundle.
     :param preset: Name of a preset from ``visualkeras.GRAPH_PRESETS`` to use as the base style.
@@ -164,6 +168,22 @@ def graph_view(model, to_file: str = None,
     if color_map is None:
         color_map = dict()
 
+    if styles is None:
+        styles = {}
+
+    global_defaults = {
+        "fill": None,
+        "outline": "black",
+        "node_size": node_size,
+        "node_spacing": node_spacing,
+        "layer_spacing": layer_spacing,
+        "connector_fill": connector_fill,
+        "connector_width": connector_width,
+        "ellipsize_after": ellipsize_after,
+        "show_neurons": show_neurons,
+        "box_scale": 3,
+    }
+
     # Iterate over the model to compute bounds and generate boxes
 
     layers = list()
@@ -229,17 +249,48 @@ def graph_view(model, to_file: str = None,
     # Create architecture
 
     current_x = padding  # + input_label_size[0] + text_padding
+    max_right = padding
 
     id_to_node_list_map = dict()
+    layer_counter = 0
 
     for index, layer_list in enumerate(model_layers):
         current_y = 0
         nodes = []
+        column_width = 0
+        column_spacing = layer_spacing
+        last_node_spacing = node_spacing
+        last_node_size = node_size
         for layer in layer_list:
+            layer_name = getattr(layer, "name", None)
+            if not layer_name:
+                layer_name = f"layer_{layer_counter}"
+            layer_counter += 1
+
+            legacy_color = color_map.get(type(layer), {})
+            current_defaults = global_defaults.copy()
+            current_defaults.update(legacy_color)
+            style = resolve_style(layer, layer_name, styles, current_defaults)
+
+            local_node_size = style.get("node_size", node_size)
+            local_node_spacing = style.get("node_spacing", node_spacing)
+            local_layer_spacing = style.get("layer_spacing", layer_spacing)
+            local_ellipsize_after = style.get("ellipsize_after", ellipsize_after)
+            local_show_neurons = style.get("show_neurons", show_neurons)
+            box_scale = style.get("box_scale", 3)
+
+            if local_ellipsize_after is not None:
+                local_ellipsize_after = int(local_ellipsize_after)
+
+            column_width = max(column_width, local_node_size)
+            column_spacing = max(column_spacing, local_layer_spacing)
+            last_node_spacing = local_node_spacing
+            last_node_size = local_node_size
+
             is_box = True
             units = 1
             
-            if show_neurons:
+            if local_show_neurons:
                 if hasattr(layer, 'units'):
                     is_box = False
                     units = layer.units
@@ -258,43 +309,48 @@ def graph_view(model, to_file: str = None,
                         raise RuntimeError(f"not supported input shape {input_shape}")
                     units = self_multiply(shape)
 
-            n = min(units, ellipsize_after)
+            if local_ellipsize_after is None or local_ellipsize_after <= 0:
+                n = units
+            else:
+                n = min(units, local_ellipsize_after)
             layer_nodes = list()
 
             for i in range(n):
                 scale = 1
                 if not is_box:
-                    if i != ellipsize_after - 2:
-                        c = Circle()
-                    else:
+                    if local_ellipsize_after and local_ellipsize_after > 1 and i == local_ellipsize_after - 2:
                         c = Ellipses()
+                    else:
+                        c = Circle()
                 else:
                     c = Box()
-                    scale = 3
+                    scale = box_scale
 
                 c.x1 = current_x
                 c.y1 = current_y
-                c.x2 = c.x1 + node_size
-                c.y2 = c.y1 + node_size * scale
+                c.x2 = c.x1 + local_node_size
+                c.y2 = c.y1 + local_node_size * scale
 
-                current_y = c.y2 + node_spacing
+                current_y = c.y2 + local_node_spacing
+                max_right = max(max_right, c.x2)
 
-                c.fill = color_map.get(type(layer), {}).get('fill', 'orange')
-                c.outline = color_map.get(type(layer), {}).get('outline', 'black')
+                c.fill = style.get('fill') if style.get('fill') is not None else 'orange'
+                c.outline = style.get('outline') if style.get('outline') is not None else 'black'
+                c.style = style
 
                 layer_nodes.append(c)
 
             id_to_node_list_map[id(layer)] = layer_nodes
             nodes.extend(layer_nodes)
-            current_y += 2 * node_size
+            current_y += 2 * local_node_size
 
-        layer_y.append(current_y - node_spacing - 2 * node_size)
+        layer_y.append(current_y - last_node_spacing - 2 * last_node_size)
         layers.append(nodes)
-        current_x += node_size + layer_spacing
+        current_x += column_width + column_spacing
 
     # Generate image
 
-    img_width = len(layers) * node_size + (len(layers) - 1) * layer_spacing + 2 * padding
+    img_width = max_right + padding
     img_height = max(*layer_y) + 2 * padding
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
 
@@ -333,7 +389,10 @@ def graph_view(model, to_file: str = None,
 
 
 def _draw_connector(draw, start_node, end_node, color, width):
-    pen = aggdraw.Pen(color, width)
+    style = getattr(start_node, "style", {}) or {}
+    use_color = style.get("connector_fill", color)
+    use_width = style.get("connector_width", width)
+    pen = aggdraw.Pen(get_rgba_tuple(use_color), use_width)
     x1 = start_node.x2
     y1 = start_node.y1 + (start_node.y2 - start_node.y1) / 2
     x2 = end_node.x1
