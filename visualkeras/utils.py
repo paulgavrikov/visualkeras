@@ -248,3 +248,77 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
         layout.paste(img, coord)
 
     return layout
+
+class Ribbon:
+    def __init__(self, x1, y1, x2, y2, de, width, color, shade_step):
+        self.x1, self.y1 = x1, y1
+        self.x2, self.y2 = x2, y2
+        self.de = de
+        self.width = width
+        self.fill = get_rgba_tuple(color)
+        self.shade = shade_step
+        
+        # Calculate depth sort key for layering ribbons correctly
+        self.z_sort = (x1 + x2) / 2 + (y1 + y2) / 2
+
+    def draw(self, draw: aggdraw.Draw):
+        pen = aggdraw.Pen("black", 0.5) # Thin outline for crispness
+        
+        # Colors
+        top_color = fade_color(self.fill, self.shade)
+        side_color = fade_color(self.fill, 2 * self.shade)
+        front_color = self.fill
+        
+        brush_top = aggdraw.Brush(top_color)
+        brush_side = aggdraw.Brush(side_color)
+        brush_front = aggdraw.Brush(front_color)
+
+        # A horizontal ribbon is a rectangle of height 'width'
+        # A vertical ribbon is a rectangle of width 'width'
+        
+        is_horizontal = abs(self.y1 - self.y2) < abs(self.x1 - self.x2)
+        
+        if is_horizontal:
+            # Draw Horizontal Ribbon (Left -> Right)
+            lx, rx = min(self.x1, self.x2), max(self.x1, self.x2)
+            y = self.y1 
+            w = self.width
+            
+            # 1. Back Face (Top)
+            # 2. Top Face (Depth)
+            # Polygon: (lx, y), (rx, y), (rx+de, y-de), (lx+de, y-de)
+            draw.polygon([
+                lx, y - w/2, 
+                rx, y - w/2, 
+                rx + self.de, y - w/2 - self.de, 
+                lx + self.de, y - w/2 - self.de
+            ], pen, brush_top)
+            
+            # 3. Front Face (The main line)
+            draw.rectangle([lx, y - w/2, rx, y + w/2], pen, brush_front)
+            
+        else:
+            # Draw Vertical Ribbon (Top -> Bottom)
+            ty, by = min(self.y1, self.y2), max(self.y1, self.y2)
+            x = self.x1
+            w = self.width
+            
+            # 1. Side Face
+            # Polygon: (x+w/2, ty), (x+w/2, by), (x+w/2+de, by-de), (x+w/2+de, ty-de)
+            draw.polygon([
+                x + w/2, ty,
+                x + w/2, by,
+                x + w/2 + self.de, by - self.de,
+                x + w/2 + self.de, ty - self.de
+            ], pen, brush_side)
+
+            # 2. Top Face
+            draw.polygon([
+                x - w/2, ty,
+                x + w/2, ty,
+                x + w/2 + self.de, ty - self.de,
+                x - w/2 + self.de, ty - self.de
+            ], pen, brush_top)
+
+            # 3. Front Face
+            draw.rectangle([x - w/2, ty, x + w/2, by], pen, brush_front)
