@@ -367,6 +367,16 @@ def layered_view(model,
     if dimension_caps is not None and not isinstance(dimension_caps, dict):
         dimension_caps = dict(dimension_caps)
 
+    if isinstance(text_callable, str):
+        try:
+            text_callable = LAYERED_TEXT_CALLABLES[text_callable]
+        except KeyError as exc:
+            available = ", ".join(sorted(LAYERED_TEXT_CALLABLES))
+            raise ValueError(
+                f"Unknown text_callable preset '{text_callable}'. "
+                f"Available presets: {available}"
+            ) from exc
+
     if callable(text_callable) and text_callable not in _BUILT_IN_TEXT_CALLABLES:
         warnings.warn(
             "Custom text_callable detected. Built-in caption templates are available "
