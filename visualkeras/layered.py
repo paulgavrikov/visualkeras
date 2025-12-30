@@ -1,4 +1,4 @@
-from typing import Any, Callable, Mapping, Union
+from typing import Any, Callable, Mapping, Optional, Union
 import aggdraw
 from PIL import ImageFont
 from math import ceil
@@ -93,6 +93,9 @@ def layered_view(model,
                  sizing_mode: str = 'accurate',
                  dimension_caps: dict = None,
                  relative_base_size: int = 20,
+                 connector_fill: Any = 'gray',
+                 connector_width: int = 1,
+                 styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
                  *,
                  options: Union[LayeredOptions, Mapping[str, Any], None] = None,
                  preset: Union[str, None] = None) -> Image:
@@ -302,7 +305,7 @@ def layered_view(model,
                 continue
             if value != defaults[key]:
                 resolved[key] = value
-
+        
         to_file = resolved["to_file"]
         min_z = resolved["min_z"]
         min_xy = resolved["min_xy"]
@@ -333,18 +336,36 @@ def layered_view(model,
         dimension_caps = resolved["dimension_caps"]
         relative_base_size = resolved["relative_base_size"]
 
-        if type_ignore is not None and not isinstance(type_ignore, list):
-            type_ignore = list(type_ignore)
-        if index_ignore is not None and not isinstance(index_ignore, list):
-            index_ignore = list(index_ignore)
-        if index_2D is None:
-            index_2D = []
-        elif not isinstance(index_2D, list):
-            index_2D = list(index_2D)
-        if color_map is not None and not isinstance(color_map, dict):
-            color_map = dict(color_map)
-        if dimension_caps is not None and not isinstance(dimension_caps, dict):
-            dimension_caps = dict(dimension_caps)
+    if styles is None:
+        styles = {}
+
+    global_defaults = {
+        'fill': None, 
+        'outline': 'black',
+        'padding': padding,
+        'spacing': spacing,
+        'scale_z': scale_z,
+        'scale_xy': scale_xy,
+        'min_z': min_z,
+        'max_z': max_z,
+        'min_xy': min_xy,
+        'max_xy': max_xy,
+        'shade_step': shade_step,
+        'font_color': font_color
+    }
+
+    if type_ignore is not None and not isinstance(type_ignore, list):
+        type_ignore = list(type_ignore)
+    if index_ignore is not None and not isinstance(index_ignore, list):
+        index_ignore = list(index_ignore)
+    if index_2D is None:
+        index_2D = []
+    elif not isinstance(index_2D, list):
+        index_2D = list(index_2D)
+    if color_map is not None and not isinstance(color_map, dict):
+        color_map = dict(color_map)
+    if dimension_caps is not None and not isinstance(dimension_caps, dict):
+        dimension_caps = dict(dimension_caps)
 
     if callable(text_callable) and text_callable not in _BUILT_IN_TEXT_CALLABLES:
         warnings.warn(
@@ -385,7 +406,7 @@ def layered_view(model,
         if type(layer) in type_ignore or index in index_ignore:
             continue
 
-        # Do no render the SpacingDummyLayer, just increase the pointer
+        # Do not render the SpacingDummyLayer, just increase the pointer
         if type(layer) == SpacingDummyLayer:
             current_z += layer.spacing
             continue
@@ -397,31 +418,34 @@ def layered_view(model,
         elif layer_type not in layer_types:
             layer_types.append(layer_type)
 
-        x = min_xy
-        y = min_xy
-        z = min_z
-
+        # Resolve Layer Name
         try:
-            # Try to get the layer name, with fallback to class name
-            layer_name = getattr(layer, 'name', None)
-            if not layer_name:
-                layer_name = f'{layer.__class__.__name__}_{index}'
+            layer_name = getattr(layer, 'name', None) or f'{layer.__class__.__name__}_{index}'
         except AttributeError:
-            # Fallback if __class__ or __name__ doesn't exist
-            try:
-                layer_name = f'{type(layer).__name__}_{index}'
-            except AttributeError:
-                # Fallback if even type() fails
-                layer_name = f'unknown_layer_{index}'
+            layer_name = f'unknown_{index}'
+
+        # Resolve Styles
+        # Merge legacy color_map into the defaults for backward compatibility.
+        legacy_color = color_map.get(type(layer), {})
+        current_defaults = global_defaults.copy()
+        current_defaults.update(legacy_color)
+        
+        style = resolve_style(layer, layer_name, styles, current_defaults)
 
         # Get the primary shape of the layer's output
         raw_shape = _resolve_layer_output_shape(layer)
         shape = extract_primary_shape(raw_shape, layer_name)
-        
-        # Calculate dimensions with flexible sizing
+
+        # Use Styles for Dimensions
+        # We pass the specific constraints and scalers from the style instead of the global args.
         x, y, z = calculate_layer_dimensions(
-            shape, scale_z, scale_xy,
-            max_z, max_xy, min_z, min_xy,
+            shape, 
+            style['scale_z'], 
+            style['scale_xy'], 
+            style['max_z'], 
+            style['max_xy'], 
+            style['min_z'], 
+            style['min_xy'],
             one_dim_orientation, sizing_mode,
             dimension_caps, relative_base_size
         )
@@ -436,6 +460,20 @@ def layered_view(model,
             dimension_list.append(dimension)
 
         box = Box()
+        box.style = style  # Store style for later use
+
+        # Use styles for visual properties
+        # If fill is None (default), fallback to the color wheel
+        if style.get('fill') is None:
+            box.fill = color_wheel.get_color(layer_type)
+        else:
+            box.fill = style.get('fill')
+        
+        box.outline = style.get('outline', 'black')
+        box.shade = style.get('shade_step', shade_step)
+        
+        # Update the color_map so the legend reflects this layer's appearance
+        color_map[layer_type] = {'fill': box.fill, 'outline': box.outline}
 
         box.de = 0
         if draw_volume and index not in index_2D:
@@ -452,11 +490,6 @@ def layered_view(model,
         box.x2 = box.x1 + z
         box.y2 = box.y1 + y
 
-        box.fill = color_map.get(layer_type, {}).get('fill', color_wheel.get_color(layer_type))
-        box.outline = color_map.get(layer_type, {}).get('outline', 'black')
-        color_map[layer_type] = {'fill': box.fill, 'outline': box.outline}
-
-        box.shade = shade_step
         boxes.append(box)
         layer_y.append(box.y2 - (box.y1 - box.de))
 
@@ -468,7 +501,9 @@ def layered_view(model,
         if box.x2 + box.de > max_right:
             max_right = box.x2 + box.de
 
-        current_z += z + spacing
+        # Use style-based spacing
+        layer_spacing = style.get('spacing', spacing)
+        current_z += z + layer_spacing
 
     # Generate image
     img_width = max_right + x_off + padding
@@ -486,6 +521,11 @@ def layered_view(model,
             if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
                 continue
             i += 1
+
+            box = boxes[i]
+            local_font = box.style.get('font', font)
+            local_vspacing = box.style.get('text_vspacing', text_vspacing)
+
             text, above = text_callable(i, layer)
             if above:
                 is_any_text_above = True
@@ -494,13 +534,16 @@ def layered_view(model,
             
             text_height = 0
             for line in text.split('\n'):
-                if hasattr(font, 'getsize'):
-                    line_height = font.getsize(line)[1]
+                if hasattr(local_font, 'getsize'):
+                    line_height = local_font.getsize(line)[1]
                 else:
-                    line_height = font.getbbox(line)[3]
+                    line_height = local_font.getbbox(line)[3]
                 text_height += line_height
-            text_height += (len(text.split('\n'))-1)*text_vspacing
-            box_height = abs(boxes[i].y2-boxes[i].y1)-boxes[i].de
+            
+            # Use local_vspacing for calculation
+            text_height += (len(text.split('\n')) - 1) * local_vspacing
+            
+            box_height = abs(box.y2 - box.y1) - box.de
             box_with_text_height = box_height + text_height
             if box_with_text_height > max_box_with_text_height:
                 max_box_with_text_height = box_with_text_height
@@ -604,39 +647,52 @@ def layered_view(model,
             if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
                 continue
             i += 1
+            
+            # Retrieve Styles
+            box = boxes[i]
+            local_font = box.style.get('font', font)
+            local_font_color = box.style.get('font_color', font_color)
+            local_vspacing = box.style.get('text_vspacing', text_vspacing)
+
             text, above = text_callable(i, layer)
             text_height = 0
             text_x_adjust = []
             for line in text.split('\n'):
-                if hasattr(font, 'getsize'):
-                    line_height = font.getsize(line)[1]
+                # Use local_font for measurements
+                if hasattr(local_font, 'getsize'):
+                    line_height = local_font.getsize(line)[1]
+                    text_x_adjust.append(local_font.getsize(line)[0])
                 else:
-                    line_height = font.getbbox(line)[3]
+                    line_height = local_font.getbbox(line)[3]
+                    text_x_adjust.append(local_font.getbbox(line)[2])
                 
                 text_height += line_height
 
-                if hasattr(font, 'getsize'):
-                    text_x_adjust.append(font.getsize(line)[0])
-                else:
-                    text_x_adjust.append(font.getbbox(line)[2])
-            text_height += (len(text.split('\n'))-1)*text_vspacing
+            # Use local_vspacing
+            text_height += (len(text.split('\n')) - 1) * local_vspacing
 
-            box = boxes[i]
             text_x = box.x1 + (box.x2 - box.x1) / 2
             text_y = box.y2
             if above:
                 text_x = box.x1 + box.de + (box.x2 - box.x1) / 2
                 text_y = box.y1 - box.de - text_height
             
-            text_x -= max(text_x_adjust)/2  # Shift text to the left by half of the text width, so that it is centered
-            # Centering with middle text anchor 'm' does not work with align center
+            # Use max width of the specific font
+            text_x -= max(text_x_adjust or [0]) / 2 
+            
             anchor = 'la'
             if above:
                 anchor = 'la'
         
-            draw_text.multiline_text((text_x, text_y), text, font=font, fill=font_color,
-                                     anchor=anchor, align='center',
-                                     spacing=text_vspacing)
+            draw_text.multiline_text(
+                (text_x, text_y), 
+                text, 
+                font=local_font,
+                fill=local_font_color,
+                anchor=anchor, 
+                align='center',
+                spacing=local_vspacing
+            )
 
     # Create layer color legend
     if legend:
