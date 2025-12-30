@@ -189,6 +189,9 @@ def layered_view(model,
             "sizing_mode": 'accurate',
             "dimension_caps": None,
             "relative_base_size": 20,
+            "connector_fill": "gray",
+            "connector_width": 1,
+            "styles": None,
         })
 
         current_params = {
@@ -221,6 +224,9 @@ def layered_view(model,
             "sizing_mode": sizing_mode,
             "dimension_caps": dimension_caps,
             "relative_base_size": relative_base_size,
+            "connector_fill": connector_fill,
+            "connector_width": connector_width,
+            "styles": styles,
         }
 
         custom_keys = [
@@ -245,6 +251,7 @@ def layered_view(model,
         defaults["dimension_caps"] = None
         defaults["font"] = None
         defaults["index_2D"] = []
+        defaults["styles"] = None
 
         resolved = dict(defaults)
 
@@ -298,6 +305,9 @@ def layered_view(model,
             "sizing_mode": sizing_mode,
             "dimension_caps": dimension_caps,
             "relative_base_size": relative_base_size,
+            "connector_fill": connector_fill,
+            "connector_width": connector_width,
+            "styles": styles,
         }
 
         for key, value in explicit_values.items():
@@ -335,6 +345,12 @@ def layered_view(model,
         sizing_mode = resolved["sizing_mode"]
         dimension_caps = resolved["dimension_caps"]
         relative_base_size = resolved["relative_base_size"]
+        connector_fill = resolved["connector_fill"]
+        connector_width = resolved["connector_width"]
+        styles = resolved["styles"]
+
+    if styles is not None and not isinstance(styles, dict):
+        styles = dict(styles)
 
     if styles is None:
         styles = {}

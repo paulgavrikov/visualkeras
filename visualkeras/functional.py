@@ -128,6 +128,7 @@ def functional_view(
             "connector_width": connector_width,
             "connector_arrow": connector_arrow,
             "connector_padding": connector_padding,
+            "connector_ribbon": connector_ribbon,
             "min_z": min_z,
             "min_xy": min_xy,
             "max_z": max_z,
@@ -148,6 +149,7 @@ def functional_view(
             "render_virtual_nodes": render_virtual_nodes,
             "draw_volume": draw_volume,
             "shade_step": shade_step,
+            "styles": styles,
         }
         custom_keys = [
             key for key, value in current_params.items()
@@ -167,6 +169,7 @@ def functional_view(
         defaults["color_map"] = None
         defaults["dimension_caps"] = None
         defaults["font"] = None
+        defaults["styles"] = None
 
         resolved = dict(defaults)
         if preset is not None:
@@ -201,6 +204,7 @@ def functional_view(
             "connector_width": connector_width,
             "connector_arrow": connector_arrow,
             "connector_padding": connector_padding,
+            "connector_ribbon": connector_ribbon,
             "min_z": min_z,
             "min_xy": min_xy,
             "max_z": max_z,
@@ -221,6 +225,7 @@ def functional_view(
             "render_virtual_nodes": render_virtual_nodes,
             "draw_volume": draw_volume,
             "shade_step": shade_step,
+            "styles": styles,
         }
 
         for key, value in explicit_values.items():
@@ -240,6 +245,7 @@ def functional_view(
         connector_width = resolved["connector_width"]
         connector_arrow = resolved["connector_arrow"]
         connector_padding = resolved["connector_padding"]
+        connector_ribbon = resolved["connector_ribbon"]
         min_z = resolved["min_z"]
         min_xy = resolved["min_xy"]
         max_z = resolved["max_z"]
@@ -260,6 +266,7 @@ def functional_view(
         render_virtual_nodes = resolved["render_virtual_nodes"]
         draw_volume = resolved["draw_volume"]
         shade_step = resolved["shade_step"]
+        styles = resolved["styles"]
 
         if color_map is not None and not isinstance(color_map, dict):
             color_map = dict(color_map)
@@ -278,7 +285,10 @@ def functional_view(
 
     if color_map is None:
         color_map = {}
-        
+
+    if styles is not None and not isinstance(styles, dict):
+        styles = dict(styles)
+
     if styles is None:
         styles = {}
 
@@ -358,6 +368,7 @@ def functional_view(
         connector_width=connector_width,
         connector_arrow=connector_arrow,
         connector_padding=connector_padding,
+        connector_ribbon=connector_ribbon,
         text_callable=text_callable,
         text_vspacing=text_vspacing,
         font=font,

@@ -1,14 +1,16 @@
 """Typed configuration objects and reusable presets for visualkeras renderers.
 
 These dataclasses mirror the existing keyword arguments accepted by
-``layered_view`` and ``graph_view`` while providing a typed, documented surface
+``layered_view``, ``graph_view``, and ``functional_view`` while providing a typed, documented surface
 that is easier to compose, reason about, and share.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
+
+StyleMap = Mapping[Union[str, type], Mapping[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,9 @@ class LayeredOptions:
     sizing_mode: str = "accurate"
     dimension_caps: Optional[Mapping[str, int]] = None
     relative_base_size: int = 20
+    connector_fill: Any = "gray"
+    connector_width: int = 1
+    styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
         """Return a shallow dict compatible with ``layered_view``."""
@@ -77,6 +82,9 @@ class LayeredOptions:
             "sizing_mode": self.sizing_mode,
             "dimension_caps": self.dimension_caps,
             "relative_base_size": self.relative_base_size,
+            "connector_fill": self.connector_fill,
+            "connector_width": self.connector_width,
+            "styles": self.styles,
         }
 
 
@@ -96,6 +104,7 @@ class GraphOptions:
     ellipsize_after: int = 10
     inout_as_tensor: bool = True
     show_neurons: bool = True
+    styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
         """Return a shallow dict compatible with ``graph_view``."""
@@ -112,6 +121,7 @@ class GraphOptions:
             "ellipsize_after": self.ellipsize_after,
             "inout_as_tensor": self.inout_as_tensor,
             "show_neurons": self.show_neurons,
+            "styles": self.styles,
         }
 
 
@@ -130,6 +140,7 @@ class FunctionalOptions:
     connector_width: int = 2
     connector_arrow: bool = False
     connector_padding: int = 5
+    connector_ribbon: bool = False
     min_z: int = 20
     min_xy: int = 20
     max_z: int = 400
@@ -150,6 +161,7 @@ class FunctionalOptions:
     render_virtual_nodes: bool = False
     draw_volume: bool = False
     shade_step: int = 10
+    styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
         """Return a shallow dict compatible with ``functional_view``."""
@@ -165,6 +177,7 @@ class FunctionalOptions:
             "connector_width": self.connector_width,
             "connector_arrow": self.connector_arrow,
             "connector_padding": self.connector_padding,
+            "connector_ribbon": self.connector_ribbon,
             "min_z": self.min_z,
             "min_xy": self.min_xy,
             "max_z": self.max_z,
@@ -185,6 +198,7 @@ class FunctionalOptions:
             "render_virtual_nodes": self.render_virtual_nodes,
             "draw_volume": self.draw_volume,
             "shade_step": self.shade_step,
+            "styles": self.styles,
         }
 
 

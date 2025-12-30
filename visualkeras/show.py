@@ -34,7 +34,7 @@ def show(
     mode: str = "layered",
     *,
     preset: Union[str, None] = None,
-    options: Union[LayeredOptions, GraphOptions, Mapping[str, Any], None] = None,
+    options: Union[LayeredOptions, GraphOptions, FunctionalOptions, Mapping[str, Any], None] = None,
     **overrides: Any,
 ) -> Image.Image:
     """Render a model visualization with optional presets or option bundles.
@@ -52,13 +52,15 @@ def show(
         :data:`visualkeras.GRAPH_PRESETS`. Presets provide curated defaults for
         common styles. When supplied, their values are merged before applying
         any explicit overrides.
-    options : LayeredOptions or GraphOptions or Mapping, optional
+    options : LayeredOptions or GraphOptions or FunctionalOptions or Mapping, optional
         A configuration bundle generated via :class:`LayeredOptions`,
-        :class:`GraphOptions`, or a plain mapping that follows the same field
-        names. These values apply after presets and before ``**overrides``.
+        :class:`GraphOptions`, :class:`FunctionalOptions`, or a plain mapping
+        that follows the same field names. These values apply after presets and
+        before ``**overrides``.
     **overrides :
-        Individual keyword arguments forwarded to the underlying renderer.
-        These take precedence over both presets and option bundles.
+        Individual keyword arguments forwarded to the underlying renderer,
+        including per-layer ``styles`` mappings. These take precedence over
+        both presets and option bundles.
 
     Returns
     -------

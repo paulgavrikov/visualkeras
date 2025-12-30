@@ -72,6 +72,7 @@ def graph_view(model, to_file: str = None,
             "ellipsize_after": 10,
             "inout_as_tensor": True,
             "show_neurons": True,
+            "styles": None,
         })
 
         current_params = {
@@ -87,6 +88,7 @@ def graph_view(model, to_file: str = None,
             "ellipsize_after": ellipsize_after,
             "inout_as_tensor": inout_as_tensor,
             "show_neurons": show_neurons,
+            "styles": styles,
         }
 
         custom_keys = [
@@ -105,6 +107,7 @@ def graph_view(model, to_file: str = None,
     if preset is not None or options is not None:
         defaults = GraphOptions().to_kwargs()
         defaults["color_map"] = None
+        defaults["styles"] = None
 
         resolved = dict(defaults)
 
@@ -141,6 +144,7 @@ def graph_view(model, to_file: str = None,
             "ellipsize_after": ellipsize_after,
             "inout_as_tensor": inout_as_tensor,
             "show_neurons": show_neurons,
+            "styles": styles,
         }
 
         for key, value in explicit_values.items():
@@ -161,12 +165,16 @@ def graph_view(model, to_file: str = None,
         ellipsize_after = resolved["ellipsize_after"]
         inout_as_tensor = resolved["inout_as_tensor"]
         show_neurons = resolved["show_neurons"]
+        styles = resolved["styles"]
 
         if color_map is not None and not isinstance(color_map, dict):
             color_map = dict(color_map)
 
     if color_map is None:
         color_map = dict()
+
+    if styles is not None and not isinstance(styles, dict):
+        styles = dict(styles)
 
     if styles is None:
         styles = {}
