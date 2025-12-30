@@ -516,73 +516,95 @@ def layered_view(model,
         current_z += z + layer_spacing
 
     # Generate image
-    img_width = max_right + x_off + padding
+    min_scene_x = float('inf')
+    max_scene_x = float('-inf')
+    max_top_extent = 0
+    max_bottom_extent = 0
 
-    # Check if any text will be written above or below and save the maximum text height for adjusting the image height
-    is_any_text_above = False
-    is_any_text_below = False
-    max_box_with_text_height=0
-    max_box_height = 0
+    for i, box in enumerate(boxes):
+        h = layer_y[i]
+        half_h = h / 2
+
+        max_top_extent = max(max_top_extent, half_h)
+        max_bottom_extent = max(max_bottom_extent, half_h)
+
+        visual_x1 = box.x1 + x_off
+        visual_x2 = box.x2 + x_off
+        if draw_reversed:
+            visual_x1 += box.de
+            visual_x2 += box.de
+
+        min_scene_x = min(min_scene_x, visual_x1)
+        max_scene_x = max(max_scene_x, visual_x2)
+
     if text_callable is not None:
         if font is None:
             font = ImageFont.load_default()
-        i = -1
+
+        box_idx = -1
         for index, layer in enumerate(model.layers):
             if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
                 continue
-            i += 1
+            box_idx += 1
 
-            box = boxes[i]
+            box = boxes[box_idx]
             local_font = box.style.get('font', font)
             local_vspacing = box.style.get('text_vspacing', text_vspacing)
 
-            text, above = text_callable(i, layer)
-            if above:
-                is_any_text_above = True
-            else:
-                is_any_text_below = True
-            
-            text_height = 0
-            for line in text.split('\n'):
+            text, above = text_callable(box_idx, layer)
+
+            text_w = 0
+            text_h = 0
+            lines = text.split('\n')
+            for line in lines:
                 if hasattr(local_font, 'getsize'):
-                    line_height = local_font.getsize(line)[1]
+                    line_w, line_h = local_font.getsize(line)
                 else:
-                    line_height = local_font.getbbox(line)[3]
-                text_height += line_height
-            
-            # Use local_vspacing for calculation
-            text_height += (len(text.split('\n')) - 1) * local_vspacing
-            
-            box_height = abs(box.y2 - box.y1) - box.de
-            box_with_text_height = box_height + text_height
-            if box_with_text_height > max_box_with_text_height:
-                max_box_with_text_height = box_with_text_height
-            if box_height > max_box_height:
-                max_box_height = box_height
-    
-    if is_any_text_above:
-        img_height += abs(max_box_height - max_box_with_text_height)*2
-    
+                    bbox = local_font.getbbox(line)
+                    line_w = bbox[2]
+                    line_h = bbox[3]
+                text_w = max(text_w, line_w)
+                text_h += line_h
+
+            text_h += (len(lines) - 1) * local_vspacing
+
+            width = box.x2 - box.x1
+            base_x = box.x1 + x_off
+            if draw_reversed:
+                base_x += box.de
+
+            if above:
+                center_x = base_x + box.de + width / 2
+                max_top_extent = max(max_top_extent, (layer_y[box_idx] / 2) + text_h)
+            else:
+                center_x = base_x + width / 2
+                max_bottom_extent = max(max_bottom_extent, (layer_y[box_idx] / 2) + text_h)
+
+            t_x1 = center_x - text_w / 2
+            t_x2 = center_x + text_w / 2
+
+            min_scene_x = min(min_scene_x, t_x1)
+            max_scene_x = max(max_scene_x, t_x2)
+
+    total_content_height = max_top_extent + max_bottom_extent
+    img_height = total_content_height
+    center_y_pos = max_top_extent
+
+    x_shift = padding - min_scene_x
+    img_width = max_scene_x + x_shift + padding
+
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
 
-    # x, y correction (centering)
     for i, node in enumerate(boxes):
-        y_off = (img.height - layer_y[i]) / 2
-        node.y1 += y_off
-        node.y2 += y_off
+        h = layer_y[i]
+        node_top = center_y_pos - h / 2
 
-        node.x1 += x_off
-        node.x2 += x_off
-    
+        node.y1 = node_top + node.de
+        node.y2 = node_top + h
 
-    
-    if is_any_text_above:
-        img_height -= abs(max_box_height - max_box_with_text_height)
-        img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
-    if is_any_text_below:
-        img_height += abs(max_box_height - max_box_with_text_height)
-        img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
-    
+        node.x1 += x_shift + x_off
+        node.x2 += x_shift + x_off
+
     draw = aggdraw.Draw(img)
 
     # Correct x positions of reversed boxes
