@@ -123,7 +123,16 @@ def functional_view(
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
     preset: Union[str, None] = None,
 ) -> Image.Image:
-    """Render a functional model using a multi-stream layered layout."""
+    """Render a functional model using a multi-stream layered layout.
+    
+    :param layered_groups: List of dicts defining groups of layers to highlight with a background rectangle.
+                           Each dict can contain:
+                           - 'layers': List of layer names or objects.
+                           - 'fill': Background color (default: semi-transparent gray).
+                           - 'outline': Border color (default: black).
+                           - 'width': Border thickness (default: 1).
+                           - 'padding': Padding around the group (default: 10).
+    """
     using_presets = options is not None or preset is not None
 
     if not using_presets:
@@ -941,7 +950,7 @@ def _render_graph(
     color_wheel = ColorWheel()
 
     if layered_groups:
-        _draw_groups(draw, graph, layered_groups)
+        _draw_group_boxes(draw, graph, layered_groups)
 
     # Draw connectors FIRST so they appear behind 3D boxes
     _draw_connectors(
@@ -1269,6 +1278,9 @@ def _render_graph(
                 spacing=text_vspacing,
             )
 
+    if layered_groups:
+        _draw_group_captions(img, graph, layered_groups)
+
     return img
 
 def _straighten_layout(
@@ -1359,42 +1371,45 @@ def _straighten_layout(
         resolve_collisions(col_nodes)
 
 
-def _draw_groups(
+def _get_group_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[FunctionalNode]:
+    layers = group.get("layers", [])
+    if not layers:
+        return []
+        
+    group_nodes = []
+    for node in graph.nodes.values():
+        # Check if node matches any layer in the group
+        for layer_ref in layers:
+            if node.layer is layer_ref:
+                group_nodes.append(node)
+                break
+            # Check name match
+            node_layer_name = getattr(node.layer, 'name', '')
+            if isinstance(layer_ref, str) and (node.name == layer_ref or node_layer_name == layer_ref):
+                group_nodes.append(node)
+                break
+    return group_nodes
+
+
+def _draw_group_boxes(
     draw: aggdraw.Draw,
     graph: FunctionalGraph,
     groups: Sequence[Dict[str, Any]],
 ) -> None:
     for group in groups:
-        layers = group.get("layers", [])
-        if not layers:
-            continue
-            
-        # Find nodes belonging to this group
-        group_nodes = []
-        for node in graph.nodes.values():
-            # Check if node matches any layer in the group
-            for layer_ref in layers:
-                if node.layer is layer_ref:
-                    group_nodes.append(node)
-                    break
-                # Check name match
-                node_layer_name = getattr(node.layer, 'name', '')
-                if isinstance(layer_ref, str) and (node.name == layer_ref or node_layer_name == layer_ref):
-                    group_nodes.append(node)
-                    break
-        
+        group_nodes = _get_group_nodes(graph, group)
         if not group_nodes:
             continue
             
         # Calculate bounding box
         # Min X: node.x
-        # Max X: node.x + node.width + node.de
-        # Min Y: node.y - node.de
+        # Max X: node.x + node.width
+        # Min Y: node.y
         # Max Y: node.y + node.height
         
         min_x = min(n.x for n in group_nodes)
-        max_x = max(n.x + n.width + n.de for n in group_nodes)
-        min_y = min(n.y - n.de for n in group_nodes)
+        max_x = max(n.x + n.width for n in group_nodes)
+        min_y = min(n.y for n in group_nodes)
         max_y = max(n.y + n.height for n in group_nodes)
         
         # Apply padding
@@ -1417,6 +1432,70 @@ def _draw_groups(
         brush = aggdraw.Brush(fill_rgba)
         
         draw.rectangle([min_x, min_y, max_x, max_y], pen, brush)
+
+
+def _draw_group_captions(
+    img: Image.Image,
+    graph: FunctionalGraph,
+    groups: Sequence[Dict[str, Any]],
+) -> None:
+    draw = ImageDraw.Draw(img)
+    for group in groups:
+        caption = group.get("name", group.get("caption"))
+        if not caption:
+            continue
+            
+        group_nodes = _get_group_nodes(graph, group)
+        if not group_nodes:
+            continue
+            
+        # Calculate bounding box (same as boxes)
+        min_x = min(n.x for n in group_nodes)
+        max_x = max(n.x + n.width for n in group_nodes)
+        min_y = min(n.y for n in group_nodes)
+        max_y = max(n.y + n.height for n in group_nodes)
+        
+        padding = group.get("padding", 10)
+        box_min_x = min_x - padding
+        box_max_x = max_x + padding
+        box_max_y = max_y + padding
+        
+        # Config
+        font_src = group.get("font", None)
+        font_size = group.get("font_size", 15)
+        color = group.get("font_color", "black")
+        gap = group.get("text_spacing", 5)
+        
+        font = None
+        if font_src is None:
+             try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+             except IOError:
+                font = ImageFont.load_default()
+        elif isinstance(font_src, str):
+             try:
+                font = ImageFont.truetype(font_src, font_size)
+             except IOError:
+                font = ImageFont.load_default()
+        elif isinstance(font_src, ImageFont.ImageFont):
+            font = font_src
+        else:
+            font = ImageFont.load_default()
+        
+        # Calculate text size
+        if hasattr(font, "getbbox"):
+            left, top, right, bottom = font.getbbox(caption)
+            text_w = right - left
+            text_h = bottom - top
+        else:
+            text_w, text_h = draw.textsize(caption, font=font)
+        
+        # Position: Centered horizontally, below box
+        center_x = (box_min_x + box_max_x) / 2
+        text_x = center_x - text_w / 2
+        text_y = box_max_y + gap
+        
+        draw.text((text_x, text_y), caption, fill=color, font=font)
 
 
 def _draw_connectors(

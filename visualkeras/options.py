@@ -8,7 +8,7 @@ that is easier to compose, reason about, and share.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 StyleMap = Mapping[Union[str, type], Mapping[str, Any]]
 
@@ -161,6 +161,7 @@ class FunctionalOptions:
     render_virtual_nodes: bool = False
     draw_volume: bool = False
     shade_step: int = 10
+    layered_groups: Optional[Sequence[Dict[str, Any]]] = None
     styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
@@ -198,6 +199,7 @@ class FunctionalOptions:
             "render_virtual_nodes": self.render_virtual_nodes,
             "draw_volume": self.draw_volume,
             "shade_step": self.shade_step,
+            "layered_groups": self.layered_groups,
             "styles": self.styles,
         }
 
