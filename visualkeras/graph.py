@@ -22,6 +22,8 @@ def graph_view(model, to_file: str = None,
                connector_width: int = 1, ellipsize_after: int = 10,
                inout_as_tensor: bool = True, show_neurons: bool = True,
                styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
+               image_fit: str = 'contain',
+               circular_crop: bool = True,
                *, options: Union[GraphOptions, Mapping[str, Any], None] = None,
                preset: Union[str, None] = None) -> Image:
     """
@@ -49,6 +51,8 @@ def graph_view(model, to_file: str = None,
     :param styles: Mapping keyed by layer class or layer name. Values override defaults on a per-layer basis.
         Supported keys include: fill, outline, node_size, node_spacing, layer_spacing,
         connector_fill, connector_width, ellipsize_after, show_neurons, box_scale.
+    :param image_fit: Default image fitting mode ('contain', 'cover', 'fill', 'match_aspect').
+    :param circular_crop: If True, images on nodes will be cropped to a circle. Default is True.
     :param options: Optional ``GraphOptions`` (or mapping) providing a configuration bundle.
         Explicit keyword arguments override the bundle.
     :param preset: Name of a preset from ``visualkeras.GRAPH_PRESETS`` to use as the base style.
@@ -73,6 +77,8 @@ def graph_view(model, to_file: str = None,
             "inout_as_tensor": True,
             "show_neurons": True,
             "styles": None,
+            "image_fit": 'contain',
+            "circular_crop": True,
         })
 
         current_params = {
@@ -89,6 +95,8 @@ def graph_view(model, to_file: str = None,
             "inout_as_tensor": inout_as_tensor,
             "show_neurons": show_neurons,
             "styles": styles,
+            "image_fit": image_fit,
+            "circular_crop": circular_crop,
         }
 
         custom_keys = [
@@ -145,6 +153,8 @@ def graph_view(model, to_file: str = None,
             "inout_as_tensor": inout_as_tensor,
             "show_neurons": show_neurons,
             "styles": styles,
+            "image_fit": image_fit,
+            "circular_crop": circular_crop,
         }
 
         for key, value in explicit_values.items():
@@ -166,6 +176,8 @@ def graph_view(model, to_file: str = None,
         inout_as_tensor = resolved["inout_as_tensor"]
         show_neurons = resolved["show_neurons"]
         styles = resolved["styles"]
+        image_fit = resolved["image_fit"]
+        circular_crop = resolved["circular_crop"]
 
         if color_map is not None and not isinstance(color_map, dict):
             color_map = dict(color_map)
@@ -190,6 +202,8 @@ def graph_view(model, to_file: str = None,
         "ellipsize_after": ellipsize_after,
         "show_neurons": show_neurons,
         "box_scale": 3,
+        "image_fit": image_fit,
+        "circular_crop": circular_crop,
     }
 
     # Iterate over the model to compute bounds and generate boxes
@@ -280,6 +294,16 @@ def graph_view(model, to_file: str = None,
             current_defaults.update(legacy_color)
             style = resolve_style(layer, layer_name, styles, current_defaults)
 
+            # --- Image Handling ---
+            image_path = style.get("image")
+            image_indices = style.get("image_indices")
+            node_image = None
+            if image_path:
+                try:
+                    node_image = Image.open(image_path).convert("RGBA")
+                except Exception as e:
+                    warnings.warn(f"Could not load image {image_path} for layer {layer_name}: {e}")
+
             local_node_size = style.get("node_size", node_size)
             local_node_spacing = style.get("node_spacing", node_spacing)
             local_layer_spacing = style.get("layer_spacing", layer_spacing)
@@ -345,6 +369,12 @@ def graph_view(model, to_file: str = None,
                 c.fill = style.get('fill') if style.get('fill') is not None else 'orange'
                 c.outline = style.get('outline') if style.get('outline') is not None else 'black'
                 c.style = style
+                
+                if node_image:
+                    if image_indices is None or i in image_indices:
+                        c.image = node_image
+                        c.image_fit = style.get("image_fit", image_fit)
+                        c.circular_crop = style.get("circular_crop", circular_crop)
 
                 layer_nodes.append(c)
 
@@ -387,6 +417,39 @@ def graph_view(model, to_file: str = None,
     for i, layer in enumerate(layers):
         for node_index, node in enumerate(layer):
             node.draw(draw)
+
+            if getattr(node, 'image', None):
+                draw.flush()
+                image = node.image
+                fit = node.image_fit
+                w = node.x2 - node.x1
+                h = node.y2 - node.y1
+                
+                resized = resize_image_to_fit(image, int(w), int(h), fit)
+                
+                if getattr(node, 'circular_crop', False):
+                    # Create a circular mask
+                    mask = Image.new("L", (int(w), int(h)), 0)
+                    mask_draw = ImageDraw.Draw(mask)
+                    mask_draw.ellipse((0, 0, int(w), int(h)), fill=255)
+                    
+                    # Apply mask to the resized image
+                    # If resized image has alpha, we need to combine it
+                    if resized.mode == 'RGBA':
+                        # Combine existing alpha with circular mask
+                        r, g, b, a = resized.split()
+                        # Use the minimum of the existing alpha and the mask
+                        # Actually, paste with mask uses the mask for transparency.
+                        # But we want to crop the image itself.
+                        # Let's create a new RGBA image for the result
+                        cropped = Image.new("RGBA", (int(w), int(h)), (0, 0, 0, 0))
+                        cropped.paste(resized, (0, 0), mask=mask)
+                        resized = cropped
+                    else:
+                        resized.putalpha(mask)
+
+                img.paste(resized, (int(node.x1), int(node.y1)), resized)
+                draw = aggdraw.Draw(img)
 
     draw.flush()
 
