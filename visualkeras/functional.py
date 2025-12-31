@@ -922,6 +922,34 @@ def _column_positions(column_widths: Mapping[int, int], padding: int, column_spa
     return positions
 
 
+def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
+    font_src = group.get("font", None)
+    font_size = group.get("font_size", 15)
+    
+    if font_src is None:
+         try:
+            return ImageFont.truetype("arial.ttf", font_size)
+         except IOError:
+            return ImageFont.load_default()
+    elif isinstance(font_src, str):
+         try:
+            return ImageFont.truetype(font_src, font_size)
+         except IOError:
+            return ImageFont.load_default()
+    elif isinstance(font_src, ImageFont.ImageFont):
+        return font_src
+    else:
+        return ImageFont.load_default()
+
+
+def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
+    if hasattr(font, "getbbox"):
+        left, top, right, bottom = font.getbbox(text)
+        return right - left, bottom - top
+    else:
+        return draw.textsize(text, font=font)
+
+
 def _render_graph(
     graph: FunctionalGraph,
     *,
@@ -944,6 +972,44 @@ def _render_graph(
     for node in graph.nodes.values():
         max_right = max(max_right, node.x + node.width + padding)
         max_bottom = max(max_bottom, node.y + node.height + padding)
+
+    if layered_groups:
+        dummy_img = Image.new("RGBA", (1, 1))
+        dummy_draw = ImageDraw.Draw(dummy_img)
+        
+        for group in layered_groups:
+            group_nodes = _get_group_nodes(graph, group)
+            if not group_nodes:
+                continue
+            
+            # Group Box Bounds
+            g_min_x = min(n.x for n in group_nodes)
+            g_max_x = max(n.x + n.width for n in group_nodes)
+            g_min_y = min(n.y for n in group_nodes)
+            g_max_y = max(n.y + n.height for n in group_nodes)
+            
+            g_padding = group.get("padding", 10)
+            g_min_x -= g_padding
+            g_max_x += g_padding
+            g_min_y -= g_padding
+            g_max_y += g_padding
+            
+            max_right = max(max_right, g_max_x + padding)
+            max_bottom = max(max_bottom, g_max_y + padding)
+            
+            # Caption Bounds
+            caption = group.get("name", group.get("caption"))
+            if caption:
+                font = _get_font(group)
+                text_w, text_h = _measure_text(dummy_draw, caption, font)
+                
+                center_x = (g_min_x + g_max_x) / 2
+                text_x = center_x - text_w / 2
+                gap = group.get("text_spacing", 5)
+                text_y = g_max_y + gap
+                
+                max_right = max(max_right, text_x + text_w + padding)
+                max_bottom = max(max_bottom, text_y + text_h + padding)
 
     img = Image.new("RGBA", (int(max_right), int(max_bottom)), background_fill)
     draw = aggdraw.Draw(img)
@@ -1461,34 +1527,12 @@ def _draw_group_captions(
         box_max_y = max_y + padding
         
         # Config
-        font_src = group.get("font", None)
-        font_size = group.get("font_size", 15)
+        font = _get_font(group)
         color = group.get("font_color", "black")
         gap = group.get("text_spacing", 5)
         
-        font = None
-        if font_src is None:
-             try:
-                font = ImageFont.truetype("arial.ttf", font_size)
-             except IOError:
-                font = ImageFont.load_default()
-        elif isinstance(font_src, str):
-             try:
-                font = ImageFont.truetype(font_src, font_size)
-             except IOError:
-                font = ImageFont.load_default()
-        elif isinstance(font_src, ImageFont.ImageFont):
-            font = font_src
-        else:
-            font = ImageFont.load_default()
-        
         # Calculate text size
-        if hasattr(font, "getbbox"):
-            left, top, right, bottom = font.getbbox(caption)
-            text_w = right - left
-            text_h = bottom - top
-        else:
-            text_w, text_h = draw.textsize(caption, font=font)
+        text_w, text_h = _measure_text(draw, caption, font)
         
         # Position: Centered horizontally, below box
         center_x = (box_min_x + box_max_x) / 2
