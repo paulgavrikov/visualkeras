@@ -108,6 +108,7 @@ def functional_view(
     draw_volume: bool = False,
     shade_step: int = 10,
     image_fit: str = "fill",
+    image_axis: str = "z",
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
@@ -151,6 +152,7 @@ def functional_view(
             "draw_volume": draw_volume,
             "shade_step": shade_step,
             "image_fit": image_fit,
+            "image_axis": image_axis,
             "styles": styles,
         }
         custom_keys = [
@@ -227,6 +229,7 @@ def functional_view(
             "draw_volume": draw_volume,
             "shade_step": shade_step,
             "image_fit": image_fit,
+            "image_axis": image_axis,
             "styles": styles,
         }
 
@@ -268,6 +271,7 @@ def functional_view(
         draw_volume = resolved["draw_volume"]
         shade_step = resolved["shade_step"]
         image_fit = resolved["image_fit"]
+        image_axis = resolved["image_axis"]
         styles = resolved["styles"]
 
         if color_map is not None and not isinstance(color_map, dict):
@@ -302,6 +306,7 @@ def functional_view(
         "draw_volume": draw_volume,
         "shade_step": shade_step,
         "image_fit": image_fit,
+        "image_axis": image_axis,
         "padding": 0,  # separate from global image padding
     }
 
@@ -324,6 +329,7 @@ def functional_view(
         draw_volume=draw_volume,
         shade_step=shade_step,
         image_fit=image_fit,
+        image_axis=image_axis,
     )
 
     ranks = _assign_ranks(graph.nodes, graph.edges)
@@ -404,6 +410,7 @@ def _build_graph(
     draw_volume: bool,
     shade_step: int,
     image_fit: str,
+    image_axis: str,
 ) -> FunctionalGraph:
     
     def resolve_style(layer, name) -> Dict[str, Any]:
@@ -451,38 +458,53 @@ def _build_graph(
         width = max(min_xy, int(dims[2]))
         height = max(min_xy, int(dims[1]))
         
+        # Calculate Depth (de)
+        use_volume = node_style.get('draw_volume', draw_volume)
+        de = 0
+        if use_volume:
+            de = int(width / 3)
+
         if image_path:
             try:
                 # Load the image and convert to RGBA for transparency support
                 node_image = Image.open(image_path).convert("RGBA")
                 
-                # Determine fit mode
+                # Determine fit mode and axis
                 fit_mode = node_style.get("image_fit", image_fit)
+                axis = node_style.get("image_axis", image_axis)
                 
                 if fit_mode == "match_aspect":
                     # Resize surface to match image proportions
                     img_w, img_h = node_image.size
                     img_ratio = img_w / img_h
                     
-                    # Current surface ratio
-                    surf_ratio = width / height
-                    
-                    if img_ratio > surf_ratio:
-                        # Image is wider than surface -> Increase width
-                        width = int(height * img_ratio)
-                    else:
-                        # Image is taller than surface -> Increase height
-                        height = int(width / img_ratio)
+                    if axis == 'z': # Front (Width x Height)
+                        # Current surface ratio
+                        surf_ratio = width / height
+                        if img_ratio > surf_ratio:
+                            # Image is wider than surface -> Increase width
+                            width = int(height * img_ratio)
+                        else:
+                            # Image is taller than surface -> Increase height
+                            height = int(width / img_ratio)
+                            
+                    elif axis == 'y': # Top (Width x Depth)
+                        # Width x Depth
+                        # We adjust 'de' to match aspect ratio relative to 'width'
+                        # Ratio = Width / Depth
+                        # Depth = Width / Ratio
+                        if img_ratio > 0:
+                            de = int(width / img_ratio)
+                            
+                    elif axis == 'x': # Side (Depth x Height)
+                        # Depth x Height
+                        # Ratio = Depth / Height
+                        # Depth = Height * Ratio
+                        de = int(height * img_ratio)
 
             except Exception as e:
                 warnings.warn(f"Failed to load image for layer '{name}': {e}. Reverting to default visualization.")
                 image_path = None # Fallback to standard logic below
-
-        # Calculate Depth (de)
-        use_volume = node_style.get('draw_volume', draw_volume)
-        de = 0
-        if use_volume:
-            de = int(width / 3)
 
         # Inflate dimensions to reserve space for the 3D projection
         total_width = width + de
@@ -945,63 +967,220 @@ def _render_graph(
             # Apply image to the front face
             draw.flush()
             
-            # Target dimensions for the image
-            target_w = int(real_width)
-            target_h = int(real_height)
+            fit_mode = node.style.get("image_fit", "fill")
+            axis = node.style.get("image_axis", "z")
             
-            if target_w > 0 and target_h > 0:
-                fit_mode = node.style.get("image_fit", "fill")
+            # Determine target dimensions and position based on axis
+            target_w = 0
+            target_h = 0
+            paste_x = 0
+            paste_y = 0
+            
+            # For affine transform (Top/Side faces)
+            is_affine = False
+            affine_quad = [] # [(x,y), (x,y), (x,y)] -> TL, TR, BL
+            
+            if axis == 'z': # Front Face (Rectangle)
+                target_w = int(real_width)
+                target_h = int(real_height)
+                paste_x = box.x1
+                paste_y = box.y1
                 
+            elif axis == 'y': # Top Face (Parallelogram)
+                # Logical dimensions: Width x Depth
+                # We map image width to 'real_width' and image height to 'de' (approx)
+                # But strictly, we map to the parallelogram.
+                is_affine = True
+                # Top Face Points:
+                # TL: (x1 + de, y1 - de)
+                # TR: (x2 + de, y1 - de)
+                # BL: (x1, y1)
+                # BR: (x2, y1)
+                
+                # Affine Quad (TL, TR, BL)
+                affine_quad = [
+                    (box.x1 + box.de, box.y1 - box.de), # TL
+                    (box.x2 + box.de, box.y1 - box.de), # TR
+                    (box.x1, box.y1)                    # BL
+                ]
+                
+                # For fitting logic, we need "logical" dimensions
+                target_w = int(real_width)
+                target_h = int(box.de) # Use depth as height for fitting
+                
+            elif axis == 'x': # Side Face (Parallelogram)
+                # Logical dimensions: Depth x Height
+                is_affine = True
+                # Side Face Points:
+                # TL: (x2 + de, y1 - de)
+                # TR: (x2 + de, y2 - de) -- Wait, Side face is vertical?
+                # Let's check Box.draw again.
+                # Side Face (Right):
+                # (x2 + de, y1 - de) -> Back Top-Right
+                # (x2, y1)           -> Front Top-Right
+                # (x2, y2)           -> Front Bottom-Right
+                # (x2 + de, y2 - de) -> Back Bottom-Right
+                
+                # We want to map image to this face.
+                # Image Top-Left -> Back Top-Right (x2 + de, y1 - de)
+                # Image Top-Right -> Back Bottom-Right (x2 + de, y2 - de) ?? No, that's vertical edge.
+                
+                # Usually:
+                # Image X axis -> Depth (Diagonal)
+                # Image Y axis -> Height (Vertical)
+                
+                # Let's map:
+                # TL: (x2 + de, y1 - de)
+                # TR: (x2, y1)  (Wait, this is going "forward" in depth?)
+                # BL: (x2 + de, y2 - de)
+                
+                # Or:
+                # TL: (x2 + de, y1 - de)
+                # TR: (x2 + de, y2 - de) ? No.
+                
+                # Let's assume standard orientation:
+                # Image Width -> Depth
+                # Image Height -> Height
+                
+                # TL: (x2 + de, y1 - de)
+                # TR: (x2, y1)  (Wait, x2 < x2+de, so this is going left?)
+                # Actually, visualkeras draws depth going Right-Up (if not reversed).
+                # x1 < x2.
+                # x1+de > x1.
+                # y1-de < y1.
+                
+                # Side face is on the Right.
+                # Top edge: (x2+de, y1-de) to (x2, y1).
+                # Left edge: (x2, y1) to (x2, y2).
+                # Right edge: (x2+de, y1-de) to (x2+de, y2-de).
+                # Bottom edge: (x2+de, y2-de) to (x2, y2).
+                
+                # So it's a parallelogram.
+                # Let's map Image TL to (x2+de, y1-de).
+                # Image TR (Width) -> (x2, y1). (Along depth axis, coming forward).
+                # Image BL (Height) -> (x2+de, y2-de). (Down vertical axis).
+                
+                affine_quad = [
+                    (box.x2 + box.de, box.y1 - box.de), # TL
+                    (box.x2, box.y1),                   # TR
+                    (box.x2 + box.de, box.y2 - box.de)  # BL
+                ]
+                
+                target_w = int(box.de)
+                target_h = int(real_height)
+
+            if target_w > 0 and target_h > 0:
                 # Prepare the image to paste
                 to_paste = node.image
                 
+                # 1. Resize/Crop based on fit_mode
                 if fit_mode == "fill" or fit_mode == "match_aspect":
-                    # Resize to exact dimensions
                     to_paste = to_paste.resize((target_w, target_h), Image.LANCZOS)
-                    paste_x = box.x1
-                    paste_y = box.y1
                     
                 elif fit_mode == "cover":
-                    # Resize to cover, then crop
                     img_w, img_h = to_paste.size
                     ratio_w = target_w / img_w
                     ratio_h = target_h / img_h
                     scale = max(ratio_w, ratio_h)
-                    
                     new_w = int(img_w * scale)
                     new_h = int(img_h * scale)
                     to_paste = to_paste.resize((new_w, new_h), Image.LANCZOS)
-                    
-                    # Crop center
                     left = (new_w - target_w) // 2
                     top = (new_h - target_h) // 2
                     to_paste = to_paste.crop((left, top, left + target_w, top + target_h))
-                    paste_x = box.x1
-                    paste_y = box.y1
                     
                 elif fit_mode == "contain":
-                    # Resize to contain, center
                     img_w, img_h = to_paste.size
                     ratio_w = target_w / img_w
                     ratio_h = target_h / img_h
                     scale = min(ratio_w, ratio_h)
-                    
                     new_w = int(img_w * scale)
                     new_h = int(img_h * scale)
                     to_paste = to_paste.resize((new_w, new_h), Image.LANCZOS)
                     
-                    # Center
-                    paste_x = box.x1 + (target_w - new_w) // 2
-                    paste_y = box.y1 + (target_h - new_h) // 2
+                    # Create a transparent container of target size
+                    container = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+                    off_x = (target_w - new_w) // 2
+                    off_y = (target_h - new_h) // 2
+                    container.paste(to_paste, (off_x, off_y))
+                    to_paste = container
                 
                 else:
-                    # Fallback to fill
                     to_paste = to_paste.resize((target_w, target_h), Image.LANCZOS)
-                    paste_x = box.x1
-                    paste_y = box.y1
 
-                img.paste(to_paste, (int(paste_x), int(paste_y)), to_paste)
-                
+                # 2. Paste or Transform
+                if not is_affine:
+                    img.paste(to_paste, (int(paste_x), int(paste_y)), to_paste)
+                else:
+                    # Calculate Affine Matrix
+                    # Source: (0,0), (w,0), (0,h)
+                    # Dest: P0, P1, P2
+                    
+                    src_w, src_h = to_paste.size
+                    p0, p1, p2 = affine_quad
+                    
+                    # Solve for M (Src -> Dest)
+                    # x_dst = a*x_src + b*y_src + c
+                    # y_dst = d*x_src + e*y_src + f
+                    
+                    # At (0,0): c = p0.x, f = p0.y
+                    c = p0[0]
+                    f = p0[1]
+                    
+                    # At (w,0): a*w + c = p1.x => a = (p1.x - c) / w
+                    a = (p1[0] - c) / src_w
+                    d = (p1[1] - f) / src_w
+                    
+                    # At (0,h): b*h + c = p2.x => b = (p2.x - c) / h
+                    b = (p2[0] - c) / src_h
+                    e = (p2[1] - f) / src_h
+                    
+                    # Image.transform expects INVERSE matrix (Dest -> Src)
+                    # M = [[a, b, c], [d, e, f], [0, 0, 1]]
+                    # We need M_inv.
+                    
+                    det = a*e - b*d
+                    if abs(det) > 1e-6:
+                        ia = e / det
+                        ib = -b / det
+                        ic = (b*f - c*e) / det
+                        id_ = -d / det
+                        ie = a / det
+                        if_ = (c*d - a*f) / det
+                        
+                        data = (ia, ib, ic, id_, ie, if_)
+                        
+                        # Transform creates an image of the specified size.
+                        # We need to create an image that covers the bounding box of the destination quad.
+                        # Calculate bbox of quad
+                        xs = [p[0] for p in affine_quad] + [p1[0] + p2[0] - p0[0]] # P3 = P1 + P2 - P0
+                        ys = [p[1] for p in affine_quad] + [p1[1] + p2[1] - p0[1]]
+                        
+                        min_x, max_x = min(xs), max(xs)
+                        min_y, max_y = min(ys), max(ys)
+                        
+                        bbox_w = int(max_x - min_x)
+                        bbox_h = int(max_y - min_y)
+                        
+                        # We need to adjust the transform data because the new image starts at (min_x, min_y)
+                        # The transform maps (x_out, y_out) -> (x_in, y_in)
+                        # x_out in the new image corresponds to (x_out + min_x) in the global space.
+                        # So we substitute x_dst = x_out + min_x, y_dst = y_out + min_y into the inverse equation.
+                        
+                        # x_src = ia*x_dst + ib*y_dst + ic
+                        #       = ia*(x_out + min_x) + ib*(y_out + min_y) + ic
+                        #       = ia*x_out + ib*y_out + (ia*min_x + ib*min_y + ic)
+                        
+                        nic = ia*min_x + ib*min_y + ic
+                        nif = id_*min_x + ie*min_y + if_
+                        
+                        new_data = (ia, ib, nic, id_, ie, nif)
+                        
+                        transformed = to_paste.transform((bbox_w, bbox_h), Image.AFFINE, new_data, Image.BICUBIC)
+                        
+                        # Paste the transformed image
+                        img.paste(transformed, (int(min_x), int(min_y)), transformed)
+
             # Re-create aggdraw context
             draw = aggdraw.Draw(img)
 
