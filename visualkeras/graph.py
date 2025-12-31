@@ -370,7 +370,7 @@ def graph_view(model, to_file: str = None,
                 c.outline = style.get('outline') if style.get('outline') is not None else 'black'
                 c.style = style
                 
-                if node_image:
+                if node_image and not isinstance(c, Ellipses):
                     if image_indices is None or i in image_indices:
                         c.image = node_image
                         c.image_fit = style.get("image_fit", image_fit)
