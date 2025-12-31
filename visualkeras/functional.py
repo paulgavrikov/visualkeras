@@ -502,6 +502,26 @@ def _build_graph(
                         # Depth = Height * Ratio
                         de = int(height * img_ratio)
 
+                # Apply scale_image factor if present
+                scale_factor = node_style.get("scale_image")
+                if scale_factor is not None:
+                    try:
+                        scale_factor = float(scale_factor)
+                        if scale_factor < 0:
+                            scale_factor = 0.0
+                    except (ValueError, TypeError):
+                        scale_factor = 1.0
+                    
+                    if axis == 'z': # Front (Width x Height)
+                        width = int(width * scale_factor)
+                        height = int(height * scale_factor)
+                    elif axis == 'y': # Top (Width x Depth)
+                        width = int(width * scale_factor)
+                        de = int(de * scale_factor)
+                    elif axis == 'x': # Side (Depth x Height)
+                        de = int(de * scale_factor)
+                        height = int(height * scale_factor)
+
             except Exception as e:
                 warnings.warn(f"Failed to load image for layer '{name}': {e}. Reverting to default visualization.")
                 image_path = None # Fallback to standard logic below
