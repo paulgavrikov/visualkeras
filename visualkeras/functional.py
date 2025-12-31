@@ -50,6 +50,7 @@ class FunctionalNode:
     style: Dict[str, Any] = field(default_factory=dict)
     de: int = 0
     shade: int = 0
+    image: Optional[Image.Image] = None
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,7 @@ def functional_view(
     render_virtual_nodes: bool = False,
     draw_volume: bool = False,
     shade_step: int = 10,
+    image_fit: str = "fill",
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
@@ -128,7 +130,6 @@ def functional_view(
             "connector_width": connector_width,
             "connector_arrow": connector_arrow,
             "connector_padding": connector_padding,
-            "connector_ribbon": connector_ribbon,
             "min_z": min_z,
             "min_xy": min_xy,
             "max_z": max_z,
@@ -149,6 +150,7 @@ def functional_view(
             "render_virtual_nodes": render_virtual_nodes,
             "draw_volume": draw_volume,
             "shade_step": shade_step,
+            "image_fit": image_fit,
             "styles": styles,
         }
         custom_keys = [
@@ -204,7 +206,6 @@ def functional_view(
             "connector_width": connector_width,
             "connector_arrow": connector_arrow,
             "connector_padding": connector_padding,
-            "connector_ribbon": connector_ribbon,
             "min_z": min_z,
             "min_xy": min_xy,
             "max_z": max_z,
@@ -225,6 +226,7 @@ def functional_view(
             "render_virtual_nodes": render_virtual_nodes,
             "draw_volume": draw_volume,
             "shade_step": shade_step,
+            "image_fit": image_fit,
             "styles": styles,
         }
 
@@ -245,7 +247,6 @@ def functional_view(
         connector_width = resolved["connector_width"]
         connector_arrow = resolved["connector_arrow"]
         connector_padding = resolved["connector_padding"]
-        connector_ribbon = resolved["connector_ribbon"]
         min_z = resolved["min_z"]
         min_xy = resolved["min_xy"]
         max_z = resolved["max_z"]
@@ -266,6 +267,7 @@ def functional_view(
         render_virtual_nodes = resolved["render_virtual_nodes"]
         draw_volume = resolved["draw_volume"]
         shade_step = resolved["shade_step"]
+        image_fit = resolved["image_fit"]
         styles = resolved["styles"]
 
         if color_map is not None and not isinstance(color_map, dict):
@@ -299,6 +301,7 @@ def functional_view(
         "connector_padding": connector_padding,
         "draw_volume": draw_volume,
         "shade_step": shade_step,
+        "image_fit": image_fit,
         "padding": 0,  # separate from global image padding
     }
 
@@ -320,6 +323,7 @@ def functional_view(
         virtual_node_size=virtual_node_size,
         draw_volume=draw_volume,
         shade_step=shade_step,
+        image_fit=image_fit,
     )
 
     ranks = _assign_ranks(graph.nodes, graph.edges)
@@ -368,7 +372,6 @@ def functional_view(
         connector_width=connector_width,
         connector_arrow=connector_arrow,
         connector_padding=connector_padding,
-        connector_ribbon=connector_ribbon,
         text_callable=text_callable,
         text_vspacing=text_vspacing,
         font=font,
@@ -400,6 +403,7 @@ def _build_graph(
     virtual_node_size: int,
     draw_volume: bool,
     shade_step: int,
+    image_fit: str,
 ) -> FunctionalGraph:
     
     def resolve_style(layer, name) -> Dict[str, Any]:
@@ -418,6 +422,18 @@ def _build_graph(
     for layer in layers:
         node_id = id(layer)
         name = getattr(layer, "name", None) or f"layer_{order_map[node_id]}"
+        
+        # Resolve style early to check for image replacement
+        node_style = resolve_style(layer, name)
+
+        # DEBUG
+        if "image" in node_style:
+            print(f"DEBUG: Found image style for layer: {name} -> {node_style['image']}")
+        
+        image_path = node_style.get("image")
+        node_image = None
+        
+        # Always calculate standard dimensions first
         shape = extract_primary_shape(_resolve_layer_output_shape(layer), name)
         dims = calculate_layer_dimensions(
             shape,
@@ -434,22 +450,44 @@ def _build_graph(
         )
         width = max(min_xy, int(dims[2]))
         height = max(min_xy, int(dims[1]))
-
-        # Resolve all properties at once
-        node_style = resolve_style(layer, name)
         
-        # Calculate Depth (de) if volume drawing is enabled by style or global default
+        if image_path:
+            try:
+                # Load the image and convert to RGBA for transparency support
+                node_image = Image.open(image_path).convert("RGBA")
+                
+                # Determine fit mode
+                fit_mode = node_style.get("image_fit", image_fit)
+                
+                if fit_mode == "match_aspect":
+                    # Resize surface to match image proportions
+                    img_w, img_h = node_image.size
+                    img_ratio = img_w / img_h
+                    
+                    # Current surface ratio
+                    surf_ratio = width / height
+                    
+                    if img_ratio > surf_ratio:
+                        # Image is wider than surface -> Increase width
+                        width = int(height * img_ratio)
+                    else:
+                        # Image is taller than surface -> Increase height
+                        height = int(width / img_ratio)
+
+            except Exception as e:
+                warnings.warn(f"Failed to load image for layer '{name}': {e}. Reverting to default visualization.")
+                image_path = None # Fallback to standard logic below
+
+        # Calculate Depth (de)
         use_volume = node_style.get('draw_volume', draw_volume)
         de = 0
         if use_volume:
             de = int(width / 3)
-            
+
         # Inflate dimensions to reserve space for the 3D projection
-        # The layout engine sees the "Total Visual Footprint"
         total_width = width + de
         total_height = height + de
         
-        # Retrieve shade step from style
         shade = node_style.get('shade_step', shade_step)
 
         nodes[node_id] = FunctionalNode(
@@ -457,14 +495,15 @@ def _build_graph(
             node_id=node_id,
             name=name,
             layer_type=type(layer),
-            shape=shape,
+            shape=extract_primary_shape(_resolve_layer_output_shape(layer), name) if not image_path else None,
             dims=(int(dims[0]), int(dims[1]), int(dims[2])),
             width=total_width,
             height=total_height,
             order=order_map[node_id],
             style=node_style,
             de=de,
-            shade=shade
+            shade=shade,
+            image=node_image
         )
 
     edges = _collect_edges(nodes)
@@ -848,7 +887,7 @@ def _render_graph(
     draw = aggdraw.Draw(img)
     color_wheel = ColorWheel()
 
-    # Draw connectors FIRST (so they appear behind 3D boxes)
+    # Draw connectors FIRST so they appear behind 3D boxes
     _draw_connectors(
         draw,
         graph.edges,
@@ -860,33 +899,22 @@ def _render_graph(
         connector_padding,
     )
 
-    boxes: Dict[int, Box] = {}
-    
-    # Create and draw boxes
-    # Note: For simple 2.5D projection (up/right), Z-order sorting isn't strictly necessary 
-    # if columns are spaced well, but technically items further right/up should be drawn later?
-    # Actually, items 'deeper' (more back/right) should be drawn first.
-    # The 'Back' of a box is at x+de, y-de.
-    # Standard iteration order is usually fine for these graphs, but we stick to order.
-    
+    # Flush connectors before pasting images
+    draw.flush()
+
     for node in graph.nodes.values():
         if node.kind == "virtual" and not render_virtual_nodes:
             continue
-            
+
         box = Box()
-        # Retrieve properties from node
         box.de = getattr(node, 'de', 0)
         box.shade = getattr(node, 'shade', 0)
 
-        # Calculate coordinates for the "Front Face"
-        # The node.x, node.y from layout represents the Top-Left of the allocated space.
-        # The front face is shifted down by 'de' so that the back face (which is up by 'de')
-        # stays within the top boundary.
+        # Calculate coordinates for the Front Face
         box.x1 = node.x
         box.y1 = node.y + box.de
         
-        # The node.width and node.height are the "Total Visual Footprint" (real_w + de).
-        # We need to recover the real width/height of the face.
+        # Recover the real width/height of the face.
         real_width = node.width - box.de
         real_height = node.height - box.de
         
@@ -904,13 +932,78 @@ def _render_graph(
         box.fill = fill if fill is not None else color_wheel.get_color(node.layer_type)
         box.outline = outline if outline is not None else "black"
         
-        # Apply style overrides if present (e.g. from Styles API)
+        # Apply style overrides if present
         if node.style.get('fill'):
             box.fill = node.style.get('fill')
         if node.style.get('outline'):
             box.outline = node.style.get('outline')
 
+        # Draw the box (background/volume)
         box.draw(draw, draw_reversed=False)
+
+        if node.image is not None:
+            # Apply image to the front face
+            draw.flush()
+            
+            # Target dimensions for the image
+            target_w = int(real_width)
+            target_h = int(real_height)
+            
+            if target_w > 0 and target_h > 0:
+                fit_mode = node.style.get("image_fit", "fill")
+                
+                # Prepare the image to paste
+                to_paste = node.image
+                
+                if fit_mode == "fill" or fit_mode == "match_aspect":
+                    # Resize to exact dimensions
+                    to_paste = to_paste.resize((target_w, target_h), Image.LANCZOS)
+                    paste_x = box.x1
+                    paste_y = box.y1
+                    
+                elif fit_mode == "cover":
+                    # Resize to cover, then crop
+                    img_w, img_h = to_paste.size
+                    ratio_w = target_w / img_w
+                    ratio_h = target_h / img_h
+                    scale = max(ratio_w, ratio_h)
+                    
+                    new_w = int(img_w * scale)
+                    new_h = int(img_h * scale)
+                    to_paste = to_paste.resize((new_w, new_h), Image.LANCZOS)
+                    
+                    # Crop center
+                    left = (new_w - target_w) // 2
+                    top = (new_h - target_h) // 2
+                    to_paste = to_paste.crop((left, top, left + target_w, top + target_h))
+                    paste_x = box.x1
+                    paste_y = box.y1
+                    
+                elif fit_mode == "contain":
+                    # Resize to contain, center
+                    img_w, img_h = to_paste.size
+                    ratio_w = target_w / img_w
+                    ratio_h = target_h / img_h
+                    scale = min(ratio_w, ratio_h)
+                    
+                    new_w = int(img_w * scale)
+                    new_h = int(img_h * scale)
+                    to_paste = to_paste.resize((new_w, new_h), Image.LANCZOS)
+                    
+                    # Center
+                    paste_x = box.x1 + (target_w - new_w) // 2
+                    paste_y = box.y1 + (target_h - new_h) // 2
+                
+                else:
+                    # Fallback to fill
+                    to_paste = to_paste.resize((target_w, target_h), Image.LANCZOS)
+                    paste_x = box.x1
+                    paste_y = box.y1
+
+                img.paste(to_paste, (int(paste_x), int(paste_y)), to_paste)
+                
+            # Re-create aggdraw context
+            draw = aggdraw.Draw(img)
 
     draw.flush()
 
