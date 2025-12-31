@@ -416,8 +416,7 @@ def graph_view(model, to_file: str = None,
 
     for i, layer in enumerate(layers):
         for node_index, node in enumerate(layer):
-            node.draw(draw)
-
+            
             if getattr(node, 'image', None):
                 draw.flush()
                 image = node.image
@@ -428,20 +427,20 @@ def graph_view(model, to_file: str = None,
                 resized = resize_image_to_fit(image, int(w), int(h), fit)
                 
                 if getattr(node, 'circular_crop', False):
-                    # Create a circular mask
-                    mask = Image.new("L", (int(w), int(h)), 0)
+                    # Supersampling for anti-aliasing
+                    super_scale = 4
+                    mask_w = int(w) * super_scale
+                    mask_h = int(h) * super_scale
+                    
+                    mask = Image.new("L", (mask_w, mask_h), 0)
                     mask_draw = ImageDraw.Draw(mask)
-                    mask_draw.ellipse((0, 0, int(w), int(h)), fill=255)
+                    mask_draw.ellipse((0, 0, mask_w, mask_h), fill=255)
+                    
+                    # Resize mask down smoothly
+                    mask = mask.resize((int(w), int(h)), Image.LANCZOS)
                     
                     # Apply mask to the resized image
-                    # If resized image has alpha, we need to combine it
                     if resized.mode == 'RGBA':
-                        # Combine existing alpha with circular mask
-                        r, g, b, a = resized.split()
-                        # Use the minimum of the existing alpha and the mask
-                        # Actually, paste with mask uses the mask for transparency.
-                        # But we want to crop the image itself.
-                        # Let's create a new RGBA image for the result
                         cropped = Image.new("RGBA", (int(w), int(h)), (0, 0, 0, 0))
                         cropped.paste(resized, (0, 0), mask=mask)
                         resized = cropped
@@ -450,6 +449,16 @@ def graph_view(model, to_file: str = None,
 
                 img.paste(resized, (int(node.x1), int(node.y1)), resized)
                 draw = aggdraw.Draw(img)
+                
+                # Draw the node outline on top (transparent fill)
+                # We access _fill directly to avoid the setter logic which might fail on None
+                original_fill = node._fill
+                node._fill = (0, 0, 0, 0) 
+                node.draw(draw)
+                node._fill = original_fill
+                
+            else:
+                node.draw(draw)
 
     draw.flush()
 
