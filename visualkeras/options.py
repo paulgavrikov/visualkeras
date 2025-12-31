@@ -48,6 +48,7 @@ class LayeredOptions:
     relative_base_size: int = 20
     connector_fill: Any = "gray"
     connector_width: int = 1
+    layered_groups: Optional[Sequence[Dict[str, Any]]] = None
     styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
@@ -84,6 +85,7 @@ class LayeredOptions:
             "relative_base_size": self.relative_base_size,
             "connector_fill": self.connector_fill,
             "connector_width": self.connector_width,
+            "layered_groups": self.layered_groups,
             "styles": self.styles,
         }
 

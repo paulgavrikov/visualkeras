@@ -1,4 +1,4 @@
-from typing import Any, Callable, Mapping, Optional, Union
+from typing import Any, Callable, Mapping, Optional, Union, List, Dict, Sequence, Tuple
 import aggdraw
 from PIL import ImageFont
 from math import ceil
@@ -63,6 +63,142 @@ def _shape_to_tuple(shape: Any) -> Any:
         return tuple(shape)
     return shape
 
+def _get_group_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
+    layers_ref = group.get("layers", [])
+    if not layers_ref:
+        return []
+        
+    group_boxes = []
+    for box in boxes:
+        if not hasattr(box, 'layer'):
+            continue
+            
+        layer = box.layer
+        # Check if node matches any layer in the group
+        for layer_ref in layers_ref:
+            if layer is layer_ref:
+                group_boxes.append(box)
+                break
+            # Check name match
+            layer_name = getattr(layer, 'name', '')
+            if isinstance(layer_ref, str) and (layer_name == layer_ref):
+                group_boxes.append(box)
+                break
+    return group_boxes
+
+
+def _draw_layered_group_boxes(draw, boxes, groups, draw_reversed):
+    for group in groups:
+        group_boxes = _get_group_boxes(boxes, group)
+        if not group_boxes: continue
+        
+        min_x = float('inf')
+        max_x = float('-inf')
+        min_y = float('inf')
+        max_y = float('-inf')
+        
+        for box in group_boxes:
+            if draw_reversed:
+                min_x = min(min_x, box.x1 - box.de)
+                max_x = max(max_x, box.x2)
+                min_y = min(min_y, box.y1 - box.de)
+                max_y = max(max_y, box.y2)
+            else:
+                min_x = min(min_x, box.x1)
+                max_x = max(max_x, box.x2 + box.de)
+                min_y = min(min_y, box.y1 - box.de)
+                max_y = max(max_y, box.y2)
+                
+        padding = group.get("padding", 10)
+        min_x -= padding
+        max_x += padding
+        min_y -= padding
+        max_y += padding
+        
+        fill = group.get("fill", (200, 200, 200, 100))
+        outline = group.get("outline", "black")
+        width = group.get("width", 1)
+        
+        pen = aggdraw.Pen(get_rgba_tuple(outline), width)
+        brush = aggdraw.Brush(get_rgba_tuple(fill))
+        
+        draw.rectangle([min_x, min_y, max_x, max_y], pen, brush)
+
+
+def _draw_layered_group_captions(img, boxes, groups, draw_reversed):
+    draw = ImageDraw.Draw(img)
+    for group in groups:
+        caption = group.get("name", group.get("caption"))
+        if not caption: continue
+        
+        group_boxes = _get_group_boxes(boxes, group)
+        if not group_boxes: continue
+        
+        min_x = float('inf')
+        max_x = float('-inf')
+        min_y = float('inf')
+        max_y = float('-inf')
+        
+        for box in group_boxes:
+            if draw_reversed:
+                min_x = min(min_x, box.x1 - box.de)
+                max_x = max(max_x, box.x2)
+                min_y = min(min_y, box.y1 - box.de)
+                max_y = max(max_y, box.y2)
+            else:
+                min_x = min(min_x, box.x1)
+                max_x = max(max_x, box.x2 + box.de)
+                min_y = min(min_y, box.y1 - box.de)
+                max_y = max(max_y, box.y2)
+                
+        padding = group.get("padding", 10)
+        min_x -= padding
+        max_x += padding
+        min_y -= padding
+        max_y += padding
+        
+        font = _get_font(group)
+        color = group.get("font_color", "black")
+        gap = group.get("text_spacing", 5)
+        
+        text_w, text_h = _measure_text(draw, caption, font)
+        
+        center_x = (min_x + max_x) / 2
+        text_x = center_x - text_w / 2
+        text_y = max_y + gap
+        
+        draw.text((text_x, text_y), caption, fill=color, font=font)
+
+
+
+def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
+    font_src = group.get("font", None)
+    font_size = group.get("font_size", 15)
+    
+    if font_src is None:
+         try:
+            return ImageFont.truetype("arial.ttf", font_size)
+         except IOError:
+            return ImageFont.load_default()
+    elif isinstance(font_src, str):
+         try:
+            return ImageFont.truetype(font_src, font_size)
+         except IOError:
+            return ImageFont.load_default()
+    elif isinstance(font_src, ImageFont.ImageFont):
+        return font_src
+    else:
+        return ImageFont.load_default()
+
+
+def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
+    if hasattr(font, "getbbox"):
+        left, top, right, bottom = font.getbbox(text)
+        return right - left, bottom - top
+    else:
+        return draw.textsize(text, font=font)
+
+
 def layered_view(model, 
                  to_file: str = None, 
                  min_z: int = 20, 
@@ -97,6 +233,7 @@ def layered_view(model,
                  connector_width: int = 1,
                  image_fit: str = "fill",
                  image_axis: str = "z",
+                 layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
                  styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
                  *,
                  options: Union[LayeredOptions, Mapping[str, Any], None] = None,
@@ -195,6 +332,7 @@ def layered_view(model,
             "connector_width": 1,
             "image_fit": "fill",
             "image_axis": "z",
+            "layered_groups": None,
             "styles": None,
         })
 
@@ -232,6 +370,7 @@ def layered_view(model,
             "connector_width": connector_width,
             "image_fit": image_fit,
             "image_axis": image_axis,
+            "layered_groups": layered_groups,
             "styles": styles,
         }
 
@@ -257,6 +396,7 @@ def layered_view(model,
         defaults["dimension_caps"] = None
         defaults["font"] = None
         defaults["index_2D"] = []
+        defaults["layered_groups"] = None
         defaults["styles"] = None
 
         resolved = dict(defaults)
@@ -313,6 +453,7 @@ def layered_view(model,
             "relative_base_size": relative_base_size,
             "connector_fill": connector_fill,
             "connector_width": connector_width,
+            "layered_groups": layered_groups,
             "styles": styles,
         }
 
@@ -355,6 +496,7 @@ def layered_view(model,
         connector_width = resolved["connector_width"]
         image_fit = resolved["image_fit"]
         image_axis = resolved["image_axis"]
+        layered_groups = resolved["layered_groups"]
         styles = resolved["styles"]
 
     if styles is not None and not isinstance(styles, dict):
@@ -436,6 +578,33 @@ def layered_view(model,
     if color_map is None:
         color_map = dict()
 
+    # Pre-process groups to map layers to their groups
+    layer_to_groups = {}
+    if layered_groups:
+        # Create a map of layer name to index for faster lookup
+        name_to_index = {}
+        for i, layer in enumerate(model.layers):
+            name = getattr(layer, 'name', None)
+            if name:
+                name_to_index[name] = i
+
+        for group in layered_groups:
+            for ref in group.get("layers", []):
+                idx = -1
+                if isinstance(ref, str):
+                    idx = name_to_index.get(ref, -1)
+                else:
+                    # Assume it's a layer object
+                    try:
+                        idx = model.layers.index(ref)
+                    except ValueError:
+                        pass
+                
+                if idx != -1:
+                    layer_to_groups.setdefault(idx, []).append(group)
+
+    last_rendered_index = -1
+
     for index, layer in enumerate(model.layers):
 
         # Ignore layers that the use has opted out to
@@ -446,6 +615,19 @@ def layered_view(model,
         if type(layer) == SpacingDummyLayer:
             current_z += layer.spacing
             continue
+        
+        # Adjust spacing to prevent group overlap
+        if last_rendered_index != -1 and layered_groups:
+             prev_groups = layer_to_groups.get(last_rendered_index, [])
+             curr_groups = layer_to_groups.get(index, [])
+             
+             exiting = [g for g in prev_groups if g not in curr_groups]
+             entering = [g for g in curr_groups if g not in prev_groups]
+             
+             clearance = max([g.get('padding', 10) for g in exiting] + [0]) + \
+                         max([g.get('padding', 10) for g in entering] + [0])
+             
+             current_z += clearance
 
         layer_type = type(layer)
 
@@ -553,6 +735,7 @@ def layered_view(model,
             dimension_list.append(dimension)
 
         box = Box()
+        box.layer = layer # Store layer for grouping
         box.style = style  # Store style for later use
         box.image = node_image
         if node_image:
@@ -601,6 +784,8 @@ def layered_view(model,
         # Use style-based spacing
         layer_spacing = style.get('spacing', spacing)
         current_z += z + layer_spacing
+        
+        last_rendered_index = index
 
     # Generate image
     min_scene_x = float('inf')
@@ -673,6 +858,76 @@ def layered_view(model,
             min_scene_x = min(min_scene_x, t_x1)
             max_scene_x = max(max_scene_x, t_x2)
 
+    if layered_groups:
+        dummy_img = Image.new("RGBA", (1, 1))
+        dummy_draw = ImageDraw.Draw(dummy_img)
+
+        for group in layered_groups:
+            group_boxes = _get_group_boxes(boxes, group)
+            if not group_boxes: continue
+            
+            g_min_x = float('inf')
+            g_max_x = float('-inf')
+            g_min_y = float('inf') # relative to center (negative is up)
+            g_max_y = float('-inf')
+            
+            for box in group_boxes:
+                # Reconstruct visual bounds in scene space
+                idx = boxes.index(box)
+                h = layer_y[idx]
+                
+                # Y bounds (relative to center)
+                # Top is -h/2, Bottom is h/2
+                g_min_y = min(g_min_y, -h/2)
+                g_max_y = max(g_max_y, h/2)
+                
+                # X bounds
+                visual_x1 = box.x1 + x_off
+                visual_x2 = box.x2 + x_off
+                
+                if draw_reversed:
+                    visual_x1 += box.de
+                    visual_x2 += box.de
+                    
+                    # Back face extends to left/up
+                    g_min_x = min(g_min_x, visual_x1 - box.de)
+                    g_max_x = max(g_max_x, visual_x2)
+                else:
+                    # Normal mode
+                    # Back face extends to right/up
+                    g_min_x = min(g_min_x, visual_x1)
+                    g_max_x = max(g_max_x, visual_x2 + box.de)
+            
+            # Apply padding
+            padding_val = group.get("padding", 10)
+            g_min_x -= padding_val
+            g_max_x += padding_val
+            g_min_y -= padding_val
+            g_max_y += padding_val
+            
+            # Update scene extents
+            min_scene_x = min(min_scene_x, g_min_x)
+            max_scene_x = max(max_scene_x, g_max_x)
+            max_top_extent = max(max_top_extent, -g_min_y) 
+            max_bottom_extent = max(max_bottom_extent, g_max_y)
+            
+            # Caption
+            caption = group.get("name", group.get("caption"))
+            if caption:
+                font = _get_font(group)
+                text_w, text_h = _measure_text(dummy_draw, caption, font)
+                
+                center_x = (g_min_x + g_max_x) / 2
+                text_x1 = center_x - text_w / 2
+                text_x2 = center_x + text_w / 2
+                
+                gap = group.get("text_spacing", 5)
+                text_bottom = g_max_y + gap + text_h
+                
+                min_scene_x = min(min_scene_x, text_x1)
+                max_scene_x = max(max_scene_x, text_x2)
+                max_bottom_extent = max(max_bottom_extent, text_bottom)
+
     total_content_height = max_top_extent + max_bottom_extent
     img_height = total_content_height
     center_y_pos = max_top_extent
@@ -701,6 +956,9 @@ def layered_view(model,
             # offset = 0
             box.x1 = box.x1 + offset
             box.x2 = box.x2 + offset
+
+    if layered_groups:
+        _draw_layered_group_boxes(draw, boxes, layered_groups, draw_reversed)
 
     # Draw created boxes
 
@@ -769,6 +1027,7 @@ def layered_view(model,
                 draw = aggdraw.Draw(img)
 
             last_box = box
+
     else:
         for box in boxes:
             pen = aggdraw.Pen(get_rgba_tuple(box.outline))
@@ -957,6 +1216,9 @@ def layered_view(model,
                                      spacing=spacing,
                                      background_fill=background_fill, horizontal=True)
         img = vertical_image_concat(img, legend_image, background_fill=background_fill)
+
+    if layered_groups:
+        _draw_layered_group_captions(img, boxes, layered_groups, draw_reversed)
 
     if to_file is not None:
         img.save(to_file)
