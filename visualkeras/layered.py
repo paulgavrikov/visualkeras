@@ -95,6 +95,8 @@ def layered_view(model,
                  relative_base_size: int = 20,
                  connector_fill: Any = 'gray',
                  connector_width: int = 1,
+                 image_fit: str = "fill",
+                 image_axis: str = "z",
                  styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
                  *,
                  options: Union[LayeredOptions, Mapping[str, Any], None] = None,
@@ -191,6 +193,8 @@ def layered_view(model,
             "relative_base_size": 20,
             "connector_fill": "gray",
             "connector_width": 1,
+            "image_fit": "fill",
+            "image_axis": "z",
             "styles": None,
         })
 
@@ -226,6 +230,8 @@ def layered_view(model,
             "relative_base_size": relative_base_size,
             "connector_fill": connector_fill,
             "connector_width": connector_width,
+            "image_fit": image_fit,
+            "image_axis": image_axis,
             "styles": styles,
         }
 
@@ -347,6 +353,8 @@ def layered_view(model,
         relative_base_size = resolved["relative_base_size"]
         connector_fill = resolved["connector_fill"]
         connector_width = resolved["connector_width"]
+        image_fit = resolved["image_fit"]
+        image_axis = resolved["image_axis"]
         styles = resolved["styles"]
 
     if styles is not None and not isinstance(styles, dict):
@@ -367,7 +375,9 @@ def layered_view(model,
         'min_xy': min_xy,
         'max_xy': max_xy,
         'shade_step': shade_step,
-        'font_color': font_color
+        'font_color': font_color,
+        'image_fit': image_fit,
+        'image_axis': image_axis
     }
 
     if type_ignore is not None and not isinstance(type_ignore, list):
@@ -475,7 +485,64 @@ def layered_view(model,
             one_dim_orientation, sizing_mode,
             dimension_caps, relative_base_size
         )
+
+        # --- Image Handling ---
+        image_path = style.get("image")
+        node_image = None
         
+        if image_path:
+            try:
+                node_image = Image.open(image_path).convert("RGBA")
+                fit_mode = style.get("image_fit", image_fit)
+                axis = style.get("image_axis", image_axis)
+                
+                if fit_mode == "match_aspect":
+                    img_w, img_h = node_image.size
+                    img_ratio = img_w / img_h
+                    
+                    if axis == 'z': # Front (Width x Height) -> (z x y)
+                        surf_ratio = z / y if y > 0 else 1
+                        if img_ratio > surf_ratio:
+                            z = int(y * img_ratio)
+                        else:
+                            y = int(z / img_ratio)
+                    elif axis == 'y': # Top (Width x Depth) -> (z x de)
+                        # de = x / 3. We adjust x to achieve target de.
+                        # Ratio = Width / Depth = z / de
+                        # de = z / Ratio
+                        if img_ratio > 0:
+                            de_target = int(z / img_ratio)
+                            x = de_target * 3
+                    elif axis == 'x': # Side (Depth x Height) -> (de x y)
+                        # Ratio = Depth / Height = de / y
+                        # de = y * Ratio
+                        de_target = int(y * img_ratio)
+                        x = de_target * 3
+                
+                # Apply scale_image
+                scale_factor = style.get("scale_image")
+                if scale_factor is not None:
+                    try:
+                        scale_factor = float(scale_factor)
+                        if scale_factor < 0: scale_factor = 0.0
+                    except (ValueError, TypeError):
+                        scale_factor = 1.0
+                    
+                    if axis == 'z':
+                        z = int(z * scale_factor)
+                        y = int(y * scale_factor)
+                    elif axis == 'y':
+                        z = int(z * scale_factor)
+                        x = int(x * scale_factor)
+                    elif axis == 'x':
+                        x = int(x * scale_factor)
+                        y = int(y * scale_factor)
+
+            except Exception as e:
+                warnings.warn(f"Failed to load image for layer '{layer_name}': {e}")
+                image_path = None
+                node_image = None
+
         if legend and show_dimension:
             dimension_string = str(shape)
             dimension_string = dimension_string[1:len(dimension_string)-1].split(", ")
@@ -487,6 +554,10 @@ def layered_view(model,
 
         box = Box()
         box.style = style  # Store style for later use
+        box.image = node_image
+        if node_image:
+            box.image_fit = style.get("image_fit", image_fit)
+            box.image_axis = style.get("image_axis", image_axis)
 
         # Use styles for visual properties
         # If fill is None (default), fallback to the color wheel
@@ -665,6 +736,38 @@ def layered_view(model,
 
             box.draw(draw, draw_reversed=True)
 
+            if getattr(box, 'image', None):
+                draw.flush()
+                image = box.image
+                fit = box.image_fit
+                axis = box.image_axis
+                x1, y1, x2, y2 = box.x1, box.y1, box.x2, box.y2
+                de = box.de
+                
+                if axis == 'z': # Front
+                    w = x2 - x1
+                    h = y2 - y1
+                    resized = resize_image_to_fit(image, int(w), int(h), fit)
+                    img.paste(resized, (int(x1), int(y1)), resized)
+                    
+                elif axis == 'y': # Top
+                    # Reversed Top Face: TL(x1-de, y1-de), TR(x2-de, y1-de), BR(x2, y1), BL(x1, y1)
+                    p1 = (x1 - de, y1 - de)
+                    p2 = (x2 - de, y1 - de)
+                    p3 = (x2, y1)
+                    p4 = (x1, y1)
+                    apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
+                    
+                elif axis == 'x': # Side
+                    # Reversed Side Face (Left): TL(x1-de, y1-de), TR(x1, y1), BR(x1, y2), BL(x1-de, y2-de)
+                    p1 = (x1 - de, y1 - de)
+                    p2 = (x1, y1)
+                    p3 = (x1, y2)
+                    p4 = (x1 - de, y2 - de)
+                    apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
+                
+                draw = aggdraw.Draw(img)
+
             last_box = box
     else:
         for box in boxes:
@@ -683,6 +786,51 @@ def layered_view(model,
                            box.x1, box.y1], pen)
 
             box.draw(draw, draw_reversed=False)
+
+            if getattr(box, 'image', None):
+                draw.flush()
+                image = box.image
+                fit = box.image_fit
+                axis = box.image_axis
+                x1, y1, x2, y2 = box.x1, box.y1, box.x2, box.y2
+                de = box.de
+                
+                if axis == 'z': # Front
+                    w = x2 - x1
+                    h = y2 - y1
+                    resized = resize_image_to_fit(image, int(w), int(h), fit)
+                    img.paste(resized, (int(x1), int(y1)), resized)
+                    
+                elif axis == 'y': # Top
+                    # Normal Top Face: TL(x1, y1), TR(x2, y1), BR(x2+de, y1-de), BL(x1+de, y1-de)
+                    # Wait, Box.draw normal top:
+                    # draw.polygon([self.x1, self.y1,
+                    #               self.x1 + self.de, self.y1 - self.de,
+                    #               self.x2 + self.de, self.y1 - self.de,
+                    #               self.x2, self.y1
+                    #               ], pen, brush_s1)
+                    # Order: BL, TL, TR, BR (relative to face?)
+                    # Let's map to TL, TR, BR, BL.
+                    # TL: (x1+de, y1-de)
+                    # TR: (x2+de, y1-de)
+                    # BR: (x2, y1)
+                    # BL: (x1, y1)
+                    
+                    p1 = (x1 + de, y1 - de)
+                    p2 = (x2 + de, y1 - de)
+                    p3 = (x2, y1)
+                    p4 = (x1, y1)
+                    apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
+                    
+                elif axis == 'x': # Side
+                    # Normal Side Face (Right): TL(x2, y1), TR(x2+de, y1-de), BR(x2+de, y2-de), BL(x2, y2)
+                    p1 = (x2, y1)
+                    p2 = (x2 + de, y1 - de)
+                    p3 = (x2 + de, y2 - de)
+                    p4 = (x2, y2)
+                    apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
+                
+                draw = aggdraw.Draw(img)
 
             last_box = box
 

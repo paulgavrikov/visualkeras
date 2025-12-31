@@ -27,7 +27,15 @@ from .layer_utils import (
     get_layers,
 )
 from .options import FunctionalOptions, FUNCTIONAL_PRESETS, LAYERED_TEXT_CALLABLES
-from .utils import Box, ColorWheel, fade_color, get_rgba_tuple
+from .utils import (
+    Box, 
+    ColorWheel, 
+    fade_color, 
+    get_rgba_tuple, 
+    resize_image_to_fit, 
+    apply_affine_transform
+)
+
 
 
 @dataclass

@@ -1,6 +1,7 @@
 from typing import Any, Dict, Mapping, Union
 from PIL import ImageColor, ImageDraw, Image
 import aggdraw
+import numpy as np
 
 def resolve_style(
     target: Any, 
@@ -322,3 +323,130 @@ class Ribbon:
 
             # 3. Front Face
             draw.rectangle([x - w/2, ty, x + w/2, by], pen, brush_front)
+
+
+def resize_image_to_fit(image: Image.Image, target_width: int, target_height: int, fit_mode: str) -> Image.Image:
+    if target_width <= 0 or target_height <= 0:
+        return image
+        
+    img_w, img_h = image.size
+    target_ratio = target_width / target_height
+    img_ratio = img_w / img_h
+    
+    new_w, new_h = target_width, target_height
+    
+    if fit_mode == "cover":
+        if img_ratio > target_ratio:
+            # Image is wider -> match height, crop width
+            new_h = target_height
+            new_w = int(new_h * img_ratio)
+        else:
+            # Image is taller -> match width, crop height
+            new_w = target_width
+            new_h = int(new_w / img_ratio)
+    elif fit_mode == "contain":
+        if img_ratio > target_ratio:
+            # Image is wider -> match width, letterbox height
+            new_w = target_width
+            new_h = int(new_w / img_ratio)
+        else:
+            # Image is taller -> match height, letterbox width
+            new_h = target_height
+            new_w = int(new_h * img_ratio)
+    elif fit_mode == "match_aspect":
+        # In this mode, the container should have been resized already.
+        # We just fill.
+        pass
+    else: # "fill"
+        pass
+        
+    resized = image.resize((new_w, new_h), Image.LANCZOS)
+    
+    # Crop or Center if needed
+    if fit_mode == "cover":
+        left = (new_w - target_width) // 2
+        top = (new_h - target_height) // 2
+        resized = resized.crop((left, top, left + target_width, top + target_height))
+    elif fit_mode == "contain":
+        # Create transparent background
+        bg = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 0))
+        left = (target_width - new_w) // 2
+        top = (target_height - new_h) // 2
+        bg.paste(resized, (left, top))
+        resized = bg
+        
+    return resized
+
+def _calculate_affine_coeffs(quad, src_size):
+    sw, sh = src_size
+    p0, p1, p2, p3 = quad
+    
+    # Mapping:
+    # p0 -> (0, 0)
+    # p1 -> (sw, 0)
+    # p3 -> (0, sh)
+    
+    # x_src = a*x_dst + b*y_dst + c
+    # y_src = d*x_dst + e*y_dst + f
+    
+    # Matrix form for X coeffs (a, b, c):
+    # [ x0 y0 1 ] [ a ]   [ 0 ]
+    # [ x1 y1 1 ] [ b ] = [ sw]
+    # [ x3 y3 1 ] [ c ]   [ 0 ]
+    
+    A = np.array([
+        [p0[0], p0[1], 1],
+        [p1[0], p1[1], 1],
+        [p3[0], p3[1], 1]
+    ])
+    
+    B_x = np.array([0, sw, 0])
+    B_y = np.array([0, 0, sh])
+    
+    try:
+        sol_x = np.linalg.solve(A, B_x)
+        sol_y = np.linalg.solve(A, B_y)
+    except np.linalg.LinAlgError:
+        return (1, 0, 0, 0, 1, 0)
+        
+    return tuple(sol_x) + tuple(sol_y)
+
+def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, quad: list, fit_mode: str):
+    """
+    Maps source_img onto the quadrilateral defined by quad [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+    on target_img.
+    """
+    # Calculate bounding box of the quad to determine target size
+    xs = [p[0] for p in quad]
+    ys = [p[1] for p in quad]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    w = int(max_x - min_x)
+    h = int(max_y - min_y)
+    
+    if w <= 0 or h <= 0: return
+
+    # Let's use the side lengths.
+    side_w = np.hypot(quad[1][0]-quad[0][0], quad[1][1]-quad[0][1])
+    side_h = np.hypot(quad[3][0]-quad[0][0], quad[3][1]-quad[0][1])
+    
+    # Resize source image to match the approximate dimensions of the target face
+    resized_source = resize_image_to_fit(source_img, int(side_w), int(side_h), fit_mode)
+    sw, sh = resized_source.size
+    
+    coeffs = _calculate_affine_coeffs(quad, (sw, sh))
+    
+    # Transform
+    # x_global = x_local + min_x
+    # x_source = a*(x_local + min_x) + ...
+    #          = a*x_local + b*y_local + (a*min_x + b*min_y + c)
+    
+    new_c = coeffs[0]*min_x + coeffs[1]*min_y + coeffs[2]
+    new_f = coeffs[3]*min_x + coeffs[4]*min_y + coeffs[5]
+    
+    new_coeffs = (coeffs[0], coeffs[1], new_c, coeffs[3], coeffs[4], new_f)
+    
+    transformed = resized_source.transform((w, h), Image.AFFINE, new_coeffs, resample=Image.BILINEAR)
+    
+    # Paste onto target_img at (min_x, min_y)
+    target_img.paste(transformed, (int(min_x), int(min_y)), transformed)
