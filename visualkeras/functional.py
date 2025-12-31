@@ -117,6 +117,7 @@ def functional_view(
     shade_step: int = 10,
     image_fit: str = "fill",
     image_axis: str = "z",
+    layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
@@ -391,6 +392,7 @@ def functional_view(
         font=font,
         font_color=font_color,
         render_virtual_nodes=render_virtual_nodes,
+        layered_groups=layered_groups,
     )
 
     if to_file is not None:
@@ -926,6 +928,7 @@ def _render_graph(
     font: Optional[ImageFont.ImageFont],
     font_color: Any,
     render_virtual_nodes: bool,
+    layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Image.Image:
     max_right = padding
     max_bottom = padding
@@ -936,6 +939,9 @@ def _render_graph(
     img = Image.new("RGBA", (int(max_right), int(max_bottom)), background_fill)
     draw = aggdraw.Draw(img)
     color_wheel = ColorWheel()
+
+    if layered_groups:
+        _draw_groups(draw, graph, layered_groups)
 
     # Draw connectors FIRST so they appear behind 3D boxes
     _draw_connectors(
@@ -1351,6 +1357,66 @@ def _straighten_layout(
                     set_visual_center(node, target_center)
         
         resolve_collisions(col_nodes)
+
+
+def _draw_groups(
+    draw: aggdraw.Draw,
+    graph: FunctionalGraph,
+    groups: Sequence[Dict[str, Any]],
+) -> None:
+    for group in groups:
+        layers = group.get("layers", [])
+        if not layers:
+            continue
+            
+        # Find nodes belonging to this group
+        group_nodes = []
+        for node in graph.nodes.values():
+            # Check if node matches any layer in the group
+            for layer_ref in layers:
+                if node.layer is layer_ref:
+                    group_nodes.append(node)
+                    break
+                # Check name match
+                node_layer_name = getattr(node.layer, 'name', '')
+                if isinstance(layer_ref, str) and (node.name == layer_ref or node_layer_name == layer_ref):
+                    group_nodes.append(node)
+                    break
+        
+        if not group_nodes:
+            continue
+            
+        # Calculate bounding box
+        # Min X: node.x
+        # Max X: node.x + node.width + node.de
+        # Min Y: node.y - node.de
+        # Max Y: node.y + node.height
+        
+        min_x = min(n.x for n in group_nodes)
+        max_x = max(n.x + n.width + n.de for n in group_nodes)
+        min_y = min(n.y - n.de for n in group_nodes)
+        max_y = max(n.y + n.height for n in group_nodes)
+        
+        # Apply padding
+        padding = group.get("padding", 10)
+        min_x -= padding
+        max_x += padding
+        min_y -= padding
+        max_y += padding
+        
+        # Style
+        fill = group.get("fill", (200, 200, 200, 100)) 
+        outline = group.get("outline", "black")
+        width = group.get("width", 1)
+        
+        # Convert colors
+        fill_rgba = get_rgba_tuple(fill)
+        outline_rgba = get_rgba_tuple(outline)
+        
+        pen = aggdraw.Pen(outline_rgba, width)
+        brush = aggdraw.Brush(fill_rgba)
+        
+        draw.rectangle([min_x, min_y, max_x, max_y], pen, brush)
 
 
 def _draw_connectors(
