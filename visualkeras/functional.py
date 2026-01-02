@@ -17,6 +17,7 @@ from collections import deque
 import warnings
 
 import aggdraw
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .layer_utils import (
@@ -118,6 +119,8 @@ def functional_view(
     image_fit: str = "fill",
     image_axis: str = "z",
     layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
+    logo_groups: Optional[Sequence[Dict[str, Any]]] = None,
+    logos_legend: Union[bool, Dict[str, Any]] = False,
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
@@ -132,6 +135,15 @@ def functional_view(
                            - 'outline': Border color (default: black).
                            - 'width': Border thickness (default: 1).
                            - 'padding': Padding around the group (default: 10).
+    :param logo_groups: List of dicts defining groups of layers to add logos to.
+                        Each dict can contain:
+                        - 'name': Name of the group (for legend).
+                        - 'file': Path to the logo image.
+                        - 'axis': Axis orientation ('x', 'y', 'z'). Default 'z'.
+                        - 'size': Tuple (w, h) or float (scale relative to face min dimension).
+                        - 'corner': Corner position ('top-left', 'top-right', 'bottom-left', 'bottom-right', 'center').
+                        - 'layers': List of layer names or types.
+    :param logos_legend: Boolean or dict to configure the logo legend.
     """
     using_presets = options is not None or preset is not None
 
@@ -401,7 +413,10 @@ def functional_view(
         font=font,
         font_color=font_color,
         render_virtual_nodes=render_virtual_nodes,
+        draw_volume=draw_volume,
         layered_groups=layered_groups,
+        logo_groups=logo_groups,
+        logos_legend=logos_legend,
     )
 
     if to_file is not None:
@@ -965,7 +980,10 @@ def _render_graph(
     font: Optional[ImageFont.ImageFont],
     font_color: Any,
     render_virtual_nodes: bool,
+    draw_volume: bool,
     layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
+    logo_groups: Optional[Sequence[Dict[str, Any]]] = None,
+    logos_legend: Union[bool, Dict[str, Any]] = False,
 ) -> Image.Image:
     max_right = padding
     max_bottom = padding
@@ -1010,6 +1028,23 @@ def _render_graph(
                 
                 max_right = max(max_right, text_x + text_w + padding)
                 max_bottom = max(max_bottom, text_y + text_h + padding)
+
+    # Pre-process logos
+    node_logos = {} # node_id -> list of (group, image)
+    if logo_groups:
+        for group in logo_groups:
+            path = group.get("file")
+            if not path: continue
+            try:
+                logo_img = Image.open(path)
+            except:
+                continue
+                
+            target_nodes = _get_logo_nodes(graph, group)
+            for node in target_nodes:
+                if node.node_id not in node_logos:
+                    node_logos[node.node_id] = []
+                node_logos[node.node_id].append((group, logo_img))
 
     img = Image.new("RGBA", (int(max_right), int(max_bottom)), background_fill)
     draw = aggdraw.Draw(img)
@@ -1293,6 +1328,12 @@ def _render_graph(
             # Re-create aggdraw context
             draw = aggdraw.Draw(img)
 
+        if node.node_id in node_logos:
+            draw.flush()
+            for group, logo_img in node_logos[node.node_id]:
+                _draw_node_logo(img, box, logo_img, group, draw_volume)
+            draw = aggdraw.Draw(img)
+
     draw.flush()
 
     if text_callable is not None:
@@ -1346,6 +1387,11 @@ def _render_graph(
 
     if layered_groups:
         _draw_group_captions(img, graph, layered_groups)
+
+    if logos_legend:
+        if font is None:
+            font = ImageFont.load_default()
+        img = _draw_logos_legend(img, logo_groups, logos_legend, background_fill, font, font_color)
 
     return img
 
@@ -1806,3 +1852,198 @@ def _shape_to_tuple(shape: Any) -> Any:
     if isinstance(shape, list):
         return tuple(shape)
     return shape
+
+def _get_logo_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[FunctionalNode]:
+    layers_ref = group.get("layers", [])
+    if not layers_ref:
+        return []
+    
+    target_nodes = []
+    
+    # Build lookup maps
+    name_to_nodes = {}
+    type_to_nodes = {}
+    
+    for node in graph.nodes.values():
+        if node.kind == "virtual": continue
+        
+        layer_name = getattr(node.layer, 'name', None)
+        if layer_name:
+            if layer_name not in name_to_nodes:
+                name_to_nodes[layer_name] = []
+            name_to_nodes[layer_name].append(node)
+            
+        layer_type = type(node.layer)
+        if layer_type not in type_to_nodes:
+            type_to_nodes[layer_type] = []
+        type_to_nodes[layer_type].append(node)
+        
+    for ref in layers_ref:
+        if isinstance(ref, str):
+            # Try name first
+            if ref in name_to_nodes:
+                target_nodes.extend(name_to_nodes[ref])
+            # If not found by name, check if it matches a type name? 
+            # The requirement says "name specification overriding type specification".
+            # This implies we should check both or have a way to distinguish.
+            # But usually type is passed as a class object in python.
+            # If the user passes a string that happens to be a type name, we might want to support it?
+            # For now, assume string is name, type is type.
+        elif isinstance(ref, type):
+            if ref in type_to_nodes:
+                target_nodes.extend(type_to_nodes[ref])
+                
+    return target_nodes
+
+def _draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dict[str, Any], draw_volume: bool):
+    axis = group.get("axis", "z")
+    if not draw_volume:
+        axis = "z"
+        
+    size = group.get("size", 0.5)
+    corner = group.get("corner", "top-right")
+    
+    # Determine Face Quad
+    quad = [] # TL, TR, BR, BL
+    if axis == 'z': # Front
+         quad = [(box.x1, box.y1), (box.x2, box.y1), (box.x2, box.y2), (box.x1, box.y2)]
+    elif axis == 'y': # Top
+         quad = [(box.x1 + box.de, box.y1 - box.de), (box.x2 + box.de, box.y1 - box.de), (box.x2, box.y1), (box.x1, box.y1)]
+    elif axis == 'x': # Side (Right)
+         quad = [(box.x2 + box.de, box.y1 - box.de), (box.x2, box.y1), (box.x2, box.y2), (box.x2 + box.de, box.y2 - box.de)]
+
+    # Calculate Face Dimensions (approx for sizing)
+    p0 = np.array(quad[0])
+    p1 = np.array(quad[1])
+    p3 = np.array(quad[3])
+    
+    vec_x = p1 - p0
+    vec_y = p3 - p0
+    
+    face_w = np.linalg.norm(vec_x)
+    face_h = np.linalg.norm(vec_y)
+    
+    if face_w == 0 or face_h == 0: return
+    
+    # Calculate Logo Size
+    target_w, target_h = 0, 0
+    if isinstance(size, (float, int)):
+         scale = float(size)
+         base = min(face_w, face_h)
+         target_w = int(base * scale)
+         if target_w <= 0: target_w = 1
+         target_h = int(target_w * logo_img.height / logo_img.width)
+    elif isinstance(size, (tuple, list)):
+         target_w, target_h = size
+         
+    # Resize Logo
+    resized_logo = resize_image_to_fit(logo_img, target_w, target_h, "contain")
+    # Update target dimensions after resize (contain might change aspect)
+    target_w, target_h = resized_logo.size
+    
+    # Position on Face
+    rx = target_w / face_w
+    ry = target_h / face_h
+    
+    # Logo Quad vectors
+    l_vec_x = vec_x * rx
+    l_vec_y = vec_y * ry
+    
+    origin = np.array([0.0, 0.0])
+    
+    if corner == 'top-left':
+        origin = p0
+    elif corner == 'top-right':
+        origin = p1 - l_vec_x
+    elif corner == 'bottom-left':
+        origin = p3 - l_vec_y
+    elif corner == 'bottom-right':
+        # P2 = P0 + vec_x + vec_y
+        p2 = p0 + vec_x + vec_y
+        origin = p2 - l_vec_x - l_vec_y
+    elif corner == 'center':
+        center = p0 + 0.5 * vec_x + 0.5 * vec_y
+        origin = center - 0.5 * l_vec_x - 0.5 * l_vec_y
+        
+    # Construct Logo Quad
+    l_p0 = origin
+    l_p1 = origin + l_vec_x
+    l_p2 = origin + l_vec_x + l_vec_y
+    l_p3 = origin + l_vec_y
+    
+    logo_quad = [tuple(l_p0), tuple(l_p1), tuple(l_p2), tuple(l_p3)]
+    
+    apply_affine_transform(img, resized_logo, logo_quad, "fill")
+
+def _draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], legend_config: Union[bool, Dict[str, Any]], background_fill: Any, font: ImageFont.ImageFont, font_color: Any) -> Image.Image:
+    if not legend_config:
+        return img
+        
+    if isinstance(legend_config, bool):
+        legend_config = {}
+        
+    padding = legend_config.get("padding", 10)
+    spacing = legend_config.get("spacing", 10)
+    
+    patches = []
+    
+    # Determine text height for sizing
+    if hasattr(font, 'getsize'):
+        text_height = font.getsize("Ag")[1]
+    else:
+        text_height = font.getbbox("Ag")[3]
+        
+    # We want to show: [Logo Image] Group Name
+    
+    for group in logo_groups:
+        name = group.get("name")
+        path = group.get("file")
+        if not name or not path: continue
+        
+        try:
+            logo_img = Image.open(path)
+        except:
+            continue
+            
+        # Resize logo for legend
+        # Let's make it square-ish, matching text height * 2?
+        icon_size = int(text_height * 2)
+        logo_img = resize_image_to_fit(logo_img, icon_size, icon_size, "contain")
+        
+        # Measure text
+        if hasattr(font, 'getsize'):
+            text_w, text_h = font.getsize(name)
+        else:
+            bbox = font.getbbox(name)
+            text_w = bbox[2]
+            text_h = bbox[3]
+            
+        patch_w = icon_size + spacing + text_w
+        patch_h = max(icon_size, text_h)
+        
+        patch = Image.new("RGBA", (patch_w, patch_h), background_fill)
+        draw = ImageDraw.Draw(patch)
+        
+        # Paste logo
+        # Center vertically
+        logo_y = (patch_h - icon_size) // 2
+        patch.paste(logo_img, (0, logo_y), logo_img)
+        
+        # Draw text
+        text_x = icon_size + spacing
+        text_y = (patch_h - text_h) // 2
+        draw.text((text_x, text_y), name, font=font, fill=font_color)
+        
+        patches.append(patch)
+        
+    if not patches:
+        return img
+        
+    # Import linear_layout and vertical_image_concat if not available in scope (they are in functional.py imports)
+    from .utils import linear_layout, vertical_image_concat
+    
+    legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding,
+                                 spacing=spacing,
+                                 background_fill=background_fill, horizontal=True)
+                                 
+    return vertical_image_concat(img, legend_image, background_fill=background_fill)
