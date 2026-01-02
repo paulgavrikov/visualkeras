@@ -540,10 +540,10 @@ def graph_view(model, to_file: str = None,
             else:
                 node.draw(draw)
 
+    draw.flush()
+
     if layered_groups:
         _draw_graph_group_captions(img, id_to_node_list_map, layered_groups, model)
-
-    draw.flush()
 
     if to_file is not None:
         img.save(to_file)
