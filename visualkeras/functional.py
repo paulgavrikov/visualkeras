@@ -34,7 +34,9 @@ from .utils import (
     fade_color, 
     get_rgba_tuple, 
     resize_image_to_fit, 
-    apply_affine_transform
+    apply_affine_transform,
+    draw_node_logo,
+    draw_logos_legend
 )
 
 
@@ -1331,7 +1333,7 @@ def _render_graph(
         if node.node_id in node_logos:
             draw.flush()
             for group, logo_img in node_logos[node.node_id]:
-                _draw_node_logo(img, box, logo_img, group, draw_volume)
+                draw_node_logo(img, box, logo_img, group, draw_volume)
             draw = aggdraw.Draw(img)
 
     draw.flush()
@@ -1391,7 +1393,7 @@ def _render_graph(
     if logos_legend:
         if font is None:
             font = ImageFont.load_default()
-        img = _draw_logos_legend(img, logo_groups, logos_legend, background_fill, font, font_color)
+        img = draw_logos_legend(img, logo_groups, logos_legend, background_fill, font, font_color)
 
     return img
 
@@ -1894,165 +1896,3 @@ def _get_logo_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[Funct
                 target_nodes.extend(type_to_nodes[ref])
                 
     return target_nodes
-
-def _draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dict[str, Any], draw_volume: bool):
-    axis = group.get("axis", "z")
-    if not draw_volume:
-        axis = "z"
-        
-    size = group.get("size", 0.5)
-    corner = group.get("corner", "top-right")
-    padding = group.get("padding", 0)
-    
-    # Determine Face Quad
-    quad = [] # TL, TR, BR, BL
-    if axis == 'z': # Front
-         quad = [(box.x1, box.y1), (box.x2, box.y1), (box.x2, box.y2), (box.x1, box.y2)]
-    elif axis == 'y': # Top
-         quad = [(box.x1 + box.de, box.y1 - box.de), (box.x2 + box.de, box.y1 - box.de), (box.x2, box.y1), (box.x1, box.y1)]
-    elif axis == 'x': # Side (Right)
-         # Fix: Swap Left/Right definition so P0 is Front-Edge (Left of face) and P1 is Back-Edge (Right of face)
-         quad = [(box.x2, box.y1), (box.x2 + box.de, box.y1 - box.de), (box.x2 + box.de, box.y2 - box.de), (box.x2, box.y2)]
-
-    # Calculate Face Dimensions (approx for sizing)
-    p0 = np.array(quad[0])
-    p1 = np.array(quad[1])
-    p3 = np.array(quad[3])
-    
-    vec_x = p1 - p0
-    vec_y = p3 - p0
-    
-    face_w = np.linalg.norm(vec_x)
-    face_h = np.linalg.norm(vec_y)
-    
-    if face_w == 0 or face_h == 0: return
-
-    # Unit vectors for padding
-    u_vec_x = vec_x / face_w
-    u_vec_y = vec_y / face_h
-    
-    pad_vec_x = u_vec_x * padding
-    pad_vec_y = u_vec_y * padding
-    
-    # Calculate Logo Size
-    target_w, target_h = 0, 0
-    if isinstance(size, (float, int)):
-         scale = float(size)
-         base = min(face_w, face_h)
-         target_w = int(base * scale)
-         if target_w <= 0: target_w = 1
-         target_h = int(target_w * logo_img.height / logo_img.width)
-    elif isinstance(size, (tuple, list)):
-         target_w, target_h = size
-         
-    # Resize Logo
-    resized_logo = resize_image_to_fit(logo_img, target_w, target_h, "contain")
-    # Update target dimensions after resize (contain might change aspect)
-    target_w, target_h = resized_logo.size
-    
-    # Position on Face
-    rx = target_w / face_w
-    ry = target_h / face_h
-    
-    # Logo Quad vectors
-    l_vec_x = vec_x * rx
-    l_vec_y = vec_y * ry
-    
-    origin = np.array([0.0, 0.0])
-    
-    if corner == 'top-left':
-        origin = p0 + pad_vec_x + pad_vec_y
-    elif corner == 'top-right':
-        origin = p1 - l_vec_x - pad_vec_x + pad_vec_y
-    elif corner == 'bottom-left':
-        origin = p3 - l_vec_y + pad_vec_x - pad_vec_y
-    elif corner == 'bottom-right':
-        # P2 = P0 + vec_x + vec_y
-        p2 = p0 + vec_x + vec_y
-        origin = p2 - l_vec_x - l_vec_y - pad_vec_x - pad_vec_y
-    elif corner == 'center':
-        center = p0 + 0.5 * vec_x + 0.5 * vec_y
-        origin = center - 0.5 * l_vec_x - 0.5 * l_vec_y
-        
-    # Construct Logo Quad
-    l_p0 = origin
-    l_p1 = origin + l_vec_x
-    l_p2 = origin + l_vec_x + l_vec_y
-    l_p3 = origin + l_vec_y
-    
-    logo_quad = [tuple(l_p0), tuple(l_p1), tuple(l_p2), tuple(l_p3)]
-    
-    apply_affine_transform(img, resized_logo, logo_quad, "fill")
-
-def _draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], legend_config: Union[bool, Dict[str, Any]], background_fill: Any, font: ImageFont.ImageFont, font_color: Any) -> Image.Image:
-    if not legend_config:
-        return img
-        
-    if isinstance(legend_config, bool):
-        legend_config = {}
-        
-    padding = legend_config.get("padding", 10)
-    spacing = legend_config.get("spacing", 10)
-    
-    patches = []
-    
-    # Determine text height for sizing
-    if hasattr(font, 'getsize'):
-        text_height = font.getsize("Ag")[1]
-    else:
-        text_height = font.getbbox("Ag")[3]
-        
-    # We want to show: [Logo Image] Group Name
-    
-    for group in logo_groups:
-        name = group.get("name")
-        path = group.get("file")
-        if not name or not path: continue
-        
-        try:
-            logo_img = Image.open(path)
-        except:
-            continue
-            
-        # Resize logo for legend
-        # Let's make it square-ish, matching text height * 2?
-        icon_size = int(text_height * 2)
-        logo_img = resize_image_to_fit(logo_img, icon_size, icon_size, "contain")
-        
-        # Measure text
-        if hasattr(font, 'getsize'):
-            text_w, text_h = font.getsize(name)
-        else:
-            bbox = font.getbbox(name)
-            text_w = bbox[2]
-            text_h = bbox[3]
-            
-        patch_w = icon_size + spacing + text_w
-        patch_h = max(icon_size, text_h)
-        
-        patch = Image.new("RGBA", (patch_w, patch_h), background_fill)
-        draw = ImageDraw.Draw(patch)
-        
-        # Paste logo
-        # Center vertically
-        logo_y = (patch_h - icon_size) // 2
-        patch.paste(logo_img, (0, logo_y), logo_img)
-        
-        # Draw text
-        text_x = icon_size + spacing
-        text_y = (patch_h - text_h) // 2
-        draw.text((text_x, text_y), name, font=font, fill=font_color)
-        
-        patches.append(patch)
-        
-    if not patches:
-        return img
-        
-    # Import linear_layout and vertical_image_concat if not available in scope (they are in functional.py imports)
-    from .utils import linear_layout, vertical_image_concat
-    
-    legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding,
-                                 spacing=spacing,
-                                 background_fill=background_fill, horizontal=True)
-                                 
-    return vertical_image_concat(img, legend_image, background_fill=background_fill)

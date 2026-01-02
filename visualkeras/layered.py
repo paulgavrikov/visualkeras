@@ -87,6 +87,42 @@ def _get_group_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
     return group_boxes
 
 
+def _get_logo_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
+    layers_ref = group.get("layers", [])
+    if not layers_ref:
+        return []
+        
+    target_boxes = []
+    
+    # Build lookup maps
+    name_to_boxes = {}
+    type_to_boxes = {}
+    
+    for box in boxes:
+        if not hasattr(box, 'layer'): continue
+        
+        layer_name = getattr(box.layer, 'name', None)
+        if layer_name:
+            if layer_name not in name_to_boxes:
+                name_to_boxes[layer_name] = []
+            name_to_boxes[layer_name].append(box)
+            
+        layer_type = type(box.layer)
+        if layer_type not in type_to_boxes:
+            type_to_boxes[layer_type] = []
+        type_to_boxes[layer_type].append(box)
+        
+    for ref in layers_ref:
+        if isinstance(ref, str):
+            if ref in name_to_boxes:
+                target_boxes.extend(name_to_boxes[ref])
+        elif isinstance(ref, type):
+            if ref in type_to_boxes:
+                target_boxes.extend(type_to_boxes[ref])
+                
+    return target_boxes
+
+
 def _draw_layered_group_boxes(draw, boxes, groups, draw_reversed):
     for group in groups:
         group_boxes = _get_group_boxes(boxes, group)
@@ -234,6 +270,8 @@ def layered_view(model,
                  image_fit: str = "fill",
                  image_axis: str = "z",
                  layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
+                 logo_groups: Optional[Sequence[Dict[str, Any]]] = None,
+                 logos_legend: Union[bool, Dict[str, Any]] = False,
                  styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
                  *,
                  options: Union[LayeredOptions, Mapping[str, Any], None] = None,
@@ -949,6 +987,23 @@ def layered_view(model,
 
     draw = aggdraw.Draw(img)
 
+    # Prepare logos
+    box_logos = {}
+    if logo_groups:
+        for group in logo_groups:
+            path = group.get("file")
+            if not path: continue
+            try:
+                logo_img = Image.open(path)
+            except:
+                continue
+            
+            target_boxes = _get_logo_boxes(boxes, group)
+            for box in target_boxes:
+                if id(box) not in box_logos:
+                    box_logos[id(box)] = []
+                box_logos[id(box)].append((group, logo_img))
+
     # Correct x positions of reversed boxes
     if draw_reversed:
         for box in boxes:
@@ -993,6 +1048,12 @@ def layered_view(model,
                            box.x2, box.y2], pen)
 
             box.draw(draw, draw_reversed=True)
+
+            if id(box) in box_logos:
+                draw.flush()
+                for group, logo_img in box_logos[id(box)]:
+                    draw_node_logo(img, box, logo_img, group, draw_volume, draw_reversed=True)
+                draw = aggdraw.Draw(img)
 
             if getattr(box, 'image', None):
                 draw.flush()
@@ -1045,6 +1106,12 @@ def layered_view(model,
                            box.x1, box.y1], pen)
 
             box.draw(draw, draw_reversed=False)
+
+            if id(box) in box_logos:
+                draw.flush()
+                for group, logo_img in box_logos[id(box)]:
+                    draw_node_logo(img, box, logo_img, group, draw_volume, draw_reversed=False)
+                draw = aggdraw.Draw(img)
 
             if getattr(box, 'image', None):
                 draw.flush()
@@ -1219,6 +1286,11 @@ def layered_view(model,
 
     if layered_groups:
         _draw_layered_group_captions(img, boxes, layered_groups, draw_reversed)
+
+    if logos_legend:
+        if font is None:
+            font = ImageFont.load_default()
+        img = draw_logos_legend(img, logo_groups, logos_legend, background_fill, font, font_color)
 
     if to_file is not None:
         img.save(to_file)
