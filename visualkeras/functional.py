@@ -1902,6 +1902,7 @@ def _draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Di
         
     size = group.get("size", 0.5)
     corner = group.get("corner", "top-right")
+    padding = group.get("padding", 0)
     
     # Determine Face Quad
     quad = [] # TL, TR, BR, BL
@@ -1910,7 +1911,8 @@ def _draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Di
     elif axis == 'y': # Top
          quad = [(box.x1 + box.de, box.y1 - box.de), (box.x2 + box.de, box.y1 - box.de), (box.x2, box.y1), (box.x1, box.y1)]
     elif axis == 'x': # Side (Right)
-         quad = [(box.x2 + box.de, box.y1 - box.de), (box.x2, box.y1), (box.x2, box.y2), (box.x2 + box.de, box.y2 - box.de)]
+         # Fix: Swap Left/Right definition so P0 is Front-Edge (Left of face) and P1 is Back-Edge (Right of face)
+         quad = [(box.x2, box.y1), (box.x2 + box.de, box.y1 - box.de), (box.x2 + box.de, box.y2 - box.de), (box.x2, box.y2)]
 
     # Calculate Face Dimensions (approx for sizing)
     p0 = np.array(quad[0])
@@ -1924,6 +1926,13 @@ def _draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Di
     face_h = np.linalg.norm(vec_y)
     
     if face_w == 0 or face_h == 0: return
+
+    # Unit vectors for padding
+    u_vec_x = vec_x / face_w
+    u_vec_y = vec_y / face_h
+    
+    pad_vec_x = u_vec_x * padding
+    pad_vec_y = u_vec_y * padding
     
     # Calculate Logo Size
     target_w, target_h = 0, 0
@@ -1952,15 +1961,15 @@ def _draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Di
     origin = np.array([0.0, 0.0])
     
     if corner == 'top-left':
-        origin = p0
+        origin = p0 + pad_vec_x + pad_vec_y
     elif corner == 'top-right':
-        origin = p1 - l_vec_x
+        origin = p1 - l_vec_x - pad_vec_x + pad_vec_y
     elif corner == 'bottom-left':
-        origin = p3 - l_vec_y
+        origin = p3 - l_vec_y + pad_vec_x - pad_vec_y
     elif corner == 'bottom-right':
         # P2 = P0 + vec_x + vec_y
         p2 = p0 + vec_x + vec_y
-        origin = p2 - l_vec_x - l_vec_y
+        origin = p2 - l_vec_x - l_vec_y - pad_vec_x - pad_vec_y
     elif corner == 'center':
         center = p0 + 0.5 * vec_x + 0.5 * vec_y
         origin = center - 0.5 * l_vec_x - 0.5 * l_vec_y
