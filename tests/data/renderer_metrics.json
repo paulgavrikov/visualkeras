@@ -75,7 +75,7 @@
     "tag": "graph_tensor_nodes"
   },
   "layered_3d_default": {
-    "checksum": 830321.0,
+    "checksum": 827565.0,
     "mean": 202.715087890625,
     "pixels": {
       "0-0": [
@@ -100,7 +100,7 @@
     "tag": "layered_3d_default"
   },
   "layered_3d_reversed": {
-    "checksum": 840894.0,
+    "checksum": 834649.0,
     "mean": 205.29638671875,
     "pixels": {
       "0-0": [

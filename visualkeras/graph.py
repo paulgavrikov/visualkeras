@@ -1,6 +1,6 @@
-from typing import Any, Dict, Mapping, Optional, Union
+from typing import Any, Dict, Mapping, Optional, Union, List, Sequence, Tuple
 import aggdraw
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from math import ceil
 import warnings
 from .utils import *
@@ -24,6 +24,7 @@ def graph_view(model, to_file: str = None,
                styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
                image_fit: str = 'contain',
                circular_crop: bool = True,
+               layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
                *, options: Union[GraphOptions, Mapping[str, Any], None] = None,
                preset: Union[str, None] = None) -> Image:
     """
@@ -53,6 +54,7 @@ def graph_view(model, to_file: str = None,
         connector_fill, connector_width, ellipsize_after, show_neurons, box_scale.
     :param image_fit: Default image fitting mode ('contain', 'cover', 'fill', 'match_aspect').
     :param circular_crop: If True, images on nodes will be cropped to a circle. Default is True.
+    :param layered_groups: List of dicts defining groups of layers to highlight with a background rectangle.
     :param options: Optional ``GraphOptions`` (or mapping) providing a configuration bundle.
         Explicit keyword arguments override the bundle.
     :param preset: Name of a preset from ``visualkeras.GRAPH_PRESETS`` to use as the base style.
@@ -79,6 +81,7 @@ def graph_view(model, to_file: str = None,
             "styles": None,
             "image_fit": 'contain',
             "circular_crop": True,
+            "layered_groups": None,
         })
 
         current_params = {
@@ -97,6 +100,7 @@ def graph_view(model, to_file: str = None,
             "styles": styles,
             "image_fit": image_fit,
             "circular_crop": circular_crop,
+            "layered_groups": layered_groups,
         }
 
         custom_keys = [
@@ -104,7 +108,7 @@ def graph_view(model, to_file: str = None,
             if key in defaults and value != defaults[key]
         ]
 
-        if len(custom_keys) >= 4:
+        if len(custom_keys) >= 5:
             warnings.warn(
                 "graph_view received many custom keyword arguments. "
                 "Consider using visualkeras.show(..., mode='graph', preset=...) and the GraphOptions dataclass for a simpler workflow.",
@@ -116,6 +120,7 @@ def graph_view(model, to_file: str = None,
         defaults = GraphOptions().to_kwargs()
         defaults["color_map"] = None
         defaults["styles"] = None
+        defaults["layered_groups"] = None
 
         resolved = dict(defaults)
 
@@ -155,6 +160,7 @@ def graph_view(model, to_file: str = None,
             "styles": styles,
             "image_fit": image_fit,
             "circular_crop": circular_crop,
+            "layered_groups": layered_groups,
         }
 
         for key, value in explicit_values.items():
@@ -178,6 +184,7 @@ def graph_view(model, to_file: str = None,
         styles = resolved["styles"]
         image_fit = resolved["image_fit"]
         circular_crop = resolved["circular_crop"]
+        layered_groups = resolved["layered_groups"]
 
         if color_map is not None and not isinstance(color_map, dict):
             color_map = dict(color_map)
@@ -390,16 +397,89 @@ def graph_view(model, to_file: str = None,
 
     img_width = max_right + padding
     img_height = max(*layer_y) + 2 * padding
-    img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
-
-    draw = aggdraw.Draw(img)
-
-    # y correction (centering)
+    
+    # Calculate y offsets for centering
+    y_offsets = []
     for i, layer in enumerate(layers):
-        y_off = (img.height - layer_y[i]) / 2
+        y_off = (img_height - layer_y[i]) / 2
+        y_offsets.append(y_off)
+        
+    # Apply offsets to nodes
+    for i, layer in enumerate(layers):
+        y_off = y_offsets[i]
         for node in layer:
             node.y1 += y_off
             node.y2 += y_off
+            
+    # Calculate group bounds and expand image if needed
+    min_x, min_y = 0, 0
+    max_x, max_y = img_width, img_height
+    
+    if layered_groups:
+        dummy_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        for group in layered_groups:
+            group_nodes = _get_graph_group_nodes(id_to_node_list_map, group, model)
+            if not group_nodes: continue
+            
+            g_min_x = float('inf')
+            g_max_x = float('-inf')
+            g_min_y = float('inf')
+            g_max_y = float('-inf')
+            
+            for node in group_nodes:
+                g_min_x = min(g_min_x, node.x1)
+                g_max_x = max(g_max_x, node.x2)
+                g_min_y = min(g_min_y, node.y1)
+                g_max_y = max(g_max_y, node.y2)
+                
+            padding_val = group.get("padding", 10)
+            g_min_x -= padding_val
+            g_max_x += padding_val
+            g_min_y -= padding_val
+            g_max_y += padding_val
+            
+            min_x = min(min_x, g_min_x)
+            max_x = max(max_x, g_max_x)
+            min_y = min(min_y, g_min_y)
+            max_y = max(max_y, g_max_y)
+            
+            # Caption
+            caption = group.get("name", group.get("caption"))
+            if caption:
+                font = _get_font(group)
+                text_w, text_h = _measure_text(dummy_draw, caption, font)
+                
+                center_x = (g_min_x + g_max_x) / 2
+                text_x1 = center_x - text_w / 2
+                text_x2 = center_x + text_w / 2
+                
+                gap = group.get("text_spacing", 5)
+                text_bottom = g_max_y + gap + text_h
+                
+                min_x = min(min_x, text_x1)
+                max_x = max(max_x, text_x2)
+                max_y = max(max_y, text_bottom)
+
+    final_width = max_x - min_x
+    final_height = max_y - min_y
+    
+    img = Image.new('RGBA', (int(ceil(final_width)), int(ceil(final_height))), background_fill)
+    draw = aggdraw.Draw(img)
+    
+    # Shift nodes if needed
+    shift_x = -min_x
+    shift_y = -min_y
+    
+    if shift_x != 0 or shift_y != 0:
+        for layer in layers:
+            for node in layer:
+                node.x1 += shift_x
+                node.x2 += shift_x
+                node.y1 += shift_y
+                node.y2 += shift_y
+                
+    if layered_groups:
+        _draw_graph_group_boxes(draw, id_to_node_list_map, layered_groups, model)
 
     for start_idx, end_idx in zip(*np.where(adj_matrix > 0)):
         start_id = next(get_keys_by_value(id_to_num_mapping, start_idx))
@@ -460,6 +540,9 @@ def graph_view(model, to_file: str = None,
             else:
                 node.draw(draw)
 
+    if layered_groups:
+        _draw_graph_group_captions(img, id_to_node_list_map, layered_groups, model)
+
     draw.flush()
 
     if to_file is not None:
@@ -478,3 +561,128 @@ def _draw_connector(draw, start_node, end_node, color, width):
     x2 = end_node.x1
     y2 = end_node.y1 + (end_node.y2 - end_node.y1) / 2
     draw.line([x1, y1, x2, y2], pen)
+
+def _get_graph_group_nodes(id_to_node_list_map: Dict[int, List[Any]], group: Dict[str, Any], model) -> List[Any]:
+    layers_ref = group.get("layers", [])
+    if not layers_ref:
+        return []
+        
+    group_nodes = []
+    
+    # Build lookup maps
+    name_to_layer = {}
+    for layer in model.layers:
+        name = getattr(layer, 'name', None)
+        if name:
+            name_to_layer[name] = layer
+            
+    for ref in layers_ref:
+        layer = None
+        if isinstance(ref, str):
+            layer = name_to_layer.get(ref)
+        else:
+            layer = ref
+            
+        if layer:
+            nodes = id_to_node_list_map.get(id(layer))
+            if nodes:
+                group_nodes.extend(nodes)
+                
+    return group_nodes
+
+def _draw_graph_group_boxes(draw, id_to_node_list_map, groups, model):
+    for group in groups:
+        nodes = _get_graph_group_nodes(id_to_node_list_map, group, model)
+        if not nodes: continue
+        
+        min_x = float('inf')
+        max_x = float('-inf')
+        min_y = float('inf')
+        max_y = float('-inf')
+        
+        for node in nodes:
+            min_x = min(min_x, node.x1)
+            max_x = max(max_x, node.x2)
+            min_y = min(min_y, node.y1)
+            max_y = max(max_y, node.y2)
+            
+        padding = group.get("padding", 10)
+        min_x -= padding
+        max_x += padding
+        min_y -= padding
+        max_y += padding
+        
+        fill = group.get("fill", (200, 200, 200, 100))
+        outline = group.get("outline", "black")
+        width = group.get("width", 1)
+        
+        pen = aggdraw.Pen(get_rgba_tuple(outline), width)
+        brush = aggdraw.Brush(get_rgba_tuple(fill))
+        
+        draw.rectangle([min_x, min_y, max_x, max_y], pen, brush)
+
+def _draw_graph_group_captions(img, id_to_node_list_map, groups, model):
+    draw = ImageDraw.Draw(img)
+    for group in groups:
+        caption = group.get("name", group.get("caption"))
+        if not caption: continue
+        
+        nodes = _get_graph_group_nodes(id_to_node_list_map, group, model)
+        if not nodes: continue
+        
+        min_x = float('inf')
+        max_x = float('-inf')
+        min_y = float('inf')
+        max_y = float('-inf')
+        
+        for node in nodes:
+            min_x = min(min_x, node.x1)
+            max_x = max(max_x, node.x2)
+            min_y = min(min_y, node.y1)
+            max_y = max(max_y, node.y2)
+            
+        padding = group.get("padding", 10)
+        min_x -= padding
+        max_x += padding
+        min_y -= padding
+        max_y += padding
+        
+        font = _get_font(group)
+        color = group.get("font_color", "black")
+        gap = group.get("text_spacing", 5)
+        
+        text_w, text_h = _measure_text(draw, caption, font)
+        
+        center_x = (min_x + max_x) / 2
+        text_x = center_x - text_w / 2
+        text_y = max_y + gap
+        
+        draw.text((text_x, text_y), caption, fill=color, font=font)
+
+def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
+    font_src = group.get("font", None)
+    font_size = group.get("font_size", 15)
+    
+    if font_src is None:
+         try:
+            return ImageFont.truetype("arial.ttf", font_size)
+         except IOError:
+            return ImageFont.load_default()
+    elif isinstance(font_src, str):
+         try:
+            return ImageFont.truetype(font_src, font_size)
+         except IOError:
+            return ImageFont.load_default()
+    elif isinstance(font_src, ImageFont.ImageFont):
+        return font_src
+    else:
+        return ImageFont.load_default()
+
+def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
+    if hasattr(font, "getbbox"):
+        left, top, right, bottom = font.getbbox(text)
+        return right - left, bottom - top
+    else:
+        return draw.textsize(text, font=font)
+
+

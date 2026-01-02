@@ -42,6 +42,12 @@ def test_layered_options_default_keys():
         "sizing_mode",
         "dimension_caps",
         "relative_base_size",
+        "connector_fill",
+        "connector_width",
+        "image_fit",
+        "image_axis",
+        "layered_groups",
+        "styles",
     }
     assert set(kwargs.keys()) == expected_keys
     assert kwargs["type_ignore"] == ()
@@ -91,6 +97,8 @@ def test_graph_options_defaults():
         "ellipsize_after",
         "inout_as_tensor",
         "show_neurons",
+        "styles",
+        "layered_groups",
     }
     assert set(kwargs.keys()) == expected_keys
     assert kwargs["color_map"] == {}

@@ -106,6 +106,7 @@ class GraphOptions:
     ellipsize_after: int = 10
     inout_as_tensor: bool = True
     show_neurons: bool = True
+    layered_groups: Optional[Sequence[Dict[str, Any]]] = None
     styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
@@ -123,6 +124,7 @@ class GraphOptions:
             "ellipsize_after": self.ellipsize_after,
             "inout_as_tensor": self.inout_as_tensor,
             "show_neurons": self.show_neurons,
+            "layered_groups": self.layered_groups,
             "styles": self.styles,
         }
 
