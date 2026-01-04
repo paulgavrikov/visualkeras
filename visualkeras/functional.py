@@ -117,6 +117,7 @@ def functional_view(
     virtual_node_size: int = 12,
     render_virtual_nodes: bool = False,
     draw_volume: bool = False,
+    orientation_rotation: Optional[float] = None,
     shade_step: int = 10,
     image_fit: str = "fill",
     image_axis: str = "z",
@@ -182,6 +183,7 @@ def functional_view(
             "virtual_node_size": virtual_node_size,
             "render_virtual_nodes": render_virtual_nodes,
             "draw_volume": draw_volume,
+            "orientation_rotation": orientation_rotation,
             "shade_step": shade_step,
             "image_fit": image_fit,
             "image_axis": image_axis,
@@ -259,6 +261,7 @@ def functional_view(
             "virtual_node_size": virtual_node_size,
             "render_virtual_nodes": render_virtual_nodes,
             "draw_volume": draw_volume,
+            "orientation_rotation": orientation_rotation,
             "shade_step": shade_step,
             "image_fit": image_fit,
             "image_axis": image_axis,
@@ -301,6 +304,7 @@ def functional_view(
         virtual_node_size = resolved["virtual_node_size"]
         render_virtual_nodes = resolved["render_virtual_nodes"]
         draw_volume = resolved["draw_volume"]
+        orientation_rotation = resolved.get("orientation_rotation", None)
         shade_step = resolved["shade_step"]
         image_fit = resolved["image_fit"]
         image_axis = resolved["image_axis"]
@@ -336,6 +340,7 @@ def functional_view(
         "connector_arrow": connector_arrow,
         "connector_padding": connector_padding,
         "draw_volume": draw_volume,
+        "orientation_rotation": orientation_rotation,
         "shade_step": shade_step,
         "image_fit": image_fit,
         "image_axis": image_axis,
@@ -416,6 +421,7 @@ def functional_view(
         font_color=font_color,
         render_virtual_nodes=render_virtual_nodes,
         draw_volume=draw_volume,
+        orientation_rotation=orientation_rotation,
         layered_groups=layered_groups,
         logo_groups=logo_groups,
         logos_legend=logos_legend,
@@ -983,6 +989,7 @@ def _render_graph(
     font_color: Any,
     render_virtual_nodes: bool,
     draw_volume: bool,
+    orientation_rotation: Optional[float] = None,
     layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
     logo_groups: Optional[Sequence[Dict[str, Any]]] = None,
     logos_legend: Union[bool, Dict[str, Any]] = False,
@@ -1077,8 +1084,9 @@ def _render_graph(
         box = Box()
         box.de = getattr(node, 'de', 0)
         box.shade = getattr(node, 'shade', 0)
+        box.rotation = orientation_rotation
 
-        # Calculate coordinates for the Front Face
+        # Calculate coordinates for the Front Face (Layout reference)
         box.x1 = node.x
         box.y1 = node.y + box.de
         
@@ -1113,219 +1121,27 @@ def _render_graph(
             # Apply image to the front face
             draw.flush()
             
+        # Re-implement Image pasting using Box's projected faces
+        if node.image is not None:
+            draw.flush()
+            
             fit_mode = node.style.get("image_fit", "fill")
             axis = node.style.get("image_axis", "z")
             
-            # Determine target dimensions and position based on axis
-            target_w = 0
-            target_h = 0
-            paste_x = 0
-            paste_y = 0
+            # Retrieve the projected quad for the target face from the Box
+            # Axis 'z' -> Front Face (Index 0)
+            # Axis 'y' -> Top Face (Index 4 - assuming Box implementation details below)
+            # Axis 'x' -> Right Face (Index 2)
             
-            # For affine transform (Top/Side faces)
-            is_affine = False
-            affine_quad = [] # [(x,y), (x,y), (x,y)] -> TL, TR, BL
+            target_face_idx = 0 # Front
+            if axis == 'y': target_face_idx = 4 # Top
+            elif axis == 'x': target_face_idx = 2 # Right / Side
+
+            # Get Quad from Box (list of tuples)
+            quad = box.get_face_quad(target_face_idx)
             
-            if axis == 'z': # Front Face (Rectangle)
-                target_w = int(real_width)
-                target_h = int(real_height)
-                paste_x = box.x1
-                paste_y = box.y1
-                
-            elif axis == 'y': # Top Face (Parallelogram)
-                # Logical dimensions: Width x Depth
-                # We map image width to 'real_width' and image height to 'de' (approx)
-                # But strictly, we map to the parallelogram.
-                is_affine = True
-                # Top Face Points:
-                # TL: (x1 + de, y1 - de)
-                # TR: (x2 + de, y1 - de)
-                # BL: (x1, y1)
-                # BR: (x2, y1)
-                
-                # Affine Quad (TL, TR, BL)
-                affine_quad = [
-                    (box.x1 + box.de, box.y1 - box.de), # TL
-                    (box.x2 + box.de, box.y1 - box.de), # TR
-                    (box.x1, box.y1)                    # BL
-                ]
-                
-                # For fitting logic, we need "logical" dimensions
-                target_w = int(real_width)
-                target_h = int(box.de) # Use depth as height for fitting
-                
-            elif axis == 'x': # Side Face (Parallelogram)
-                # Logical dimensions: Depth x Height
-                is_affine = True
-                # Side Face Points:
-                # TL: (x2 + de, y1 - de)
-                # TR: (x2 + de, y2 - de) -- Wait, Side face is vertical?
-                # Let's check Box.draw again.
-                # Side Face (Right):
-                # (x2 + de, y1 - de) -> Back Top-Right
-                # (x2, y1)           -> Front Top-Right
-                # (x2, y2)           -> Front Bottom-Right
-                # (x2 + de, y2 - de) -> Back Bottom-Right
-                
-                # We want to map image to this face.
-                # Image Top-Left -> Back Top-Right (x2 + de, y1 - de)
-                # Image Top-Right -> Back Bottom-Right (x2 + de, y2 - de) ?? No, that's vertical edge.
-                
-                # Usually:
-                # Image X axis -> Depth (Diagonal)
-                # Image Y axis -> Height (Vertical)
-                
-                # Let's map:
-                # TL: (x2 + de, y1 - de)
-                # TR: (x2, y1)  (Wait, this is going "forward" in depth?)
-                # BL: (x2 + de, y2 - de)
-                
-                # Or:
-                # TL: (x2 + de, y1 - de)
-                # TR: (x2 + de, y2 - de) ? No.
-                
-                # Let's assume standard orientation:
-                # Image Width -> Depth
-                # Image Height -> Height
-                
-                # TL: (x2 + de, y1 - de)
-                # TR: (x2, y1)  (Wait, x2 < x2+de, so this is going left?)
-                # Actually, visualkeras draws depth going Right-Up (if not reversed).
-                # x1 < x2.
-                # x1+de > x1.
-                # y1-de < y1.
-                
-                # Side face is on the Right.
-                # Top edge: (x2+de, y1-de) to (x2, y1).
-                # Left edge: (x2, y1) to (x2, y2).
-                # Right edge: (x2+de, y1-de) to (x2+de, y2-de).
-                # Bottom edge: (x2+de, y2-de) to (x2, y2).
-                
-                # So it's a parallelogram.
-                # Let's map Image TL to (x2+de, y1-de).
-                # Image TR (Width) -> (x2, y1). (Along depth axis, coming forward).
-                # Image BL (Height) -> (x2+de, y2-de). (Down vertical axis).
-                
-                affine_quad = [
-                    (box.x2 + box.de, box.y1 - box.de), # TL
-                    (box.x2, box.y1),                   # TR
-                    (box.x2 + box.de, box.y2 - box.de)  # BL
-                ]
-                
-                target_w = int(box.de)
-                target_h = int(real_height)
-
-            if target_w > 0 and target_h > 0:
-                # Prepare the image to paste
-                to_paste = node.image
-                
-                # 1. Resize/Crop based on fit_mode
-                if fit_mode == "fill" or fit_mode == "match_aspect":
-                    to_paste = to_paste.resize((target_w, target_h), Image.LANCZOS)
-                    
-                elif fit_mode == "cover":
-                    img_w, img_h = to_paste.size
-                    ratio_w = target_w / img_w
-                    ratio_h = target_h / img_h
-                    scale = max(ratio_w, ratio_h)
-                    new_w = int(img_w * scale)
-                    new_h = int(img_h * scale)
-                    to_paste = to_paste.resize((new_w, new_h), Image.LANCZOS)
-                    left = (new_w - target_w) // 2
-                    top = (new_h - target_h) // 2
-                    to_paste = to_paste.crop((left, top, left + target_w, top + target_h))
-                    
-                elif fit_mode == "contain":
-                    img_w, img_h = to_paste.size
-                    ratio_w = target_w / img_w
-                    ratio_h = target_h / img_h
-                    scale = min(ratio_w, ratio_h)
-                    new_w = int(img_w * scale)
-                    new_h = int(img_h * scale)
-                    to_paste = to_paste.resize((new_w, new_h), Image.LANCZOS)
-                    
-                    # Create a transparent container of target size
-                    container = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-                    off_x = (target_w - new_w) // 2
-                    off_y = (target_h - new_h) // 2
-                    container.paste(to_paste, (off_x, off_y))
-                    to_paste = container
-                
-                else:
-                    to_paste = to_paste.resize((target_w, target_h), Image.LANCZOS)
-
-                # 2. Paste or Transform
-                if not is_affine:
-                    img.paste(to_paste, (int(paste_x), int(paste_y)), to_paste)
-                else:
-                    # Calculate Affine Matrix
-                    # Source: (0,0), (w,0), (0,h)
-                    # Dest: P0, P1, P2
-                    
-                    src_w, src_h = to_paste.size
-                    p0, p1, p2 = affine_quad
-                    
-                    # Solve for M (Src -> Dest)
-                    # x_dst = a*x_src + b*y_src + c
-                    # y_dst = d*x_src + e*y_src + f
-                    
-                    # At (0,0): c = p0.x, f = p0.y
-                    c = p0[0]
-                    f = p0[1]
-                    
-                    # At (w,0): a*w + c = p1.x => a = (p1.x - c) / w
-                    a = (p1[0] - c) / src_w
-                    d = (p1[1] - f) / src_w
-                    
-                    # At (0,h): b*h + c = p2.x => b = (p2.x - c) / h
-                    b = (p2[0] - c) / src_h
-                    e = (p2[1] - f) / src_h
-                    
-                    # Image.transform expects INVERSE matrix (Dest -> Src)
-                    # M = [[a, b, c], [d, e, f], [0, 0, 1]]
-                    # We need M_inv.
-                    
-                    det = a*e - b*d
-                    if abs(det) > 1e-6:
-                        ia = e / det
-                        ib = -b / det
-                        ic = (b*f - c*e) / det
-                        id_ = -d / det
-                        ie = a / det
-                        if_ = (c*d - a*f) / det
-                        
-                        data = (ia, ib, ic, id_, ie, if_)
-                        
-                        # Transform creates an image of the specified size.
-                        # We need to create an image that covers the bounding box of the destination quad.
-                        # Calculate bbox of quad
-                        xs = [p[0] for p in affine_quad] + [p1[0] + p2[0] - p0[0]] # P3 = P1 + P2 - P0
-                        ys = [p[1] for p in affine_quad] + [p1[1] + p2[1] - p0[1]]
-                        
-                        min_x, max_x = min(xs), max(xs)
-                        min_y, max_y = min(ys), max(ys)
-                        
-                        bbox_w = int(max_x - min_x)
-                        bbox_h = int(max_y - min_y)
-                        
-                        # We need to adjust the transform data because the new image starts at (min_x, min_y)
-                        # The transform maps (x_out, y_out) -> (x_in, y_in)
-                        # x_out in the new image corresponds to (x_out + min_x) in the global space.
-                        # So we substitute x_dst = x_out + min_x, y_dst = y_out + min_y into the inverse equation.
-                        
-                        # x_src = ia*x_dst + ib*y_dst + ic
-                        #       = ia*(x_out + min_x) + ib*(y_out + min_y) + ic
-                        #       = ia*x_out + ib*y_out + (ia*min_x + ib*min_y + ic)
-                        
-                        nic = ia*min_x + ib*min_y + ic
-                        nif = id_*min_x + ie*min_y + if_
-                        
-                        new_data = (ia, ib, nic, id_, ie, nif)
-                        
-                        transformed = to_paste.transform((bbox_w, bbox_h), Image.AFFINE, new_data, Image.BICUBIC)
-                        
-                        # Paste the transformed image
-                        img.paste(transformed, (int(min_x), int(min_y)), transformed)
+            if quad:
+                apply_affine_transform(img, node.image, quad, fit_mode)
 
             # Re-create aggdraw context
             draw = aggdraw.Draw(img)
@@ -1333,6 +1149,7 @@ def _render_graph(
         if node.node_id in node_logos:
             draw.flush()
             for group, logo_img in node_logos[node.node_id]:
+                # Update draw_node_logo to accept the box object directly for quad extraction
                 draw_node_logo(img, box, logo_img, group, draw_volume)
             draw = aggdraw.Draw(img)
 

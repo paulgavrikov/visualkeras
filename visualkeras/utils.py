@@ -1,7 +1,8 @@
-from typing import Any, Dict, Mapping, Union, Sequence, List, Tuple
+from typing import Any, Dict, Mapping, Union, Sequence, List, Tuple, Optional
 from PIL import ImageColor, ImageDraw, Image, ImageFont
 import aggdraw
 import numpy as np
+import math
 
 def resolve_style(
     target: Any, 
@@ -61,48 +62,217 @@ class RectShape:
 class Box(RectShape):
     de: int
     shade: int
+    rotation: Optional[float] = None  # Rotation around Y axis in degrees
+    
+    # Cache for projected faces to ensure logos/images align perfectly
+    _projected_faces: Dict[int, List[Tuple[float, float]]] = None
+
+    def get_face_quad(self, face_index: int) -> List[Tuple[float, float]]:
+        """
+        Returns the 4 projected screen coordinates [(x,y), ...] for the specified face.
+        Face Indices:
+        0: Front, 1: Back, 2: Right, 3: Left, 4: Top, 5: Bottom
+        """
+        if self._projected_faces and face_index in self._projected_faces:
+            return self._projected_faces[face_index]
+        return []
 
     def draw(self, draw: ImageDraw, draw_reversed: bool = False):
         pen, brush = self._get_pen_brush()
+        
+        # Dimensions
+        w = self.x2 - self.x1
+        h = self.y2 - self.y1
+        # Use 'de' as the Z-depth. 
+        # In the layout, de was a shift offset. We treat it as physical depth here.
+        d = self.de
+        
+        if d == 0:
+            # Fallback for flat nodes (2D)
+            draw.rectangle([self.x1, self.y1, self.x2, self.y2], pen, brush)
+            self._projected_faces = {0: [(self.x1, self.y1), (self.x2, self.y1), (self.x2, self.y2), (self.x1, self.y2)]}
+            return
 
-        if hasattr(self, 'de') and self.de > 0:
-            brush_s1 = aggdraw.Brush(fade_color(self.fill, self.shade))
-            brush_s2 = aggdraw.Brush(fade_color(self.fill, 2 * self.shade))
+        if self.rotation is None:
+            # Legacy Drawing Logic (Isometric-ish offset)
+            if hasattr(self, 'de') and self.de > 0:
+                brush_s1 = aggdraw.Brush(fade_color(self.fill, self.shade))
+                brush_s2 = aggdraw.Brush(fade_color(self.fill, 2 * self.shade))
 
-            if draw_reversed:
-                draw.line([self.x2 - self.de, self.y1 - self.de, self.x2 - self.de, self.y2 - self.de], pen)
-                draw.line([self.x2 - self.de, self.y2 - self.de, self.x2, self.y2], pen)
-                draw.line([self.x1 - self.de, self.y2 - self.de, self.x2 - self.de, self.y2 - self.de], pen)
+                if draw_reversed:
+                    draw.line([self.x2 - self.de, self.y1 - self.de, self.x2 - self.de, self.y2 - self.de], pen)
+                    draw.line([self.x2 - self.de, self.y2 - self.de, self.x2, self.y2], pen)
+                    draw.line([self.x1 - self.de, self.y2 - self.de, self.x2 - self.de, self.y2 - self.de], pen)
 
-                draw.polygon([self.x1, self.y1,
-                              self.x1 - self.de, self.y1 - self.de,
-                              self.x2 - self.de, self.y1 - self.de,
-                              self.x2, self.y1
-                              ], pen, brush_s1)
+                    draw.polygon([self.x1, self.y1,
+                                  self.x1 - self.de, self.y1 - self.de,
+                                  self.x2 - self.de, self.y1 - self.de,
+                                  self.x2, self.y1
+                                  ], pen, brush_s1)
 
-                draw.polygon([self.x1 - self.de, self.y1 - self.de,
-                              self.x1, self.y1,
-                              self.x1, self.y2,
-                              self.x1 - self.de, self.y2 - self.de
-                              ], pen, brush_s2)
-            else:
-                draw.line([self.x1 + self.de, self.y1 - self.de, self.x1 + self.de, self.y2 - self.de], pen)
-                draw.line([self.x1 + self.de, self.y2 - self.de, self.x1, self.y2], pen)
-                draw.line([self.x1 + self.de, self.y2 - self.de, self.x2 + self.de, self.y2 - self.de], pen)
+                    draw.polygon([self.x1 - self.de, self.y1 - self.de,
+                                  self.x1, self.y1,
+                                  self.x1, self.y2,
+                                  self.x1 - self.de, self.y2 - self.de
+                                  ], pen, brush_s2)
+                    
+                    # Populate projected faces for legacy mode
+                    self._projected_faces = {
+                        0: [(self.x1, self.y1), (self.x2, self.y1), (self.x2, self.y2), (self.x1, self.y2)], # Front
+                        4: [(self.x1 - self.de, self.y1 - self.de), (self.x2 - self.de, self.y1 - self.de), (self.x2, self.y1), (self.x1, self.y1)], # Top
+                        2: [(self.x1 - self.de, self.y1 - self.de), (self.x1, self.y1), (self.x1, self.y2), (self.x1 - self.de, self.y2 - self.de)] # Side (Left)
+                    }
+                else:
+                    draw.line([self.x1 + self.de, self.y1 - self.de, self.x1 + self.de, self.y2 - self.de], pen)
+                    draw.line([self.x1 + self.de, self.y2 - self.de, self.x1, self.y2], pen)
+                    draw.line([self.x1 + self.de, self.y2 - self.de, self.x2 + self.de, self.y2 - self.de], pen)
 
-                draw.polygon([self.x1, self.y1,
-                              self.x1 + self.de, self.y1 - self.de,
-                              self.x2 + self.de, self.y1 - self.de,
-                              self.x2, self.y1
-                              ], pen, brush_s1)
+                    draw.polygon([self.x1, self.y1,
+                                  self.x1 + self.de, self.y1 - self.de,
+                                  self.x2 + self.de, self.y1 - self.de,
+                                  self.x2, self.y1
+                                  ], pen, brush_s1)
 
-                draw.polygon([self.x2 + self.de, self.y1 - self.de,
-                              self.x2, self.y1,
-                              self.x2, self.y2,
-                              self.x2 + self.de, self.y2 - self.de
-                              ], pen, brush_s2)
+                    draw.polygon([self.x2 + self.de, self.y1 - self.de,
+                                  self.x2, self.y1,
+                                  self.x2, self.y2,
+                                  self.x2 + self.de, self.y2 - self.de
+                                  ], pen, brush_s2)
+                    
+                    # Populate projected faces for legacy mode
+                    self._projected_faces = {
+                        0: [(self.x1, self.y1), (self.x2, self.y1), (self.x2, self.y2), (self.x1, self.y2)], # Front
+                        4: [(self.x1 + self.de, self.y1 - self.de), (self.x2 + self.de, self.y1 - self.de), (self.x2, self.y1), (self.x1, self.y1)], # Top
+                        2: [(self.x2, self.y1), (self.x2 + self.de, self.y1 - self.de), (self.x2 + self.de, self.y2 - self.de), (self.x2, self.y2)] # Side (Right)
+                    }
 
-        draw.rectangle([self.x1, self.y1, self.x2, self.y2], pen, brush)
+            draw.rectangle([self.x1, self.y1, self.x2, self.y2], pen, brush)
+            return
+
+        # Center of the box in 2D layout space (reference for pivot)
+        cx = self.x1 + w / 2
+        cy = self.y1 + h / 2
+        
+        # 3D vertices relative to center (x, y, z)
+        # Y is Down, X is Right, Z is Out (towards viewer)
+        # Vertices: 0-3 Front (z=-d/2), 4-7 Back (z=d/2)
+        # Order: TL, TR, BR, BL
+        
+        # Apply visual scaling to compensate for 3D foreshortening
+        # Legacy view uses an oblique projection that preserves 1:1 scale for X/Y and ~1.4 for Z.
+        # 3D projection foreshortens everything. We scale up to match visual weight.
+        v_scale_xy = 1.2
+        v_scale_z = 2.0
+        
+        dx = (w / 2) * v_scale_xy
+        dy = (h / 2) * v_scale_xy
+        dz = (d / 2) * v_scale_z
+        
+        vertices = [
+            (-dx, -dy, -dz), (dx, -dy, -dz), (dx, dy, -dz), (-dx, dy, -dz), # Front
+            (-dx, -dy, dz),  (dx, -dy, dz),  (dx, dy, dz),  (-dx, dy, dz)   # Back
+        ]
+        
+        # Rotation Angles (Radians)
+        theta_y = math.radians(self.rotation)
+        
+        # Fixed Pitch (Rotation around X) to maintain 2.5D visual style (seeing top/side)
+        # If rotation is 0, we want to match the classic 'visualkeras' look which is roughly isometric/oblique.
+        # Classic look: Top and Right visible.
+        phi_x = math.radians(-25) # Tilt up to see top
+        
+        # Transform and Project
+        projected = []
+        for vx, vy, vz in vertices:
+            # 1. Rotate Y (Yaw)
+            x1 = vx * math.cos(theta_y) + vz * math.sin(theta_y)
+            y1 = vy
+            z1 = -vx * math.sin(theta_y) + vz * math.cos(theta_y)
+            
+            # 2. Rotate X (Pitch)
+            x2 = x1
+            y2 = y1 * math.cos(phi_x) - z1 * math.sin(phi_x)
+            z2 = y1 * math.sin(phi_x) + z1 * math.cos(phi_x)
+            
+            # 3. Project (Orthographic + Center Offset)
+            # Invert Y logic for screen coords if needed, but standard math works if we assume Y down.
+            px = x2 + cx
+            py = y2 + cy
+            projected.append((px, py, z2))
+
+        # Define Faces (indices)
+        # Standard winding (CCW or CW). Let's define CCW looking from outside.
+        faces = [
+            (0, [0, 1, 2, 3], "front"),   # Front
+            (1, [5, 4, 7, 6], "back"),    # Back
+            (2, [1, 5, 6, 2], "right"),   # Right
+            (3, [4, 0, 3, 7], "left"),    # Left
+            (4, [4, 5, 1, 0], "top"),     # Top
+            (5, [3, 2, 6, 7], "bottom")   # Bottom
+        ]
+
+        # Colors
+        base_color = self.fill
+        shade1 = fade_color(base_color, self.shade)     # Top/Bottom
+        shade2 = fade_color(base_color, self.shade * 2) # Left/Right
+        shade3 = fade_color(base_color, self.shade * 3) # Back/Inside
+        
+        face_colors = {
+            "front": base_color,
+            "back": shade3,
+            "right": shade2,
+            "left": shade2,
+            "top": shade1,
+            "bottom": shade1
+        }
+
+        # Calculate Face Depth (Centroid Z) for sorting
+        face_depths = []
+        self._projected_faces = {}
+        
+        for f_idx, indices, name in faces:
+            # Get coords
+            pts_3d = [projected[i] for i in indices]
+            # Avg Z
+            avg_z = sum(p[2] for p in pts_3d) / 4.0
+            
+            # Store 2D Quad
+            quad_2d = [(p[0], p[1]) for p in pts_3d]
+            self._projected_faces[f_idx] = quad_2d
+            
+            face_depths.append((avg_z, f_idx, indices, name, quad_2d))
+            
+        # Sort faces: furthest Z first (Painter's Algorithm)
+        # Z increases away from camera? 
+        # In our rotation math: 
+        # Back (d/2) -> Rotated. 
+        # Usually positive Z is towards viewer in right-hand, but here standard math
+        # x_screen, y_screen. z_depth.
+        # We draw from lowest Z to highest Z?
+        # Let's check: Front was -d/2. Back was +d/2.
+        # If we rotate 180, Front becomes +d/2.
+        # We want to draw the FURTHEST face first.
+        # Furthest is largest positive Z (if Z points into screen) or smallest Z (if Z points out)?
+        # Our math: vertices start with Front = -d/2.
+        # If Z points to viewer, -d/2 is further than +d/2? No.
+        # Let's assume standard: +Z is out of screen. -Z is into screen.
+        # Actually, let's just test sort. Usually standard sort (ascending) works if Z is depth.
+        
+        face_depths.sort(key=lambda x: x[0]) # Draw smallest Z first (furthest if Z is distance)
+
+        # Draw
+        for _, _, _, name, quad in face_depths:
+            # Prepare color
+            f_color = face_colors[name]
+            f_pen = pen # Always black outline
+            f_brush = aggdraw.Brush(f_color)
+            
+            # Flatten quad for aggdraw
+            coords = []
+            for x, y in quad:
+                coords.extend([x, y])
+                
+            draw.polygon(coords, f_pen, f_brush)
 
 
 class Circle(RectShape):
@@ -456,50 +626,52 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
     axis = group.get("axis", "z")
     if not draw_volume:
         axis = "z"
-        
+    
+    # Map axis to Face Index
+    # z -> Front (0)
+    # y -> Top (4)
+    # x -> Right (2) or Left (3) depending on visibility?
+    # Let's default 'x' to Right (2) as visualkeras standard.
+    
+    face_idx = 0
+    if axis == 'y': face_idx = 4
+    elif axis == 'x': face_idx = 2
+    
+    # Get rigorous quad from Box
+    quad = box.get_face_quad(face_idx)
+    if not quad or len(quad) != 4:
+        return
+
+    padding = group.get("padding", 0)
     size = group.get("size", 0.5)
     corner = group.get("corner", "top-right")
-    padding = group.get("padding", 0)
-    
-    # Determine Face Quad
-    quad = [] # TL, TR, BR, BL
-    if axis == 'z': # Front
-         quad = [(box.x1, box.y1), (box.x2, box.y1), (box.x2, box.y2), (box.x1, box.y2)]
-    elif axis == 'y': # Top
-         if draw_reversed:
-             quad = [(box.x1 - box.de, box.y1 - box.de), (box.x2 - box.de, box.y1 - box.de), (box.x2, box.y1), (box.x1, box.y1)]
-         else:
-             quad = [(box.x1 + box.de, box.y1 - box.de), (box.x2 + box.de, box.y1 - box.de), (box.x2, box.y1), (box.x1, box.y1)]
-    elif axis == 'x': # Side
-         if draw_reversed:
-             # Left Side
-             quad = [(box.x1 - box.de, box.y1 - box.de), (box.x1, box.y1), (box.x1, box.y2), (box.x1 - box.de, box.y2 - box.de)]
-         else:
-             # Right Side
-             # Fix: Swap Left/Right definition so P0 is Front-Edge (Left of face) and P1 is Back-Edge (Right of face)
-             quad = [(box.x2, box.y1), (box.x2 + box.de, box.y1 - box.de), (box.x2 + box.de, box.y2 - box.de), (box.x2, box.y2)]
 
-    # Calculate Face Dimensions (approx for sizing)
+    # The quad points are corner projections: TL, TR, BR, BL (based on box vertex order 0,1,2,3)
+    # However, Top face (4,5,1,0) implies (Back-TL, Back-TR, Front-TR, Front-TL).
+    # We need to treat them as vectors P0..P3.
+    
     p0 = np.array(quad[0])
     p1 = np.array(quad[1])
     p3 = np.array(quad[3])
     
+    # Calculate vectors
     vec_x = p1 - p0
     vec_y = p3 - p0
     
     face_w = np.linalg.norm(vec_x)
     face_h = np.linalg.norm(vec_y)
     
-    if face_w == 0 or face_h == 0: return
+    if face_w < 1 or face_h < 1: return
 
-    # Unit vectors for padding
+    # Normalize vectors
     u_vec_x = vec_x / face_w
     u_vec_y = vec_y / face_h
     
+    # Padding vectors
     pad_vec_x = u_vec_x * padding
     pad_vec_y = u_vec_y * padding
-    
-    # Calculate Logo Size
+
+    # Logo Sizing
     target_w, target_h = 0, 0
     if isinstance(size, (float, int)):
          scale = float(size)
@@ -509,21 +681,19 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
          target_h = int(target_w * logo_img.height / logo_img.width)
     elif isinstance(size, (tuple, list)):
          target_w, target_h = size
-         
-    # Resize Logo
+    
     resized_logo = resize_image_to_fit(logo_img, target_w, target_h, "contain")
-    # Update target dimensions after resize (contain might change aspect)
     target_w, target_h = resized_logo.size
     
-    # Position on Face
+    # Relativize size
     rx = target_w / face_w
     ry = target_h / face_h
     
-    # Logo Quad vectors
     l_vec_x = vec_x * rx
     l_vec_y = vec_y * ry
     
-    origin = np.array([0.0, 0.0])
+    # Calculate Origin based on corner
+    origin = p0 # default top-left
     
     if corner == 'top-left':
         origin = p0 + pad_vec_x + pad_vec_y
@@ -532,14 +702,13 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
     elif corner == 'bottom-left':
         origin = p3 - l_vec_y + pad_vec_x - pad_vec_y
     elif corner == 'bottom-right':
-        # P2 = P0 + vec_x + vec_y
         p2 = p0 + vec_x + vec_y
         origin = p2 - l_vec_x - l_vec_y - pad_vec_x - pad_vec_y
     elif corner == 'center':
         center = p0 + 0.5 * vec_x + 0.5 * vec_y
         origin = center - 0.5 * l_vec_x - 0.5 * l_vec_y
-        
-    # Construct Logo Quad
+
+    # Final Logo Quad
     l_p0 = origin
     l_p1 = origin + l_vec_x
     l_p2 = origin + l_vec_x + l_vec_y
