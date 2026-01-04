@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Unio
 
 import hashlib
 import random
+import os
 
 import math
 import aggdraw
@@ -124,6 +125,222 @@ def _stable_seed(base_seed: Optional[int], *parts: Any) -> int:
         h.update(str(p).encode("utf-8"))
     return int.from_bytes(h.digest()[:8], "big", signed=False)
 
+
+# ---------------------------------------------------------------------------
+# Face image helpers (front-face textures)
+# ---------------------------------------------------------------------------
+
+_FACE_IMAGE_CACHE: Dict[str, Image.Image] = {}
+
+
+def _load_face_image(spec: Any) -> Optional[Image.Image]:
+    """Load a face image from a path or return a provided PIL image.
+
+    Returns an RGBA image or None on failure.
+    """
+    if spec is None:
+        return None
+    if isinstance(spec, Image.Image):
+        try:
+            return spec.convert("RGBA")
+        except Exception:  # noqa: BLE001
+            return None
+    if isinstance(spec, str):
+        path = os.path.expanduser(spec)
+        # Cache the decoded image; callers get a copy to avoid mutation issues.
+        if path in _FACE_IMAGE_CACHE:
+            return _FACE_IMAGE_CACHE[path].copy()
+        try:
+            img = Image.open(path).convert("RGBA")
+        except Exception:  # noqa: BLE001
+            return None
+        _FACE_IMAGE_CACHE[path] = img
+        return img.copy()
+    return None
+
+
+def _parse_face_image_style(style: Mapping[str, Any]) -> Tuple[Optional[Any], str, int, Optional[int]]:
+    """Extract face-image parameters from a style dict.
+
+    Supports either:
+      - face_image = "/path/to.png"
+      - face_image = {"path": "...", "fit": "...", "alpha": 200, "inset": 1}
+    and optional top-level overrides:
+      - face_image_fit, face_image_alpha, face_image_inset
+    """
+    spec = style.get("face_image", None)
+    fit = str(style.get("face_image_fit", "cover")).strip().lower()
+    alpha = int(style.get("face_image_alpha", 255))
+    inset = style.get("face_image_inset", None)
+    if inset is not None:
+        try:
+            inset = int(inset)
+        except Exception:  # noqa: BLE001
+            inset = None
+
+    if isinstance(spec, Mapping):
+        # Nested spec dict for convenience
+        spec_map: Mapping[str, Any] = spec
+        spec_path = spec_map.get("path", spec_map.get("src", spec_map.get("file", None)))
+        if spec_path is not None:
+            spec = spec_path
+        if "fit" in spec_map:
+            fit = str(spec_map.get("fit")).strip().lower()
+        if "alpha" in spec_map:
+            try:
+                alpha = int(spec_map.get("alpha"))
+            except Exception:  # noqa: BLE001
+                pass
+        if "inset" in spec_map:
+            try:
+                inset = int(spec_map.get("inset"))
+            except Exception:  # noqa: BLE001
+                pass
+
+    # Normalize + clamp
+    if fit not in {"cover", "contain", "match_aspect", "fill"}:
+        fit = "cover"
+    alpha = int(max(0, min(255, alpha)))
+    return spec, fit, alpha, inset
+
+
+def _adjust_wh_for_image_aspect(
+    w_px: int,
+    h_px: int,
+    img: Image.Image,
+    *,
+    min_xy: int,
+    max_xy: int,
+) -> Tuple[int, int]:
+    """Adjust (w,h) so the face matches the image aspect ratio (best-effort)."""
+    try:
+        iw, ih = img.size
+    except Exception:  # noqa: BLE001
+        return (w_px, h_px)
+    if iw <= 0 or ih <= 0:
+        return (w_px, h_px)
+    aspect = float(iw) / float(ih)
+
+    def _cl(v: float) -> int:
+        return int(max(min_xy, min(max_xy, round(v))))
+
+    # Prefer keeping height stable (less vertical jitter) when possible.
+    w1 = _cl(h_px * aspect)
+    if min_xy <= w1 <= max_xy:
+        return (w1, _cl(h_px))
+
+    h1 = _cl(w_px / aspect)
+    if min_xy <= h1 <= max_xy:
+        return (_cl(w_px), h1)
+
+    # Fallback: clamp both with minimal distortion.
+    return (_cl(w1), _cl(h1))
+
+
+def _fit_image_to_rect(
+    img: Image.Image,
+    w: int,
+    h: int,
+    *,
+    fit: str,
+    background: Tuple[int, int, int, int],
+) -> Image.Image:
+    """Fit an image into a (w,h) rect using the requested mode."""
+    fit = (fit or "cover").strip().lower()
+    if fit == "match_aspect":
+        # After aspect-matching, 'contain' shows the full image with no crop.
+        fit = "contain"
+
+    if w <= 0 or h <= 0:
+        return Image.new("RGBA", (max(1, w), max(1, h)), background)
+
+    try:
+        iw, ih = img.size
+    except Exception:  # noqa: BLE001
+        iw, ih = (0, 0)
+
+    resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS", getattr(Image, "LANCZOS", Image.BICUBIC))
+
+    if iw <= 0 or ih <= 0:
+        return Image.new("RGBA", (w, h), background)
+
+    if fit == "fill":
+        return img.resize((w, h), resample=resample)
+
+    if fit == "contain":
+        scale = min(float(w) / float(iw), float(h) / float(ih))
+        nw = max(1, int(round(iw * scale)))
+        nh = max(1, int(round(ih * scale)))
+        im2 = img.resize((nw, nh), resample=resample)
+        canvas = Image.new("RGBA", (w, h), background)
+        canvas.paste(im2, ((w - nw) // 2, (h - nh) // 2), im2)
+        return canvas
+
+    # cover (default)
+    scale = max(float(w) / float(iw), float(h) / float(ih))
+    nw = max(1, int(round(iw * scale)))
+    nh = max(1, int(round(ih * scale)))
+    im2 = img.resize((nw, nh), resample=resample)
+
+    left = max(0, (nw - w) // 2)
+    top = max(0, (nh - h) // 2)
+    return im2.crop((left, top, left + w, top + h))
+
+
+def _apply_face_images(img: Image.Image, stacks: Sequence[Dict[str, Any]]) -> None:
+    """Paste configured face images onto the front face of stacks."""
+    for obj in stacks:
+        style = obj.get("style", {}) or {}
+        st: FeatureMapStack = obj.get("stack")
+        if st is None:
+            continue
+
+        spec, fit, alpha, inset = _parse_face_image_style(style)
+        if not spec:
+            continue
+
+        face_img = style.get("_face_image_obj", None)
+        if not isinstance(face_img, Image.Image):
+            face_img = _load_face_image(spec)
+            if face_img is None:
+                continue
+            # Save for later reuse in the same render call.
+            try:
+                style["_face_image_obj"] = face_img
+            except Exception:  # noqa: BLE001
+                pass
+
+        x1f, y1f, x2f, y2f = st.front_rect()
+        ix1 = int(round(x1f))
+        iy1 = int(round(y1f))
+        ix2 = int(round(x2f))
+        iy2 = int(round(y2f))
+
+        # Inset so we don't paint over the outline
+        inset_px = st.line_width if inset is None else int(max(0, inset))
+        ix1 += inset_px
+        iy1 += inset_px
+        ix2 -= inset_px
+        iy2 -= inset_px
+
+        w = max(1, ix2 - ix1)
+        h = max(1, iy2 - iy1)
+
+        bg = get_rgba_tuple(style.get("fill", st.fill))
+        fitted = _fit_image_to_rect(face_img, w, h, fit=fit, background=bg)
+
+        if alpha < 255:
+            # Multiply alpha channel
+            r, g, b, a = fitted.split()
+            a = a.point(lambda v: int(v * (alpha / 255.0)))
+            fitted = Image.merge("RGBA", (r, g, b, a))
+
+        # Composite onto the base image
+        try:
+            img.alpha_composite(fitted, (ix1, iy1))
+        except Exception:  # noqa: BLE001
+            # Fallback
+            img.paste(fitted, (ix1, iy1), fitted)
 
 def _sample_patch_ratios(rng: random.Random, *, x_lo: float, x_hi: float, y_lo: float = 0.12, y_hi: float = 0.88) -> Tuple[float, float]:
     """Sample (rx, ry) in [0,1] normalized coordinates with bounded ranges."""
@@ -765,6 +982,10 @@ def lenet_view(
         "patch_fill": patch_fill,
         "patch_outline": patch_outline,
         "patch_scale": patch_scale,
+        "face_image": None,
+        "face_image_fit": "cover",
+        "face_image_alpha": 255,
+        "face_image_inset": None,
     }
 
     for idx, layer in enumerate(layers):
@@ -804,6 +1025,19 @@ def lenet_view(
             h_px = min(h_px, max_xy // 2) if max_xy > 0 else h_px
             w_px = max(min_xy, min(w_px, max_xy))
             h_px = max(min_xy, min(h_px, max_xy))
+
+        
+        # Optional: texture the front face with an image.
+        # If fit == 'match_aspect', adjust the face dimensions to match the image aspect ratio.
+        spec, fit_mode, _, _inset = _parse_face_image_style(style)
+        if spec:
+            face_img = style.get("_face_image_obj", None)
+            if not isinstance(face_img, Image.Image):
+                face_img = _load_face_image(spec)
+                if face_img is not None:
+                    style["_face_image_obj"] = face_img
+            if isinstance(face_img, Image.Image) and fit_mode == "match_aspect":
+                w_px, h_px = _adjust_wh_for_image_aspect(w_px, h_px, face_img, min_xy=min_xy, max_xy=max_xy)
 
         ms = int(style.get("map_spacing", map_spacing))
         mvc = int(style.get("max_visual_channels", max_visual_channels))
@@ -1075,15 +1309,22 @@ def lenet_view(
                     )
                 )
 
-# Create canvas and draw
+    # Create canvas and draw
     img = Image.new("RGBA", (img_w, img_h), get_rgba_tuple(background_fill))
-    draw = aggdraw.Draw(img)
 
+    # Pass 1: draw stacks (geometry + outlines)
+    draw = aggdraw.Draw(img)
     for obj in stacks:
         obj["stack"].draw(draw)
+    draw.flush()
+
+    # Pass 1.5: paste optional face images onto each stack's front face
+    _apply_face_images(img, stacks)
+
+    # Pass 2: draw connections (polygons + patch boxes) over the faces
+    draw = aggdraw.Draw(img)
     for conn in connections:
         conn.draw(draw)
-
     draw.flush()
 
     # Text pass
