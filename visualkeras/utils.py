@@ -157,17 +157,7 @@ class Box(RectShape):
         # Y is Down, X is Right, Z is Out (towards viewer)
         # Vertices: 0-3 Front (z=-d/2), 4-7 Back (z=d/2)
         # Order: TL, TR, BR, BL
-        
-        # Apply visual scaling to compensate for 3D foreshortening
-        # Legacy view uses an oblique projection that preserves 1:1 scale for X/Y and ~1.4 for Z.
-        # 3D projection foreshortens everything. We scale up to match visual weight.
-        v_scale_xy = 1.2
-        v_scale_z = 2.0
-        
-        dx = (w / 2) * v_scale_xy
-        dy = (h / 2) * v_scale_xy
-        dz = (d / 2) * v_scale_z
-        
+        dx, dy, dz = w/2, h/2, d/2
         vertices = [
             (-dx, -dy, -dz), (dx, -dy, -dz), (dx, dy, -dz), (-dx, dy, -dz), # Front
             (-dx, -dy, dz),  (dx, -dy, dz),  (dx, dy, dz),  (-dx, dy, dz)   # Back
