@@ -25,6 +25,7 @@ PyPi: https://pypi.org/project/visualkeras/
 from visualkeras.layered import *
 from visualkeras.graph import *
 from visualkeras.functional import *
+from visualkeras.lenet import lenet_view
 from visualkeras.options import (
     FunctionalOptions,
     LayeredOptions,
