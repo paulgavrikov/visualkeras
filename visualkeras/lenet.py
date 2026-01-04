@@ -14,6 +14,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union
 
+import hashlib
+import random
+
 import math
 import aggdraw
 from PIL import Image, ImageDraw, ImageFont
@@ -109,6 +112,186 @@ def _clamp_rect_to_face(
 
 def _with_alpha(rgba: Tuple[int, int, int, int], alpha: int) -> Tuple[int, int, int, int]:
     return (rgba[0], rgba[1], rgba[2], int(max(0, min(255, alpha))))
+
+
+def _stable_seed(base_seed: Optional[int], *parts: Any) -> int:
+    """Create a stable 64-bit seed from an optional base seed and arbitrary parts."""
+    h = hashlib.sha256()
+    if base_seed is not None:
+        h.update(str(int(base_seed)).encode("utf-8"))
+    for p in parts:
+        h.update(b"|")
+        h.update(str(p).encode("utf-8"))
+    return int.from_bytes(h.digest()[:8], "big", signed=False)
+
+
+def _sample_patch_ratios(rng: random.Random, *, x_lo: float, x_hi: float, y_lo: float = 0.12, y_hi: float = 0.88) -> Tuple[float, float]:
+    """Sample (rx, ry) in [0,1] normalized coordinates with bounded ranges."""
+    rx = x_lo + (x_hi - x_lo) * rng.random()
+    ry = y_lo + (y_hi - y_lo) * rng.random()
+    # clamp just in case
+    rx = max(0.0, min(1.0, rx))
+    ry = max(0.0, min(1.0, ry))
+    return rx, ry
+
+
+def _place_patch_by_ratio(
+    face: Tuple[float, float, float, float],
+    patch_w: float,
+    patch_h: float,
+    rx: float,
+    ry: float,
+    *,
+    margin: float = 1.0,
+) -> Tuple[float, float, float, float]:
+    """Place a patch within a face using normalized ratios, clamped to the face."""
+    fx1, fy1, fx2, fy2 = face
+    fw = max(0.0, fx2 - fx1)
+    fh = max(0.0, fy2 - fy1)
+
+    # Available travel range for the patch's top-left (after margins)
+    avail_w = max(0.0, fw - 2 * margin - patch_w)
+    avail_h = max(0.0, fh - 2 * margin - patch_h)
+
+    # If the patch is too large, fall back to center ratios.
+    rx_eff = rx if avail_w > 0 else 0.5
+    ry_eff = ry if avail_h > 0 else 0.5
+
+    cx = fx1 + margin + patch_w / 2.0 + rx_eff * avail_w
+    cy = fy1 + margin + patch_h / 2.0 + ry_eff * avail_h
+    return _clamp_rect_to_face(cx, cy, patch_w, patch_h, face, margin=margin)
+
+
+def _rects_overlap_1d(a1: float, a2: float, b1: float, b2: float, *, eps: float = 0.0) -> bool:
+    """Return True if [a1,a2] overlaps/touches [b1,b2] within eps."""
+    return (a1 <= b2 + eps) and (a2 >= b1 - eps)
+
+
+def _clamp_rect_topleft(
+    rect: Tuple[float, float, float, float],
+    face: Tuple[float, float, float, float],
+    *,
+    margin: float = 1.0,
+) -> Tuple[float, float, float, float]:
+    """Clamp rect (x1,y1,x2,y2) inside face, preserving its size."""
+    x1, y1, x2, y2 = rect
+    fx1, fy1, fx2, fy2 = face
+    w = max(0.0, x2 - x1)
+    h = max(0.0, y2 - y1)
+    # protect against negative available space
+    max_x1 = fx2 - margin - w
+    max_y1 = fy2 - margin - h
+    x1 = min(max(x1, fx1 + margin), max_x1)
+    y1 = min(max(y1, fy1 + margin), max_y1)
+    return (x1, y1, x1 + w, y1 + h)
+
+
+def _set_rect_x1(rect: Tuple[float, float, float, float], new_x1: float) -> Tuple[float, float, float, float]:
+    x1, y1, x2, y2 = rect
+    w = x2 - x1
+    return (new_x1, y1, new_x1 + w, y2)
+
+
+def _set_rect_y1(rect: Tuple[float, float, float, float], new_y1: float) -> Tuple[float, float, float, float]:
+    x1, y1, x2, y2 = rect
+    h = y2 - y1
+    return (x1, new_y1, x2, new_y1 + h)
+
+
+def _choose_y_from_ranges(
+    rng: random.Random,
+    prefer: float,
+    ranges: Sequence[Tuple[float, float]],
+) -> Optional[float]:
+    if not ranges:
+        return None
+    candidates = []
+    for lo, hi in ranges:
+        y = max(lo, min(prefer, hi))
+        candidates.append((abs(prefer - y), y, lo, hi))
+    mind = min(c[0] for c in candidates)
+    best = [c for c in candidates if abs(c[0] - mind) <= 1e-6]
+    _, y, lo, hi = rng.choice(best)
+    # tiny jitter for variety while staying close
+    if hi - lo >= 1.0:
+        jitter = (rng.random() - 0.5) * min(6.0, hi - lo)
+        y = max(lo, min(hi, y + jitter))
+    return y
+
+
+def _enforce_in_out_patch_separation(
+    face: Tuple[float, float, float, float],
+    incoming: Tuple[float, float, float, float],
+    outgoing: Tuple[float, float, float, float],
+    *,
+    rng: random.Random,
+    x_eps: float = 1.0,
+    v_gap: float = 2.0,
+    margin: float = 1.0,
+) -> Tuple[Tuple[float, float, float, float], Tuple[float, float, float, float]]:
+    """Ensure ordering + avoid 'touching' for incoming/outgoing patches on the same face.
+
+    Requirements:
+    - The outgoing patch (to the next layer) should not have a left edge further left than the incoming patch.
+    - If patches are horizontally close (overlap/touch), enforce enough vertical separation so they don't touch.
+    """
+    inc = _clamp_rect_topleft(incoming, face, margin=margin)
+    out = _clamp_rect_topleft(outgoing, face, margin=margin)
+
+    # Enforce ordering by left edge: out.x1 >= inc.x1
+    if out[0] < inc[0]:
+        fx1, fy1, fx2, fy2 = face
+        out_w = out[2] - out[0]
+        max_out_x1 = fx2 - margin - out_w
+        out = _set_rect_x1(out, min(max_out_x1, inc[0]))
+        out = _clamp_rect_topleft(out, face, margin=margin)
+        if out[0] < inc[0]:
+            # If still violated due to clamping, move incoming left as needed.
+            inc_w = inc[2] - inc[0]
+            inc = _set_rect_x1(inc, out[0])
+            inc = _clamp_rect_topleft(inc, face, margin=margin)
+
+    # If horizontally close, enforce vertical separation (disallow overlap/touch)
+    x_close = out[0] <= inc[2] + x_eps  # outgoing is on the right (or close)
+    if x_close and _rects_overlap_1d(inc[1], inc[3], out[1], out[3], eps=v_gap):
+        fx1, fy1, fx2, fy2 = face
+
+        # First, try moving outgoing away from incoming (above or below).
+        out_h = out[3] - out[1]
+        min_y = fy1 + margin
+        max_y = fy2 - margin - out_h
+        above_max = min(max_y, inc[1] - v_gap - out_h)
+        below_min = max(min_y, inc[3] + v_gap)
+        ranges: list[Tuple[float, float]] = []
+        if min_y <= above_max:
+            ranges.append((min_y, above_max))
+        if below_min <= max_y:
+            ranges.append((below_min, max_y))
+
+        new_y = _choose_y_from_ranges(rng, out[1], ranges)
+        if new_y is not None:
+            out = _set_rect_y1(out, new_y)
+            out = _clamp_rect_topleft(out, face, margin=margin)
+
+        # If still overlapping (very tight face), try moving incoming instead.
+        if _rects_overlap_1d(inc[1], inc[3], out[1], out[3], eps=v_gap):
+            inc_h = inc[3] - inc[1]
+            min_y2 = fy1 + margin
+            max_y2 = fy2 - margin - inc_h
+            above_max2 = min(max_y2, out[1] - v_gap - inc_h)
+            below_min2 = max(min_y2, out[3] + v_gap)
+            ranges2: list[Tuple[float, float]] = []
+            if min_y2 <= above_max2:
+                ranges2.append((min_y2, above_max2))
+            if below_min2 <= max_y2:
+                ranges2.append((below_min2, max_y2))
+            new_y2 = _choose_y_from_ranges(rng, inc[1], ranges2)
+            if new_y2 is not None:
+                inc = _set_rect_y1(inc, new_y2)
+                inc = _clamp_rect_topleft(inc, face, margin=margin)
+
+    return inc, out
+
 
 
 @dataclass
@@ -448,6 +631,7 @@ def lenet_view(
     patch_fill: Any = "#7db7ff",
     patch_outline: Any = "black",
     patch_scale: float = 1.0,
+    seed: Optional[int] = None,
     draw_connections: bool = True,
     draw_patches: bool = True,
     font: Optional[ImageFont.ImageFont] = None,
@@ -509,6 +693,7 @@ def lenet_view(
             "patch_fill": patch_fill,
             "patch_outline": patch_outline,
             "patch_scale": patch_scale,
+            "seed": seed,
             "draw_connections": draw_connections,
             "draw_patches": draw_patches,
             "font": font,
@@ -541,6 +726,7 @@ def lenet_view(
         patch_fill = resolved["patch_fill"]
         patch_outline = resolved["patch_outline"]
         patch_scale = resolved["patch_scale"]
+        seed = resolved.get("seed", None)
         draw_connections = resolved["draw_connections"]
         draw_patches = resolved["draw_patches"]
         font = resolved["font"]
@@ -733,9 +919,25 @@ def lenet_view(
         st.x += shift_x
         st.y += shift_y
 
-    # Build connections between consecutive rendered layers (after shift)
+    
+    # Pre-sample per-layer patch placement ratios so boxes appear randomly placed on faces,
+    # while keeping outgoing boxes on a layer to the right of incoming boxes.
+    patch_ratios_in: Dict[int, Tuple[float, float]] = {}
+    patch_ratios_out: Dict[int, Tuple[float, float]] = {}
+    for li, obj in enumerate(stacks):
+        lname = getattr(obj.get("layer"), "name", f"layer_{li}")
+        if li > 0:
+            rng_in = random.Random(_stable_seed(seed, "in", li, lname))
+            patch_ratios_in[li] = _sample_patch_ratios(rng_in, x_lo=0.06, x_hi=0.44)
+        if li < len(stacks) - 1:
+            rng_out = random.Random(_stable_seed(seed, "out", li, lname))
+            patch_ratios_out[li] = _sample_patch_ratios(rng_out, x_lo=0.56, x_hi=0.94)
+
+# Build connections between consecutive rendered layers (after shift)
     connections = []
     if draw_connections and len(stacks) >= 2:
+        # First pass: compute edge definitions (patch rectangles can be post-processed per-layer).
+        edge_defs: list[Dict[str, Any]] = []
         for i in range(len(stacks) - 1):
             src_obj = stacks[i]
             dst_obj = stacks[i + 1]
@@ -770,21 +972,20 @@ def lenet_view(
                 patch_w = min(patch_w, int(src_stack.width * 0.6))
                 patch_h = min(patch_h, int(src_stack.height * 0.6))
 
-                # Place patch near the right edge of the source *front face*, clamped inside.
-                cx = sx2 - 1 - patch_w / 2.0
-                cy = sy1 + src_stack.height * 0.5
-                sp = _clamp_rect_to_face(cx, cy, patch_w, patch_h, (sx1, sy1, sx2, sy2), margin=1.0)
+                # Place patch randomly on the source front face (outgoing patch is biased to the right).
+                rx, ry = patch_ratios_out.get(i, (0.80, 0.50))
+                sp = _place_patch_by_ratio((sx1, sy1, sx2, sy2), patch_w, patch_h, rx, ry, margin=1.0)
 
-                # Destination activation patch: small, near the left edge of the dst front face.
+                # Destination activation patch: small, randomly placed (incoming patch is biased to the left).
                 dsz = max(3, int(min(dst_stack.width, dst_stack.height) * 0.22))
-                dcx = dx1 + 1 + dsz / 2.0
-                dcy = dy1 + dst_stack.height * 0.5
-                dp = _clamp_rect_to_face(dcx, dcy, dsz, dsz, (dx1, dy1, dx2, dy2), margin=1.0)
+                rx2, ry2 = patch_ratios_in.get(i + 1, (0.20, 0.50))
+                dp = _place_patch_by_ratio((dx1, dy1, dx2, dy2), float(dsz), float(dsz), rx2, ry2, margin=1.0)
 
-                connections.append(
-                    PyramidConnection(
-                        src_stack,
-                        dst_stack,
+                edge_defs.append(
+                    dict(
+                        type='pyramid',
+                        src=src_stack,
+                        dst=dst_stack,
                         src_patch=sp,
                         dst_patch=dp,
                         connector_fill=conn_fill,
@@ -795,15 +996,86 @@ def lenet_view(
                     )
                 )
             elif src_shape.kind == 'spatial' and dst_shape.kind == 'vector':
+                edge_defs.append(
+                    dict(
+                        type='funnel',
+                        src=src_stack,
+                        dst=dst_stack,
+                        connector_fill=conn_fill,
+                        connector_width=conn_w,
+                    )
+                )
+            else:
+                edge_defs.append(
+                    dict(
+                        type='full',
+                        src=src_stack,
+                        dst=dst_stack,
+                        connector_fill=conn_fill,
+                        connector_width=conn_w,
+                    )
+                )
+
+        # Second pass: if a layer has both an incoming and outgoing patch, enforce ordering + separation.
+        # Incoming patch lives on layer j as dst_patch of edge (j-1). Outgoing patch lives on layer j as src_patch of edge j.
+        for j in range(1, len(stacks) - 1):
+            left_edge = edge_defs[j - 1]
+            right_edge = edge_defs[j]
+            if left_edge.get('type') == 'pyramid' and right_edge.get('type') == 'pyramid':
+                layer_obj = stacks[j]
+                lname = getattr(layer_obj.get('layer'), 'name', f'layer_{j}')
+                rng_sep = random.Random(_stable_seed(seed, 'sep', j, lname))
+                face = layer_obj['stack'].front_rect()
+                inc = left_edge['dst_patch']
+                out = right_edge['src_patch']
+                inc2, out2 = _enforce_in_out_patch_separation(
+                    face,
+                    inc,
+                    out,
+                    rng=rng_sep,
+                    x_eps=1.0,
+                    v_gap=2.0,
+                    margin=1.0,
+                )
+                left_edge['dst_patch'] = inc2
+                right_edge['src_patch'] = out2
+
+        # Final: instantiate connection objects.
+        for ed in edge_defs:
+            if ed['type'] == 'pyramid':
                 connections.append(
-                    FunnelConnection(src_stack, dst_stack, connector_fill=conn_fill, connector_width=conn_w)
+                    PyramidConnection(
+                        ed['src'],
+                        ed['dst'],
+                        src_patch=ed['src_patch'],
+                        dst_patch=ed['dst_patch'],
+                        connector_fill=ed['connector_fill'],
+                        connector_width=ed['connector_width'],
+                        patch_fill=ed['patch_fill'],
+                        patch_outline=ed['patch_outline'],
+                        draw_patches=ed.get('draw_patches', True),
+                    )
+                )
+            elif ed['type'] == 'funnel':
+                connections.append(
+                    FunnelConnection(
+                        ed['src'],
+                        ed['dst'],
+                        connector_fill=ed['connector_fill'],
+                        connector_width=ed['connector_width'],
+                    )
                 )
             else:
                 connections.append(
-                    FullConnection(src_stack, dst_stack, connector_fill=conn_fill, connector_width=conn_w)
+                    FullConnection(
+                        ed['src'],
+                        ed['dst'],
+                        connector_fill=ed['connector_fill'],
+                        connector_width=ed['connector_width'],
+                    )
                 )
 
-    # Create canvas and draw
+# Create canvas and draw
     img = Image.new("RGBA", (img_w, img_h), get_rgba_tuple(background_fill))
     draw = aggdraw.Draw(img)
 
