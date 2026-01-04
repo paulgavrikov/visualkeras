@@ -114,6 +114,49 @@ def _clamp_rect_to_face(
 def _with_alpha(rgba: Tuple[int, int, int, int], alpha: int) -> Tuple[int, int, int, int]:
     return (rgba[0], rgba[1], rgba[2], int(max(0, min(255, alpha))))
 
+def _effective_patch_alpha_for_layer(
+    style: Mapping[str, Any],
+    *,
+    has_face_image: bool,
+    base_alpha: int,
+    default_on_image: int,
+) -> int:
+    """Return an alpha (0-255) for patch fill on this layer.
+
+    Rules:
+      - If the style explicitly sets patch alpha (patch_fill_alpha/patch_alpha), use it.
+      - Otherwise, if the layer has a face image configured, default to a semi-transparent
+        alpha (min(base_alpha, default_on_image)) so the underlying image remains visible.
+      - Otherwise, keep the base alpha from the patch fill color.
+
+    The level of opacity can be controlled per-layer via style keys:
+      - patch_fill_alpha (preferred) or patch_alpha
+      - patch_fill_alpha_on_image / patch_alpha_on_image (only when a face image is present)
+    """
+    def _clamp(v: Any) -> Optional[int]:
+        try:
+            return int(max(0, min(255, int(v))))
+        except Exception:  # noqa: BLE001
+            return None
+
+    # Explicit per-layer alpha always wins.
+    for key in ("patch_fill_alpha", "patch_alpha"):
+        if key in style:
+            vv = _clamp(style.get(key))
+            if vv is not None:
+                return vv
+
+    if has_face_image:
+        for key in ("patch_fill_alpha_on_image", "patch_alpha_on_image"):
+            if key in style:
+                vv = _clamp(style.get(key))
+                if vv is not None:
+                    return vv
+        return int(min(int(base_alpha), int(default_on_image)))
+
+    return int(base_alpha)
+
+
 
 def _stable_seed(base_seed: Optional[int], *parts: Any) -> int:
     """Create a stable 64-bit seed from an optional base seed and arbitrary parts."""
@@ -673,7 +716,8 @@ class PyramidConnection:
         dst_patch: Tuple[float, float, float, float],
         connector_fill: Any,
         connector_width: int,
-        patch_fill: Any,
+        src_patch_fill: Any,
+        dst_patch_fill: Any,
         patch_outline: Any,
         draw_patches: bool = True,
         polygon_alpha: int = 90,
@@ -684,7 +728,8 @@ class PyramidConnection:
         self.dst_patch = dst_patch
         self.connector_fill = connector_fill
         self.connector_width = int(max(1, connector_width))
-        self.patch_fill = patch_fill
+        self.src_patch_fill = src_patch_fill
+        self.dst_patch_fill = dst_patch_fill
         self.patch_outline = patch_outline
         self.draw_patches = bool(draw_patches)
         self.polygon_alpha = int(max(0, min(255, polygon_alpha)))
@@ -706,9 +751,10 @@ class PyramidConnection:
 
         if self.draw_patches:
             ppen = aggdraw.Pen(get_rgba_tuple(self.patch_outline), 1)
-            pbrush = aggdraw.Brush(get_rgba_tuple(self.patch_fill))
-            draw.rectangle(list(self.src_patch), ppen, pbrush)
-            draw.rectangle(list(self.dst_patch), ppen, pbrush)
+            pbrush_src = aggdraw.Brush(get_rgba_tuple(self.src_patch_fill))
+            pbrush_dst = aggdraw.Brush(get_rgba_tuple(self.dst_patch_fill))
+            draw.rectangle(list(self.src_patch), ppen, pbrush_src)
+            draw.rectangle(list(self.dst_patch), ppen, pbrush_dst)
 
 
 class FunnelConnection:
@@ -848,6 +894,7 @@ def lenet_view(
     patch_fill: Any = "#7db7ff",
     patch_outline: Any = "black",
     patch_scale: float = 1.0,
+    patch_alpha_on_image: int = 140,
     seed: Optional[int] = None,
     draw_connections: bool = True,
     draw_patches: bool = True,
@@ -910,6 +957,7 @@ def lenet_view(
             "patch_fill": patch_fill,
             "patch_outline": patch_outline,
             "patch_scale": patch_scale,
+            "patch_alpha_on_image": patch_alpha_on_image,
             "seed": seed,
             "draw_connections": draw_connections,
             "draw_patches": draw_patches,
@@ -943,6 +991,7 @@ def lenet_view(
         patch_fill = resolved["patch_fill"]
         patch_outline = resolved["patch_outline"]
         patch_scale = resolved["patch_scale"]
+        patch_alpha_on_image = resolved.get("patch_alpha_on_image", patch_alpha_on_image)
         seed = resolved.get("seed", None)
         draw_connections = resolved["draw_connections"]
         draw_patches = resolved["draw_patches"]
@@ -1059,6 +1108,7 @@ def lenet_view(
             "rshape": rshape,
             "style": style,
             "stack": temp_stack,
+            "has_face_image": bool(spec),
         })
 
     # Second pass: assign positions using bounding boxes
@@ -1189,9 +1239,26 @@ def lenet_view(
             dst_style = dst_obj['style']
             conn_fill = dst_style.get('connector_fill', connector_fill)
             conn_w = int(dst_style.get('connector_width', connector_width))
-            pfill = dst_style.get('patch_fill', patch_fill)
+            pfill_base = dst_style.get('patch_fill', patch_fill)
             pout = dst_style.get('patch_outline', patch_outline)
             pscale = float(dst_style.get('patch_scale', patch_scale))
+
+            # Patch box opacity: by default make patches semi-transparent on layers with face images.
+            base_patch_rgba = get_rgba_tuple(pfill_base)
+            src_alpha = _effective_patch_alpha_for_layer(
+                src_obj.get('style', {}),
+                has_face_image=bool(src_obj.get('has_face_image', False)),
+                base_alpha=base_patch_rgba[3],
+                default_on_image=int(patch_alpha_on_image),
+            )
+            dst_alpha = _effective_patch_alpha_for_layer(
+                dst_style,
+                has_face_image=bool(dst_obj.get('has_face_image', False)),
+                base_alpha=base_patch_rgba[3],
+                default_on_image=int(patch_alpha_on_image),
+            )
+            src_patch_fill = _with_alpha(base_patch_rgba, src_alpha)
+            dst_patch_fill = _with_alpha(base_patch_rgba, dst_alpha)
 
             if src_shape.kind == 'spatial' and dst_shape.kind == 'spatial' and (k is not None or p is not None):
                 sx1, sy1, sx2, sy2 = src_stack.front_rect()
@@ -1224,7 +1291,8 @@ def lenet_view(
                         dst_patch=dp,
                         connector_fill=conn_fill,
                         connector_width=conn_w,
-                        patch_fill=pfill,
+                        src_patch_fill=src_patch_fill,
+                        dst_patch_fill=dst_patch_fill,
                         patch_outline=pout,
                         draw_patches=draw_patches,
                     )
@@ -1285,7 +1353,8 @@ def lenet_view(
                         dst_patch=ed['dst_patch'],
                         connector_fill=ed['connector_fill'],
                         connector_width=ed['connector_width'],
-                        patch_fill=ed['patch_fill'],
+                        src_patch_fill=ed['src_patch_fill'],
+                        dst_patch_fill=ed['dst_patch_fill'],
                         patch_outline=ed['patch_outline'],
                         draw_patches=ed.get('draw_patches', True),
                     )

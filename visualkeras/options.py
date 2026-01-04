@@ -226,6 +226,7 @@ class LenetOptions:
     patch_fill: Any = "#7db7ff"
     patch_outline: Any = "black"
     patch_scale: float = 1.0
+    patch_alpha_on_image: int = 140
     seed: Optional[int] = None
     draw_connections: bool = True
     draw_patches: bool = True
