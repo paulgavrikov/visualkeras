@@ -232,6 +232,8 @@ class LenetOptions:
     draw_patches: bool = True
     font: Any = None
     font_color: Any = "white"
+    top_label_padding: int = 6
+    bottom_label_padding: int = 6
     top_label: bool = True
     bottom_label: bool = True
     styles: Optional[StyleMap] = None

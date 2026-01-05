@@ -904,6 +904,8 @@ def lenet_view(
     bottom_label_callable: Optional[Callable[[Any, RenderShape], Optional[str]]] = None,
     top_label: bool = True,
     bottom_label: bool = True,
+    top_label_padding: int = 6,
+    bottom_label_padding: int = 6,
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
     *,
     options: Union[LenetOptions, Mapping[str, Any], None] = None,
@@ -963,6 +965,8 @@ def lenet_view(
             "draw_patches": draw_patches,
             "font": font,
             "font_color": font_color,
+            "top_label_padding": top_label_padding,
+            "bottom_label_padding": bottom_label_padding,
             "top_label": top_label,
             "bottom_label": bottom_label,
             "styles": styles,
@@ -997,6 +1001,8 @@ def lenet_view(
         draw_patches = resolved["draw_patches"]
         font = resolved["font"]
         font_color = resolved["font_color"]
+        top_label_padding = resolved.get("top_label_padding", 6)
+        bottom_label_padding = resolved.get("bottom_label_padding", 6)
         top_label = resolved["top_label"]
         bottom_label = resolved["bottom_label"]
         styles = resolved["styles"]
@@ -1035,6 +1041,8 @@ def lenet_view(
         "face_image_fit": "cover",
         "face_image_alpha": 255,
         "face_image_inset": None,
+        "top_label_padding": top_label_padding,
+        "bottom_label_padding": bottom_label_padding,
     }
 
     for idx, layer in enumerate(layers):
@@ -1161,15 +1169,19 @@ def lenet_view(
 
         layer = obj['layer']
         rshape: RenderShape = obj['rshape']
-        cx, _cy = st.front_anchor()
+        b_left, _b_top, b_right, _b_bottom = st.bounds()
+        cx = (b_left + b_right) / 2.0
         x1, y1, x2, y2 = st.front_rect()
+
+        top_pad = int(obj.get("style", {}).get("top_label_padding", top_label_padding))
+        bottom_pad = int(obj.get("style", {}).get("bottom_label_padding", bottom_label_padding))
 
         if bottom_label:
             text = bottom_label_callable(layer, rshape)
             if text:
                 tw, th = _get_multiline_text_size(measure_draw, str(text), font)
                 tx0 = cx - tw / 2.0
-                ty0 = y2 + 6
+                ty0 = y2 + bottom_pad
                 tx1 = tx0 + tw
                 ty1 = ty0 + th
                 min_x = min(min_x, tx0)
@@ -1183,7 +1195,7 @@ def lenet_view(
                 tw, th = _get_multiline_text_size(measure_draw, str(text), font)
                 vis_top = y1 - st.offset
                 tx0 = cx - tw / 2.0
-                ty0 = vis_top - th - 6
+                ty0 = vis_top - th - top_pad
                 tx1 = tx0 + tw
                 ty1 = ty0 + th
                 min_x = min(min_x, tx0)
@@ -1410,13 +1422,18 @@ def lenet_view(
             rshape = obj["rshape"]
             stack: FeatureMapStack = obj["stack"]
             x1, y1, x2, y2 = stack.front_rect()
-            cx = (x1 + x2) / 2.0
+            b_left, _b_top, b_right, _b_bottom = stack.bounds()
+            cx = (b_left + b_right) / 2.0
+
+            style = obj.get("style", {}) or {}
+            top_pad = int(style.get("top_label_padding", top_label_padding))
+            bottom_pad = int(style.get("bottom_label_padding", bottom_label_padding))
 
             if bottom_label:
                 text = bottom_label_callable(layer, rshape)
                 if text:
                     tw, th = _get_multiline_text_size(dtext, str(text), font)
-                    dtext.multiline_text((cx - tw / 2.0, y2 + 6), str(text), font=font, fill=font_color, spacing=2, align='center')
+                    dtext.multiline_text((cx - tw / 2.0, y2 + bottom_pad), str(text), font=font, fill=font_color, spacing=2, align='center')
 
             if top_label:
                 text = top_label_callable(layer, rshape)
@@ -1424,7 +1441,7 @@ def lenet_view(
                     # Account for stack offset: top of visible stack is y1 - offset
                     vis_top = y1 - stack.offset
                     tw, th = _get_multiline_text_size(dtext, str(text), font)
-                    dtext.multiline_text((cx - tw / 2.0, vis_top - th - 6), str(text), font=font, fill=font_color, spacing=2, align='center')
+                    dtext.multiline_text((cx - tw / 2.0, vis_top - th - top_pad), str(text), font=font, fill=font_color, spacing=2, align='center')
 
     if to_file:
         img.save(to_file)
