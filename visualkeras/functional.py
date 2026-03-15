@@ -120,6 +120,27 @@ def _normalize_collapse_selector(kind: str, selector: Any, rule_index: int) -> U
 def _validate_and_normalize_collapse_rules(
     collapse_rules: Optional[Sequence[Mapping[str, Any]]]
 ) -> List[Dict[str, Any]]:
+    """Validate and normalize explicit collapse rule definitions.
+
+    Rules must be mappings with:
+    - ``kind``: ``"layer"`` or ``"block"``
+    - ``selector``: a layer name/type (for ``layer``) or sequence of names/types (for ``block``)
+    - ``repeat_count``: integer >= 2
+
+    Optional fields:
+    - ``label``: string, defaults to ``"{repeat_count}x"``
+    - ``annotation_position``: ``"above"`` or ``"below"``, defaults to ``"above"``
+
+    Args:
+        collapse_rules: User-provided collapse rules from ``functional_view`` options/kwargs.
+
+    Returns:
+        A normalized list of plain dict rules with canonical keys and validated values.
+
+    Raises:
+        TypeError: If rule container/items or typed fields have invalid types.
+        ValueError: If required keys are missing or values are outside accepted ranges.
+    """
     if collapse_rules is None:
         return []
     if not isinstance(collapse_rules, Sequence) or isinstance(collapse_rules, (str, bytes, Mapping)):
@@ -470,7 +491,6 @@ def functional_view(
         "image_axis": image_axis,
         "padding": 0,  # separate from global image padding
 
-        # Simple text visualization (2D diagram boxes) defaults
         "box_orientation": "vertical",
         "box_text_rotation": None,
         "box_text_color": font_color,
@@ -487,7 +507,6 @@ def functional_view(
         "box_outline": None,
         "box_text_enabled": True,
 
-        # Collapsed-layer annotations
         "collapse_badge_enabled": True,
         "collapse_badge_fill": "white",
         "collapse_badge_outline": "black",
@@ -627,6 +646,38 @@ def _build_graph(
     image_axis: str,
     simple_text_visualization: bool = False,
 ) -> FunctionalGraph:
+    """Build the intermediate functional graph from a Keras model.
+
+    This stage creates ``FunctionalNode`` objects for each model layer, applies
+    style/default resolution, computes visual dimensions, optionally loads image
+    textures, and collects directed graph edges from inbound layer relations.
+    When requested, synthetic output nodes are appended.
+
+    Args:
+        model: Keras/TensorFlow model.
+        styles: Style overrides keyed by layer type or layer name.
+        global_defaults: Base style values merged into each node style.
+        min_z: Minimum depth dimension used in dimension scaling.
+        min_xy: Minimum width/height dimension used in scaling.
+        max_z: Maximum depth dimension used in scaling.
+        max_xy: Maximum width/height dimension used in scaling.
+        scale_z: Depth scaling factor.
+        scale_xy: Width/height scaling factor.
+        one_dim_orientation: Orientation hint for one-dimensional shapes.
+        sizing_mode: Dimension scaling strategy.
+        dimension_caps: Optional dimension caps for capped/balanced sizing modes.
+        relative_base_size: Base pixel size used by relative sizing mode.
+        add_output_nodes: Whether to append synthetic output marker nodes.
+        virtual_node_size: Size used for synthetic helper nodes.
+        draw_volume: Global default for volumetric rendering depth.
+        shade_step: Global shade delta for box rendering.
+        image_fit: Default image fit mode for textured nodes.
+        image_axis: Default box face axis for image projection.
+        simple_text_visualization: If true, force flat 2D boxes.
+
+    Returns:
+        A ``FunctionalGraph`` containing nodes, edges, and inferred input/output ids.
+    """
     
     def resolve_style(layer, name) -> Dict[str, Any]:
         final_style = global_defaults.copy()
@@ -644,19 +695,14 @@ def _build_graph(
     for layer in layers:
         node_id = id(layer)
         name = getattr(layer, "name", None) or f"layer_{order_map[node_id]}"
-        
-        # Resolve style early to check for image replacement
         node_style = resolve_style(layer, name)
 
-        # Simple diagram mode uses 2D boxes; disable volume depth
         if simple_text_visualization:
             node_style = dict(node_style)
             node_style["draw_volume"] = False
 
         image_path = node_style.get("image")
         node_image = None
-        
-        # Always calculate standard dimensions first
         shape = extract_primary_shape(_resolve_layer_output_shape(layer), name)
         dims = calculate_layer_dimensions(
             shape,
@@ -690,7 +736,6 @@ def _build_graph(
                 except Exception:
                     pass
 
-        # Calculate Depth (de)
         use_volume = node_style.get('draw_volume', draw_volume)
         if simple_text_visualization:
             use_volume = False
@@ -700,43 +745,27 @@ def _build_graph(
 
         if image_path:
             try:
-                # Load the image and convert to RGBA for transparency support
                 node_image = Image.open(image_path).convert("RGBA")
-                
-                # Determine fit mode and axis
                 fit_mode = node_style.get("image_fit", image_fit)
                 axis = ("z" if simple_text_visualization else node_style.get("image_axis", image_axis))
-                
                 if fit_mode == "match_aspect":
-                    # Resize surface to match image proportions
                     img_w, img_h = node_image.size
                     img_ratio = img_w / img_h
-                    
-                    if axis == 'z': # Front (Width x Height)
-                        # Current surface ratio
+
+                    if axis == 'z':
                         surf_ratio = width / height
                         if img_ratio > surf_ratio:
-                            # Image is wider than surface -> Increase width
                             width = int(height * img_ratio)
                         else:
-                            # Image is taller than surface -> Increase height
                             height = int(width / img_ratio)
-                            
-                    elif axis == 'y': # Top (Width x Depth)
-                        # Width x Depth
-                        # We adjust 'de' to match aspect ratio relative to 'width'
-                        # Ratio = Width / Depth
-                        # Depth = Width / Ratio
+
+                    elif axis == 'y':
                         if img_ratio > 0:
                             de = int(width / img_ratio)
-                            
-                    elif axis == 'x': # Side (Depth x Height)
-                        # Depth x Height
-                        # Ratio = Depth / Height
-                        # Depth = Height * Ratio
+
+                    elif axis == 'x':
                         de = int(height * img_ratio)
 
-                # Apply scale_image factor if present
                 scale_factor = node_style.get("scale_image")
                 if scale_factor is not None:
                     try:
@@ -760,7 +789,6 @@ def _build_graph(
                 warnings.warn(f"Failed to load image for layer '{name}': {e}. Reverting to default visualization.")
                 image_path = None # Fallback to standard logic below
 
-        # Inflate dimensions to reserve space for the 3D projection
         total_width = width + de
         total_height = height + de
         
@@ -883,6 +911,20 @@ def _find_first_collapse_sequence(
     graph: FunctionalGraph,
     rule: Mapping[str, Any],
 ) -> Optional[List[int]]:
+    """Find the first collapsible linear node sequence matching one rule.
+
+    Matching is strict and linear: each internal hop must traverse a node with
+    exactly one outgoing edge and a successor with exactly one incoming edge
+    from that predecessor. This avoids collapsing ambiguous branch/merge paths.
+
+    Args:
+        graph: Current graph state.
+        rule: One normalized collapse rule.
+
+    Returns:
+        A list of node ids for the first valid match in node order, or ``None``
+        if no sequence satisfies the rule.
+    """
     kind = str(rule["kind"])
     repeat_count = int(rule["repeat_count"])
     if kind == "layer":
@@ -944,6 +986,22 @@ def _collapse_node_sequence(
     rule: Mapping[str, Any],
     collapse_annotations: bool,
 ) -> FunctionalGraph:
+    """Collapse one matched node sequence into a synthetic collapsed node.
+
+    The function removes all sequence members, inserts one synthetic node with
+    merged metadata/style markers, and rewires boundary edges so incoming edges
+    target the collapsed node and outgoing edges originate from it.
+
+    Args:
+        graph: Source graph.
+        sequence: Ordered node ids to collapse.
+        rule: Normalized rule that produced the match.
+        collapse_annotations: Whether block-level annotation rendering is enabled.
+
+    Returns:
+        A new ``FunctionalGraph`` with collapsed topology and recomputed
+        input/output sets.
+    """
     if not sequence:
         return graph
 
@@ -1044,6 +1102,21 @@ def _collapse_graph_with_rules(
     *,
     collapse_annotations: bool,
 ) -> Tuple[FunctionalGraph, List[int]]:
+    """Apply collapse rules repeatedly until no more matches remain.
+
+    Rules are processed in order. For each rule, the first valid match is
+    collapsed repeatedly until that rule has no additional matches in the
+    updated graph.
+
+    Args:
+        graph: Source graph before collapse.
+        rules: Normalized collapse rules.
+        collapse_annotations: Whether collapsed block annotations are enabled.
+
+    Returns:
+        Tuple of ``(collapsed_graph, applied_counts)`` where ``applied_counts``
+        tracks how many collapses each rule produced.
+    """
     if not rules:
         return graph, []
 
@@ -1500,6 +1573,21 @@ def _draw_box_text_in_rect(
     fallback_color: Any,
     fallback_spacing: int,
 ) -> None:
+    """Render style-driven text inside a rectangular node region.
+
+    The text is optionally wrapped, autoshrunk, rotated, and aligned according
+    to ``box_text_*`` style keys. Rendering is performed via an intermediate
+    RGBA text image to avoid clipping from glyph bearings.
+
+    Args:
+        base: Destination image.
+        rect: Target rectangle ``(x1, y1, x2, y2)``.
+        text: Raw label text.
+        style: Node style mapping with text layout keys.
+        fallback_font: Global fallback font when per-node font is absent.
+        fallback_color: Global fallback text color.
+        fallback_spacing: Global fallback line spacing.
+    """
     if not text:
         return
     x1, y1, x2, y2 = rect
@@ -1625,6 +1713,18 @@ def _draw_collapse_badge(
     text_color: Any,
     padding: Union[int, Tuple[int, int], List[int]],
 ) -> None:
+    """Draw a compact collapse-count badge (for example ``"4x"``) on a node.
+
+    Args:
+        draw: PIL drawing context.
+        rect: Node bounds ``(x1, y1, x2, y2)``.
+        label: Badge text.
+        font: Font used for label text.
+        fill: Badge background color.
+        outline: Badge border color.
+        text_color: Badge text color.
+        padding: Horizontal/vertical text padding in the badge.
+    """
     if not label:
         return
 
@@ -1676,6 +1776,20 @@ def _draw_collapse_block_annotation(
     font: Any,
     image_size: Tuple[int, int],
 ) -> None:
+    """Draw a block-collapse double-headed arrow with an optional count label.
+
+    Args:
+        draw: PIL drawing context.
+        rect: Collapsed node bounds ``(x1, y1, x2, y2)``.
+        label: Annotation text shown near the arrow.
+        position: ``"above"`` or ``"below"`` relative to the node.
+        color: Arrow and text color.
+        line_width: Arrow line thickness.
+        head_size: Arrowhead size.
+        offset: Pixel distance from node edge to arrow baseline.
+        font: Font used for annotation text.
+        image_size: Destination image size used for clipping guards.
+    """
     x1, y1, x2, y2 = rect
     if x2 <= x1:
         return
@@ -1730,6 +1844,19 @@ def _draw_collapsed_annotations(
     fallback_font_color: Any,
     default_annotation_color: Any,
 ) -> None:
+    """Render all collapsed-node overlays after the main node pass.
+
+    For each collapsed node this can draw:
+    - an ``Nx`` badge
+    - an optional double-headed block annotation line with label
+
+    Args:
+        img: Destination RGBA image.
+        collapsed_nodes: ``(node, rect)`` entries gathered during rendering.
+        fallback_font: Global fallback font.
+        fallback_font_color: Global fallback text color.
+        default_annotation_color: Global fallback arrow/annotation color.
+    """
     if not collapsed_nodes:
         return
 
@@ -1807,6 +1934,39 @@ def _render_graph(
     logos_legend: Union[bool, Dict[str, Any]] = False,
     simple_text_visualization: bool = False,
 ) -> Image.Image:
+    """Render a positioned ``FunctionalGraph`` to a PIL image.
+
+    Rendering order:
+    1. optional group backgrounds
+    2. connectors
+    3. nodes (flat or volumetric), node images, and logos
+    4. in-node text and external annotations (collapsed markers)
+    5. optional group captions and logo legend
+
+    Args:
+        graph: Graph with already-computed node positions.
+        color_map: Optional per-layer fill/outline overrides.
+        background_fill: Canvas background color.
+        padding: Outer image padding.
+        connector_fill: Connector color.
+        connector_width: Default connector width.
+        connector_arrow: Whether connectors include arrowheads by default.
+        connector_padding: Anchor offset from node faces.
+        text_callable: Optional callable for above/below external labels.
+        text_vspacing: Vertical spacing for multiline text labels.
+        font: Optional global font for text labels.
+        font_color: Global text color.
+        render_virtual_nodes: Whether virtual routing nodes are visible.
+        draw_volume: Whether default node rendering uses volumetric boxes.
+        orientation_rotation: Optional rotation applied to volumetric boxes.
+        layered_groups: Optional background highlight groups.
+        logo_groups: Optional node-logo overlay groups.
+        logos_legend: Legend toggle/config for logo groups.
+        simple_text_visualization: Switch to flat 2D box rendering mode.
+
+    Returns:
+        A rendered ``PIL.Image.Image``.
+    """
     max_right = padding
     max_bottom = padding
     for node in graph.nodes.values():
@@ -1829,8 +1989,6 @@ def _render_graph(
             group_nodes = _get_group_nodes(graph, group)
             if not group_nodes:
                 continue
-            
-            # Group Box Bounds
             g_min_x = min(n.x for n in group_nodes)
             g_max_x = max(n.x + n.width for n in group_nodes)
             g_min_y = min(n.y for n in group_nodes)
@@ -1844,8 +2002,6 @@ def _render_graph(
             
             max_right = max(max_right, g_max_x + padding)
             max_bottom = max(max_bottom, g_max_y + padding)
-            
-            # Caption Bounds
             caption = group.get("name", group.get("caption"))
             if caption:
                 font = _get_font(group)
@@ -1859,7 +2015,6 @@ def _render_graph(
                 max_right = max(max_right, text_x + text_w + padding)
                 max_bottom = max(max_bottom, text_y + text_h + padding)
 
-    # Pre-process logos
     node_logos = {} # node_id -> list of (group, image)
     if logo_groups:
         for group in logo_groups:
@@ -1883,7 +2038,6 @@ def _render_graph(
     if layered_groups:
         _draw_group_boxes(draw, graph, layered_groups)
 
-    # Draw connectors FIRST so they appear behind 3D boxes
     _draw_connectors(
         draw,
         graph.edges,
@@ -1894,8 +2048,6 @@ def _render_graph(
         connector_arrow,
         connector_padding,
     )
-
-    # Flush connectors before pasting images
     draw.flush()
 
     pending_simple_text: List[Tuple[FunctionalNode, Tuple[int, int, int, int]]] = []
@@ -1911,7 +2063,6 @@ def _render_graph(
             x2 = int(node.x + node.width)
             y2 = int(node.y + node.height)
 
-            # Resolve fill/outline
             fill = node.style.get("box_fill")
             if fill is None:
                 fill = node.style.get("fill")
@@ -1933,7 +2084,6 @@ def _render_graph(
             brush = aggdraw.Brush(get_rgba_tuple(fill))
             draw.rectangle((x1, y1, x2, y2), pen, brush)
 
-            # Optional image fill
             if node.image is not None:
                 draw.flush()
                 fit_mode = node.style.get("image_fit", "fill")
@@ -1944,7 +2094,6 @@ def _render_graph(
                     pass
                 draw = aggdraw.Draw(img)
 
-            # Optional logos
             if node.node_id in node_logos:
                 draw.flush()
                 box_tmp = Box()
@@ -1970,18 +2119,15 @@ def _render_graph(
         box.shade = getattr(node, 'shade', 0)
         box.rotation = orientation_rotation
 
-        # Calculate coordinates for the Front Face (Layout reference)
         box.x1 = node.x
         box.y1 = node.y + box.de
-        
-        # Recover the real width/height of the face.
+
         real_width = node.width - box.de
         real_height = node.height - box.de
-        
+
         box.x2 = box.x1 + real_width
         box.y2 = box.y1 + real_height
-        
-        # Fill/Outline logic
+
         fill = color_map.get(node.layer_type, {}).get("fill")
         outline = color_map.get(node.layer_type, {}).get("outline")
         if node.kind == "virtual":
@@ -1991,45 +2137,34 @@ def _render_graph(
             
         box.fill = fill if fill is not None else color_wheel.get_color(node.layer_type)
         box.outline = outline if outline is not None else "black"
-        
-        # Apply style overrides if present
+
         if node.style.get('fill'):
             box.fill = node.style.get('fill')
         if node.style.get('outline'):
             box.outline = node.style.get('outline')
 
-        # Draw the box (background/volume)
         box.draw(draw, draw_reversed=False)
 
-        # Re-implement Image pasting using Box's projected faces
         if node.image is not None:
             draw.flush()
             
             fit_mode = node.style.get("image_fit", "fill")
             axis = node.style.get("image_axis", "z")
-            
-            # Retrieve the projected quad for the target face from the Box
-            # Axis 'z' -> Front Face (Index 0)
-            # Axis 'y' -> Top Face (Index 4 - assuming Box implementation details below)
-            # Axis 'x' -> Right Face (Index 2)
-            
+
             target_face_idx = 0 # Front
             if axis == 'y': target_face_idx = 4 # Top
             elif axis == 'x': target_face_idx = 2 # Right / Side
 
-            # Get Quad from Box (list of tuples)
             quad = box.get_face_quad(target_face_idx)
             
             if quad:
                 apply_affine_transform(img, node.image, quad, fit_mode)
 
-            # Re-create aggdraw context
             draw = aggdraw.Draw(img)
 
         if node.node_id in node_logos:
             draw.flush()
             for group, logo_img in node_logos[node.node_id]:
-                # Update draw_node_logo to accept the box object directly for quad extraction
                 draw_node_logo(img, box, logo_img, group, draw_volume)
             draw = aggdraw.Draw(img)
 
@@ -2041,7 +2176,6 @@ def _render_graph(
     draw.flush()
 
     if simple_text_visualization and pending_simple_text:
-        # Render inside-box labels with bbox-safe text images (avoids clipping)
         for node, rect in pending_simple_text:
             label = _resolve_box_label(node)
             _draw_box_text_in_rect(
@@ -2073,26 +2207,19 @@ def _render_graph(
                     text_widths.append(bbox[2])
                     text_height += bbox[3]
             text_height += (len(text.split("\n")) - 1) * text_vspacing
-            
-            # Center text relative to the Front Face
+
             de = getattr(node, 'de', 0)
             real_width = node.width - de
             real_height = node.height - de
-            
-            # Center X = node.x + real_width / 2
-            # Center Y = node.y + de + real_height / 2 (approx center of face)
-            # Text Y is relative to top/bottom of the face
-            
+
             face_x = node.x
             face_y = node.y + de
-            
+
             text_x = face_x + real_width / 2 - max(text_widths or [0]) / 2
-            
+
             if above:
-                # Above the top of the front face
                 text_y = face_y - text_height - 4
             else:
-                # Below the bottom of the front face
                 text_y = face_y + real_height + 4
                 
             draw_text.multiline_text(
@@ -2145,18 +2272,11 @@ def _straighten_layout(
         incoming[edge.dst].append(edge.src)
 
     def get_visual_center(node: FunctionalNode) -> float:
-        # Visual Center = Top of Front Face + Half Height of Front Face
-        # Top of Front Face = node.y + node.de
-        # Height of Front Face = node.height - node.de
-        # Center = (node.y + node.de) + (node.height - node.de) / 2
-        # Simplified: node.y + (node.height + node.de) / 2
         de = getattr(node, 'de', 0)
         return node.y + (node.height + de) / 2.0
 
     def set_visual_center(node: FunctionalNode, center_y: float):
         de = getattr(node, 'de', 0)
-        # Inverse of get_visual_center
-        # node.y = center_y - (node.height + de) / 2
         new_y = center_y - (node.height + de) / 2.0
         node.y = int(new_y)
 
@@ -2167,11 +2287,9 @@ def _straighten_layout(
 
         current_y_map = {n.node_id: n.y for n in col_nodes}
 
-        # Forward sweep (push down)
         for i in range(1, len(col_nodes)):
             prev_node = col_nodes[i-1]
             curr_node = col_nodes[i]
-            # Ensure spacing between Bounding Boxes
             min_y = current_y_map[prev_node.node_id] + prev_node.height + row_spacing
             if current_y_map[curr_node.node_id] < min_y:
                 current_y_map[curr_node.node_id] = min_y
@@ -2179,7 +2297,6 @@ def _straighten_layout(
         for node in col_nodes:
             node.y = int(current_y_map[node.node_id])
 
-    # Forward pass (Align Child to Parent)
     for rank in sorted_ranks:
         col_nodes = nodes_by_rank[rank]
         for node in col_nodes:
@@ -2188,13 +2305,11 @@ def _straighten_layout(
                 parent_id = parents[0]
                 if len(outgoing[parent_id]) == 1:
                     parent = graph.nodes[parent_id]
-                    # Align to Parent's Visual Center
                     target_center = get_visual_center(parent)
                     set_visual_center(node, target_center)
         
         resolve_collisions(col_nodes)
 
-    # Backward pass (Align Parent to Child)
     for rank in reversed(sorted_ranks):
         col_nodes = nodes_by_rank[rank]
         for node in col_nodes:
@@ -2203,7 +2318,6 @@ def _straighten_layout(
                 child_id = children[0]
                 if len(incoming[child_id]) == 1:
                     child = graph.nodes[child_id]
-                    # Align to Child's Visual Center
                     target_center = get_visual_center(child)
                     set_visual_center(node, target_center)
         
@@ -2211,18 +2325,22 @@ def _straighten_layout(
 
 
 def _get_group_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[FunctionalNode]:
+    """Resolve all graph nodes referenced by one layered-group configuration.
+
+    Group ``layers`` entries may reference layer objects directly or layer names.
+    Name matching checks both the rendered node name and the underlying Keras
+    layer ``name`` attribute.
+    """
     layers = group.get("layers", [])
     if not layers:
         return []
         
     group_nodes = []
     for node in graph.nodes.values():
-        # Check if node matches any layer in the group
         for layer_ref in layers:
             if node.layer is layer_ref:
                 group_nodes.append(node)
                 break
-            # Check name match
             node_layer_name = getattr(node.layer, 'name', '')
             if isinstance(layer_ref, str) and (node.name == layer_ref or node_layer_name == layer_ref):
                 group_nodes.append(node)
@@ -2235,35 +2353,33 @@ def _draw_group_boxes(
     graph: FunctionalGraph,
     groups: Sequence[Dict[str, Any]],
 ) -> None:
+    """Draw configured group highlight rectangles behind matching nodes.
+
+    Args:
+        draw: Aggdraw context for the destination image.
+        graph: Positioned graph.
+        groups: Group style dictionaries containing layer selectors and colors.
+    """
     for group in groups:
         group_nodes = _get_group_nodes(graph, group)
         if not group_nodes:
             continue
-            
-        # Calculate bounding box
-        # Min X: node.x
-        # Max X: node.x + node.width
-        # Min Y: node.y
-        # Max Y: node.y + node.height
-        
+
         min_x = min(n.x for n in group_nodes)
         max_x = max(n.x + n.width for n in group_nodes)
         min_y = min(n.y for n in group_nodes)
         max_y = max(n.y + n.height for n in group_nodes)
-        
-        # Apply padding
+
         padding = group.get("padding", 10)
         min_x -= padding
         max_x += padding
         min_y -= padding
         max_y += padding
-        
-        # Style
+
         fill = group.get("fill", (200, 200, 200, 100)) 
         outline = group.get("outline", "black")
         width = group.get("width", 1)
-        
-        # Convert colors
+
         fill_rgba = get_rgba_tuple(fill)
         outline_rgba = get_rgba_tuple(outline)
         
@@ -2278,6 +2394,15 @@ def _draw_group_captions(
     graph: FunctionalGraph,
     groups: Sequence[Dict[str, Any]],
 ) -> None:
+    """Draw text captions for configured layer groups.
+
+    Captions are centered horizontally below each group's padded bounding box.
+
+    Args:
+        img: Destination image.
+        graph: Positioned graph.
+        groups: Group configuration dictionaries.
+    """
     draw = ImageDraw.Draw(img)
     for group in groups:
         caption = group.get("name", group.get("caption"))
@@ -2287,8 +2412,7 @@ def _draw_group_captions(
         group_nodes = _get_group_nodes(graph, group)
         if not group_nodes:
             continue
-            
-        # Calculate bounding box (same as boxes)
+
         min_x = min(n.x for n in group_nodes)
         max_x = max(n.x + n.width for n in group_nodes)
         min_y = min(n.y for n in group_nodes)
@@ -2298,16 +2422,13 @@ def _draw_group_captions(
         box_min_x = min_x - padding
         box_max_x = max_x + padding
         box_max_y = max_y + padding
-        
-        # Config
+
         font = _get_font(group)
         color = group.get("font_color", "black")
         gap = group.get("text_spacing", 5)
-        
-        # Calculate text size
+
         text_w, text_h = _measure_text(draw, caption, font)
-        
-        # Position: Centered horizontally, below box
+
         center_x = (box_min_x + box_max_x) / 2
         text_x = center_x - text_w / 2
         text_y = box_max_y + gap
@@ -2325,6 +2446,22 @@ def _draw_connectors(
     connector_arrow: bool,
     connector_padding: int,
 ) -> None:
+    """Draw orthogonal connector polylines between graph nodes.
+
+    The routing pass consolidates virtual-node chains, computes shared elbows
+    for branch/merge readability, and supports per-node connector overrides for
+    width, arrowheads, and padding.
+
+    Args:
+        draw: Aggdraw context.
+        edges: Directed graph edges.
+        nodes: Node lookup by id.
+        render_virtual_nodes: Whether virtual nodes are visually rendered.
+        connector_fill: Default connector color.
+        connector_width: Default connector line width.
+        connector_arrow: Default arrowhead toggle.
+        connector_padding: Default anchor offset from node faces.
+    """
     pen = aggdraw.Pen(connector_fill, connector_width)
     brush = aggdraw.Brush(connector_fill)
     
@@ -2334,15 +2471,12 @@ def _draw_connectors(
     paths_by_src: Dict[int, List[List[int]]] = {}
 
     def anchor(node: FunctionalNode, role: str) -> Tuple[int, int]:
-        # Use the node's specific style, fallback to the global arg
         padding = node.style.get("connector_padding", connector_padding)
         de = getattr(node, 'de', 0)
-        
-        # Calculate "Real" dimensions (the front face)
+
         real_width = node.width - de
         real_height = node.height - de
-        
-        # Front face top-left
+
         face_x = node.x
         face_y = node.y + de
         
@@ -2375,7 +2509,6 @@ def _draw_connectors(
             if valid_merge and dst_node_id in nodes:
                 d_node = nodes[dst_node_id]
                 dx, _ = anchor(d_node, "end")
-                # Calculate the shared elbow based on the widest source
                 shared_merge_x[dst_node_id] = int(round(max_start_x + (dx - max_start_x) / 2))
 
     def append_path(start_id: int, next_id: int) -> None:
@@ -2497,10 +2630,8 @@ def _draw_connectors(
             current_pen = aggdraw.Pen(connector_fill, use_width)
 
             if len(points) >= 2:
-                # Draw the Line
                 draw.line([coord for point in points for coord in point], current_pen)
 
-                # Draw the Arrowhead (if enabled)
                 if use_arrow:
                     end_x, end_y = points[-1]
                     prev_x, prev_y = points[-2]
@@ -2581,13 +2712,16 @@ def _shape_to_tuple(shape: Any) -> Any:
     return shape
 
 def _get_logo_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[FunctionalNode]:
+    """Resolve nodes targeted by one logo-group configuration.
+
+    String entries in ``layers`` target layer names. Type entries target all
+    nodes whose layer is an instance of that type.
+    """
     layers_ref = group.get("layers", [])
     if not layers_ref:
         return []
     
     target_nodes = []
-    
-    # Build lookup maps
     name_to_nodes = {}
     type_to_nodes = {}
     
@@ -2607,15 +2741,8 @@ def _get_logo_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[Funct
         
     for ref in layers_ref:
         if isinstance(ref, str):
-            # Try name first
             if ref in name_to_nodes:
                 target_nodes.extend(name_to_nodes[ref])
-            # If not found by name, check if it matches a type name? 
-            # The requirement says "name specification overriding type specification".
-            # This implies we should check both or have a way to distinguish.
-            # But usually type is passed as a class object in python.
-            # If the user passes a string that happens to be a type name, we might want to support it?
-            # For now, assume string is name, type is type.
         elif isinstance(ref, type):
             if ref in type_to_nodes:
                 target_nodes.extend(type_to_nodes[ref])
