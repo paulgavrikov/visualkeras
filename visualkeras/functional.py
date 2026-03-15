@@ -86,6 +86,91 @@ class _SyntheticLayer:
         self.name = name
         self.output_shape = output_shape
 
+
+def _normalize_collapse_selector(kind: str, selector: Any, rule_index: int) -> Union[str, type, Tuple[Union[str, type], ...]]:
+    if kind == "layer":
+        if isinstance(selector, (str, type)):
+            return selector
+        raise TypeError(
+            f"collapse_rules[{rule_index}]['selector'] must be a layer name (str) or layer type for kind='layer'."
+        )
+
+    if kind == "block":
+        if not isinstance(selector, Sequence) or isinstance(selector, (str, bytes)):
+            raise TypeError(
+                f"collapse_rules[{rule_index}]['selector'] must be a sequence of layer names/types for kind='block'."
+            )
+        normalized: List[Union[str, type]] = []
+        for item_index, item in enumerate(selector):
+            if isinstance(item, (str, type)):
+                normalized.append(item)
+                continue
+            raise TypeError(
+                f"collapse_rules[{rule_index}]['selector'][{item_index}] must be a layer name (str) or layer type."
+            )
+        if len(normalized) < 2:
+            raise ValueError(
+                f"collapse_rules[{rule_index}]['selector'] for kind='block' must contain at least 2 entries."
+            )
+        return tuple(normalized)
+
+    raise ValueError(f"Unsupported collapse rule kind '{kind}'.")
+
+
+def _validate_and_normalize_collapse_rules(
+    collapse_rules: Optional[Sequence[Mapping[str, Any]]]
+) -> List[Dict[str, Any]]:
+    if collapse_rules is None:
+        return []
+    if not isinstance(collapse_rules, Sequence) or isinstance(collapse_rules, (str, bytes, Mapping)):
+        raise TypeError("collapse_rules must be a sequence of mapping rules.")
+
+    normalized_rules: List[Dict[str, Any]] = []
+    for rule_index, raw_rule in enumerate(collapse_rules):
+        if not isinstance(raw_rule, Mapping):
+            raise TypeError(f"collapse_rules[{rule_index}] must be a mapping.")
+
+        kind = str(raw_rule.get("kind", "")).strip().lower()
+        if kind not in {"layer", "block"}:
+            raise ValueError(
+                f"collapse_rules[{rule_index}]['kind'] must be one of: 'layer', 'block'."
+            )
+
+        if "selector" not in raw_rule:
+            raise ValueError(f"collapse_rules[{rule_index}] is missing required key 'selector'.")
+        selector = _normalize_collapse_selector(kind, raw_rule["selector"], rule_index)
+
+        repeat_count = raw_rule.get("repeat_count")
+        if not isinstance(repeat_count, int) or repeat_count < 2:
+            raise ValueError(
+                f"collapse_rules[{rule_index}]['repeat_count'] must be an integer >= 2."
+            )
+
+        annotation_position = str(raw_rule.get("annotation_position", "above")).strip().lower()
+        if annotation_position not in {"above", "below"}:
+            raise ValueError(
+                f"collapse_rules[{rule_index}]['annotation_position'] must be 'above' or 'below'."
+            )
+
+        label = raw_rule.get("label")
+        if label is None:
+            label = f"{repeat_count}x"
+        elif not isinstance(label, str):
+            raise TypeError(f"collapse_rules[{rule_index}]['label'] must be a string when provided.")
+
+        normalized_rules.append(
+            {
+                "kind": kind,
+                "selector": selector,
+                "repeat_count": repeat_count,
+                "label": label,
+                "annotation_position": annotation_position,
+            }
+        )
+
+    return normalized_rules
+
+
 def functional_view(
     model,
     to_file: Optional[str] = None,
@@ -128,6 +213,9 @@ def functional_view(
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
     simple_text_visualization: bool = False,
+    collapse_enabled: bool = False,
+    collapse_rules: Optional[Sequence[Mapping[str, Any]]] = None,
+    collapse_annotations: bool = True,
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
     preset: Union[str, None] = None,
 ) -> Image.Image:
@@ -193,6 +281,9 @@ def functional_view(
             "logo_groups": logo_groups,
             "logos_legend": logos_legend,
             "simple_text_visualization": simple_text_visualization,
+            "collapse_enabled": collapse_enabled,
+            "collapse_rules": collapse_rules,
+            "collapse_annotations": collapse_annotations,
             "styles": styles,
         }
         custom_keys = [
@@ -282,6 +373,9 @@ def functional_view(
             "logo_groups": logo_groups,
             "logos_legend": logos_legend,
             "simple_text_visualization": simple_text_visualization,
+            "collapse_enabled": collapse_enabled,
+            "collapse_rules": collapse_rules,
+            "collapse_annotations": collapse_annotations,
             "styles": styles,
         }
 
@@ -329,6 +423,9 @@ def functional_view(
         logo_groups = resolved.get("logo_groups", logo_groups)
         logos_legend = resolved.get("logos_legend", logos_legend)
         simple_text_visualization = resolved.get("simple_text_visualization", simple_text_visualization)
+        collapse_enabled = resolved.get("collapse_enabled", collapse_enabled)
+        collapse_rules = resolved.get("collapse_rules", collapse_rules)
+        collapse_annotations = resolved.get("collapse_annotations", collapse_annotations)
         styles = resolved["styles"]
 
         if simple_text_visualization:
@@ -358,6 +455,14 @@ def functional_view(
 
     if styles is None:
         styles = {}
+
+    normalized_collapse_rules = _validate_and_normalize_collapse_rules(collapse_rules)
+    if collapse_enabled and normalized_collapse_rules:
+        warnings.warn(
+            "collapse_enabled/collapse_rules are currently validated but not yet applied to functional_view rendering.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     global_defaults = {
         "connector_fill": connector_fill,

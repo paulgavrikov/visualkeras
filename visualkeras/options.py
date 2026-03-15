@@ -201,6 +201,9 @@ class FunctionalOptions:
     logo_groups: Optional[Sequence[Dict[str, Any]]] = None
     logos_legend: Union[bool, Dict[str, Any]] = False
     simple_text_visualization: bool = False
+    collapse_enabled: bool = False
+    collapse_rules: Optional[Sequence[Mapping[str, Any]]] = None
+    collapse_annotations: bool = True
     styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
