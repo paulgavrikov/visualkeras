@@ -30,9 +30,11 @@ from visualkeras.options import (
     FunctionalOptions,
     LayeredOptions,
     GraphOptions,
+    LenetOptions,
     FUNCTIONAL_PRESETS,
     LAYERED_PRESETS,
     GRAPH_PRESETS,
+    LENET_PRESETS,
     LAYERED_TEXT_CALLABLES,
 )
 from visualkeras.show import show
