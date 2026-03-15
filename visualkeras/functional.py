@@ -57,7 +57,7 @@ class FunctionalNode:
     rank_order: int = 0
     x: int = 0
     y: int = 0
-    kind: str = "layer"  # layer, input, output, virtual
+    kind: str = "layer"  # layer, input, output, virtual, collapsed
     component: int = 0
     style: Dict[str, Any] = field(default_factory=dict)
     de: int = 0
@@ -457,12 +457,6 @@ def functional_view(
         styles = {}
 
     normalized_collapse_rules = _validate_and_normalize_collapse_rules(collapse_rules)
-    if collapse_enabled and normalized_collapse_rules:
-        warnings.warn(
-            "collapse_enabled/collapse_rules are currently validated but not yet applied to functional_view rendering.",
-            UserWarning,
-            stacklevel=2,
-        )
 
     global_defaults = {
         "connector_fill": connector_fill,
@@ -516,6 +510,20 @@ def functional_view(
         image_axis=image_axis,
         simple_text_visualization=simple_text_visualization,
     )
+
+    if collapse_enabled and normalized_collapse_rules:
+        graph, rule_apply_counts = _collapse_graph_with_rules(
+            graph,
+            normalized_collapse_rules,
+            collapse_annotations=collapse_annotations,
+        )
+        for rule_index, apply_count in enumerate(rule_apply_counts):
+            if apply_count == 0:
+                warnings.warn(
+                    f"collapse_rules[{rule_index}] did not match any collapsible linear chain.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
     ranks = _assign_ranks(graph.nodes, graph.edges)
     graph, ranks = _expand_long_edges(graph, ranks, virtual_node_size)
@@ -831,6 +839,214 @@ def _find_inputs_outputs(
     inputs = [node_id for node_id, count in incoming.items() if count == 0]
     outputs = [node_id for node_id, count in outgoing.items() if count == 0]
     return inputs, outputs
+
+
+def _build_edge_index(
+    nodes: Mapping[int, FunctionalNode],
+    edges: Sequence[FunctionalEdge],
+) -> Tuple[Dict[int, List[int]], Dict[int, List[int]]]:
+    outgoing: Dict[int, List[int]] = {node_id: [] for node_id in nodes}
+    incoming: Dict[int, List[int]] = {node_id: [] for node_id in nodes}
+    for edge in edges:
+        if edge.src not in nodes or edge.dst not in nodes:
+            continue
+        outgoing[edge.src].append(edge.dst)
+        incoming[edge.dst].append(edge.src)
+    return outgoing, incoming
+
+
+def _node_matches_collapse_selector(node: FunctionalNode, selector: Union[str, type]) -> bool:
+    if isinstance(selector, str):
+        return node.name == selector
+    try:
+        return issubclass(node.layer_type, selector)
+    except TypeError:
+        return False
+
+
+def _find_first_collapse_sequence(
+    graph: FunctionalGraph,
+    rule: Mapping[str, Any],
+) -> Optional[List[int]]:
+    kind = str(rule["kind"])
+    repeat_count = int(rule["repeat_count"])
+    if kind == "layer":
+        selector_pattern: List[Union[str, type]] = [rule["selector"]] * repeat_count
+    else:
+        block = list(rule["selector"])
+        selector_pattern = block * repeat_count
+
+    if len(selector_pattern) < 2:
+        return None
+
+    outgoing, incoming = _build_edge_index(graph.nodes, graph.edges)
+    candidate_ids = sorted(graph.nodes, key=lambda node_id: graph.nodes[node_id].order)
+
+    for start_id in candidate_ids:
+        start_node = graph.nodes[start_id]
+        if start_node.kind != "layer":
+            continue
+        if not _node_matches_collapse_selector(start_node, selector_pattern[0]):
+            continue
+
+        sequence = [start_id]
+        cursor = start_id
+        valid = True
+
+        for expected_selector in selector_pattern[1:]:
+            out_nodes = outgoing.get(cursor, [])
+            if len(out_nodes) != 1:
+                valid = False
+                break
+            next_id = out_nodes[0]
+            if next_id in sequence:
+                valid = False
+                break
+            next_node = graph.nodes.get(next_id)
+            if next_node is None or next_node.kind != "layer":
+                valid = False
+                break
+            in_nodes = incoming.get(next_id, [])
+            if len(in_nodes) != 1 or in_nodes[0] != cursor:
+                valid = False
+                break
+            if not _node_matches_collapse_selector(next_node, expected_selector):
+                valid = False
+                break
+            sequence.append(next_id)
+            cursor = next_id
+
+        if valid:
+            return sequence
+
+    return None
+
+
+def _collapse_node_sequence(
+    graph: FunctionalGraph,
+    sequence: Sequence[int],
+    *,
+    rule: Mapping[str, Any],
+    collapse_annotations: bool,
+) -> FunctionalGraph:
+    if not sequence:
+        return graph
+
+    seq_ids = list(sequence)
+    seq_set = set(seq_ids)
+    old_nodes = graph.nodes
+    member_nodes = [old_nodes[node_id] for node_id in seq_ids]
+    first_node = member_nodes[0]
+    last_node = member_nodes[-1]
+
+    collapse_label = str(rule.get("label", f"{rule['repeat_count']}x"))
+    collapse_kind = str(rule["kind"])
+    synthetic_name = f"collapsed_{first_node.name}_{collapse_label}"
+    synthetic_layer = _SyntheticLayer(
+        name=synthetic_name,
+        output_shape=getattr(last_node.layer, "output_shape", None),
+    )
+    collapsed_node_id = id(synthetic_layer)
+    while collapsed_node_id in old_nodes:
+        synthetic_layer = _SyntheticLayer(
+            name=f"{synthetic_name}_{collapsed_node_id}",
+            output_shape=getattr(last_node.layer, "output_shape", None),
+        )
+        collapsed_node_id = id(synthetic_layer)
+
+    collapsed_style = dict(first_node.style or {})
+    collapsed_style["collapsed"] = True
+    collapsed_style["collapse_kind"] = collapse_kind
+    collapsed_style["collapse_repeat_count"] = int(rule["repeat_count"])
+    collapsed_style["collapse_label"] = collapse_label
+    collapsed_style["collapse_annotation_position"] = rule.get("annotation_position", "above")
+    collapsed_style["collapse_annotation_enabled"] = bool(collapse_annotations)
+    collapsed_style["collapse_members"] = tuple(node.name for node in member_nodes)
+    if collapse_kind == "block":
+        selector = rule.get("selector", ())
+        collapsed_style["collapse_block_size"] = len(selector) if isinstance(selector, tuple) else 0
+
+    collapsed_node = FunctionalNode(
+        layer=synthetic_layer,
+        node_id=collapsed_node_id,
+        name=synthetic_name,
+        layer_type=first_node.layer_type,
+        shape=last_node.shape,
+        dims=(
+            max(node.dims[0] for node in member_nodes),
+            max(node.dims[1] for node in member_nodes),
+            max(node.dims[2] for node in member_nodes),
+        ),
+        width=max(node.width for node in member_nodes),
+        height=max(node.height for node in member_nodes),
+        order=first_node.order,
+        rank=first_node.rank,
+        rank_order=first_node.rank_order,
+        kind="collapsed",
+        component=first_node.component,
+        style=collapsed_style,
+        de=max(node.de for node in member_nodes),
+        shade=first_node.shade,
+        image=first_node.image if collapse_kind == "layer" else None,
+    )
+
+    new_nodes = {node_id: node for node_id, node in old_nodes.items() if node_id not in seq_set}
+    new_nodes[collapsed_node_id] = collapsed_node
+
+    first_id = seq_ids[0]
+    last_id = seq_ids[-1]
+    seen_edges = set()
+    new_edges: List[FunctionalEdge] = []
+    for edge in graph.edges:
+        src = edge.src
+        dst = edge.dst
+
+        if src in seq_set and dst in seq_set:
+            continue
+        if src in seq_set:
+            if src != last_id:
+                continue
+            src = collapsed_node_id
+        if dst in seq_set:
+            if dst != first_id:
+                continue
+            dst = collapsed_node_id
+        if src == dst:
+            continue
+        edge_key = (src, dst)
+        if edge_key in seen_edges:
+            continue
+        seen_edges.add(edge_key)
+        new_edges.append(FunctionalEdge(src, dst))
+
+    inputs, outputs = _find_inputs_outputs(new_nodes, new_edges)
+    return FunctionalGraph(nodes=new_nodes, edges=new_edges, inputs=inputs, outputs=outputs)
+
+
+def _collapse_graph_with_rules(
+    graph: FunctionalGraph,
+    rules: Sequence[Mapping[str, Any]],
+    *,
+    collapse_annotations: bool,
+) -> Tuple[FunctionalGraph, List[int]]:
+    if not rules:
+        return graph, []
+
+    collapsed_graph = graph
+    applied_counts = [0 for _ in rules]
+    for rule_index, rule in enumerate(rules):
+        while True:
+            sequence = _find_first_collapse_sequence(collapsed_graph, rule)
+            if not sequence:
+                break
+            collapsed_graph = _collapse_node_sequence(
+                collapsed_graph,
+                sequence,
+                rule=rule,
+                collapse_annotations=collapse_annotations,
+            )
+            applied_counts[rule_index] += 1
+    return collapsed_graph, applied_counts
 
 
 def _assign_ranks(
