@@ -85,7 +85,7 @@ class Box(RectShape):
         h = self.y2 - self.y1
         # Use 'de' as the Z-depth. 
         # In the layout, de was a shift offset. We treat it as physical depth here.
-        d = self.de
+        d = getattr(self, "de", 0)
         
         if d == 0:
             # Fallback for flat nodes (2D)
