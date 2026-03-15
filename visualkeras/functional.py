@@ -486,6 +486,21 @@ def functional_view(
         "box_fill": None,
         "box_outline": None,
         "box_text_enabled": True,
+
+        # Collapsed-layer annotations
+        "collapse_badge_enabled": True,
+        "collapse_badge_fill": "white",
+        "collapse_badge_outline": "black",
+        "collapse_badge_text_color": font_color,
+        "collapse_badge_font": None,
+        "collapse_badge_font_size": 12,
+        "collapse_badge_padding": (4, 2),
+        "collapse_annotation_color": connector_fill,
+        "collapse_annotation_font": None,
+        "collapse_annotation_font_size": 12,
+        "collapse_annotation_offset": 10,
+        "collapse_annotation_width": 2,
+        "collapse_annotation_head_size": 6,
     }
 
     graph = _build_graph(
@@ -1577,6 +1592,199 @@ def _draw_box_text_in_rect(
         py = y1 + (h - th) // 2
 
     base.alpha_composite(txt_img, (int(px), int(py)))
+
+
+def _resolve_annotation_font(
+    style_font: Any,
+    fallback_font: Optional[Any],
+    size: int,
+) -> Any:
+    if _is_font_like(style_font):
+        return style_font
+    if isinstance(style_font, str):
+        resolved = _try_load_font(style_font, size)
+        if resolved is not None:
+            return resolved
+    if _is_font_like(fallback_font):
+        return fallback_font
+    for candidate in ("DejaVuSans.ttf", "arial.ttf"):
+        resolved = _try_load_font(candidate, size)
+        if resolved is not None:
+            return resolved
+    return ImageFont.load_default()
+
+
+def _draw_collapse_badge(
+    draw: ImageDraw.ImageDraw,
+    *,
+    rect: Tuple[int, int, int, int],
+    label: str,
+    font: Any,
+    fill: Any,
+    outline: Any,
+    text_color: Any,
+    padding: Union[int, Tuple[int, int], List[int]],
+) -> None:
+    if not label:
+        return
+
+    x1, y1, x2, _ = rect
+    text_w, text_h = _measure_text(draw, label, font)
+    if isinstance(padding, (tuple, list)) and len(padding) == 2:
+        pad_x, pad_y = int(padding[0]), int(padding[1])
+    else:
+        pad_x = pad_y = int(padding)
+
+    badge_w = max(1, text_w + 2 * pad_x)
+    badge_h = max(1, text_h + 2 * pad_y)
+    badge_x2 = x2 - 4
+    badge_x1 = max(x1 + 2, badge_x2 - badge_w)
+    badge_y1 = y1 + 4
+    badge_y2 = badge_y1 + badge_h
+
+    if hasattr(draw, "rounded_rectangle"):
+        try:
+            draw.rounded_rectangle(
+                (badge_x1, badge_y1, badge_x2, badge_y2),
+                radius=4,
+                fill=fill,
+                outline=outline,
+                width=1,
+            )
+        except TypeError:
+            draw.rounded_rectangle(
+                (badge_x1, badge_y1, badge_x2, badge_y2),
+                radius=4,
+                fill=fill,
+                outline=outline,
+            )
+    else:
+        draw.rectangle((badge_x1, badge_y1, badge_x2, badge_y2), fill=fill, outline=outline)
+    draw.text((badge_x1 + pad_x, badge_y1 + pad_y), label, font=font, fill=text_color)
+
+
+def _draw_collapse_block_annotation(
+    draw: ImageDraw.ImageDraw,
+    *,
+    rect: Tuple[int, int, int, int],
+    label: str,
+    position: str,
+    color: Any,
+    line_width: int,
+    head_size: int,
+    offset: int,
+    font: Any,
+    image_size: Tuple[int, int],
+) -> None:
+    x1, y1, x2, y2 = rect
+    if x2 <= x1:
+        return
+
+    left = int(x1 + 8)
+    right = int(x2 - 8)
+    if right - left < 12:
+        left = x1 + 2
+        right = x2 - 2
+    if right - left < 8:
+        return
+
+    if position == "below":
+        line_y = y2 + offset
+    else:
+        line_y = y1 - offset
+    line_y = max(2, min(image_size[1] - 3, int(line_y)))
+
+    draw.line((left, line_y, right, line_y), fill=color, width=max(1, line_width))
+    head = max(3, head_size)
+    draw.polygon(
+        [(left, line_y), (left + head, line_y - head // 2), (left + head, line_y + head // 2)],
+        fill=color,
+    )
+    draw.polygon(
+        [(right, line_y), (right - head, line_y - head // 2), (right - head, line_y + head // 2)],
+        fill=color,
+    )
+
+    if not label:
+        return
+    text_w, text_h = _measure_text(draw, label, font)
+    text_x = int((left + right - text_w) / 2)
+    if position == "below":
+        text_y = line_y + 4
+    else:
+        text_y = line_y - text_h - 4
+    text_y = max(0, min(image_size[1] - max(1, text_h), text_y))
+    bg = (255, 255, 255, 220)
+    draw.rectangle(
+        (text_x - 2, text_y - 1, text_x + text_w + 2, text_y + text_h + 1),
+        fill=bg,
+    )
+    draw.text((text_x, text_y), label, font=font, fill=color)
+
+
+def _draw_collapsed_annotations(
+    img: Image.Image,
+    collapsed_nodes: Sequence[Tuple[FunctionalNode, Tuple[int, int, int, int]]],
+    *,
+    fallback_font: Optional[Any],
+    fallback_font_color: Any,
+    default_annotation_color: Any,
+) -> None:
+    if not collapsed_nodes:
+        return
+
+    draw = ImageDraw.Draw(img)
+    for node, rect in collapsed_nodes:
+        style = node.style or {}
+        if not bool(style.get("collapsed", False)):
+            continue
+        label = str(style.get("collapse_label", ""))
+
+        if bool(style.get("collapse_badge_enabled", True)):
+            badge_font_size = int(style.get("collapse_badge_font_size", 12) or 12)
+            badge_font = _resolve_annotation_font(
+                style.get("collapse_badge_font"),
+                fallback_font,
+                badge_font_size,
+            )
+            _draw_collapse_badge(
+                draw,
+                rect=rect,
+                label=label,
+                font=badge_font,
+                fill=style.get("collapse_badge_fill", "white"),
+                outline=style.get("collapse_badge_outline", "black"),
+                text_color=style.get("collapse_badge_text_color", fallback_font_color),
+                padding=style.get("collapse_badge_padding", (4, 2)),
+            )
+
+        if (
+            style.get("collapse_kind") == "block"
+            and bool(style.get("collapse_annotation_enabled", True))
+        ):
+            annotation_font_size = int(style.get("collapse_annotation_font_size", 12) or 12)
+            annotation_font = _resolve_annotation_font(
+                style.get("collapse_annotation_font"),
+                fallback_font,
+                annotation_font_size,
+            )
+            position = str(style.get("collapse_annotation_position", "above") or "above").lower()
+            if position not in {"above", "below"}:
+                position = "above"
+            _draw_collapse_block_annotation(
+                draw,
+                rect=rect,
+                label=label,
+                position=position,
+                color=style.get("collapse_annotation_color", default_annotation_color),
+                line_width=int(style.get("collapse_annotation_width", 2) or 2),
+                head_size=int(style.get("collapse_annotation_head_size", 6) or 6),
+                offset=int(style.get("collapse_annotation_offset", 10) or 10),
+                font=annotation_font,
+                image_size=img.size,
+            )
+
+
 def _render_graph(
     graph: FunctionalGraph,
     *,
@@ -1604,6 +1812,14 @@ def _render_graph(
     for node in graph.nodes.values():
         max_right = max(max_right, node.x + node.width + padding)
         max_bottom = max(max_bottom, node.y + node.height + padding)
+        if (
+            node.kind == "collapsed"
+            and node.style.get("collapse_kind") == "block"
+            and bool(node.style.get("collapse_annotation_enabled", True))
+            and str(node.style.get("collapse_annotation_position", "above")).lower() == "below"
+        ):
+            annotation_offset = int(node.style.get("collapse_annotation_offset", 10) or 10)
+            max_bottom = max(max_bottom, node.y + node.height + annotation_offset + padding + 24)
 
     if layered_groups:
         dummy_img = Image.new("RGBA", (1, 1))
@@ -1683,6 +1899,7 @@ def _render_graph(
     draw.flush()
 
     pending_simple_text: List[Tuple[FunctionalNode, Tuple[int, int, int, int]]] = []
+    pending_collapsed_annotations: List[Tuple[FunctionalNode, Tuple[int, int, int, int]]] = []
 
     for node in graph.nodes.values():
         if node.kind == "virtual" and not render_virtual_nodes:
@@ -1744,6 +1961,8 @@ def _render_graph(
 
             if node.kind != "virtual" and bool(node.style.get("box_text_enabled", True)):
                 pending_simple_text.append((node, (x1, y1, x2, y2)))
+            if node.kind == "collapsed":
+                pending_collapsed_annotations.append((node, (x1, y1, x2, y2)))
             continue
 
         box = Box()
@@ -1814,6 +2033,11 @@ def _render_graph(
                 draw_node_logo(img, box, logo_img, group, draw_volume)
             draw = aggdraw.Draw(img)
 
+        if node.kind == "collapsed":
+            pending_collapsed_annotations.append(
+                (node, (int(node.x), int(node.y), int(node.x + node.width), int(node.y + node.height)))
+            )
+
     draw.flush()
 
     if simple_text_visualization and pending_simple_text:
@@ -1878,6 +2102,15 @@ def _render_graph(
                 fill=font_color,
                 spacing=text_vspacing,
             )
+
+    if pending_collapsed_annotations:
+        _draw_collapsed_annotations(
+            img,
+            pending_collapsed_annotations,
+            fallback_font=font,
+            fallback_font_color=font_color,
+            default_annotation_color=connector_fill,
+        )
 
     if layered_groups:
         _draw_group_captions(img, graph, layered_groups)
