@@ -525,10 +525,6 @@ def _build_graph(
             node_style = dict(node_style)
             node_style["draw_volume"] = False
 
-        # DEBUG
-        if "image" in node_style:
-            print(f"DEBUG: Found image style for layer: {name} -> {node_style['image']}")
-        
         image_path = node_style.get("image")
         node_image = None
         
@@ -1465,10 +1461,6 @@ def _render_graph(
         # Draw the box (background/volume)
         box.draw(draw, draw_reversed=False)
 
-        if node.image is not None:
-            # Apply image to the front face
-            draw.flush()
-            
         # Re-implement Image pasting using Box's projected faces
         if node.image is not None:
             draw.flush()
