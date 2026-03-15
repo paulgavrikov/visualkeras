@@ -234,6 +234,7 @@ def functional_view(
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
     simple_text_visualization: bool = False,
+    simple_text_label_mode: str = "below",
     collapse_enabled: bool = False,
     collapse_rules: Optional[Sequence[Mapping[str, Any]]] = None,
     collapse_annotations: bool = True,
@@ -302,6 +303,7 @@ def functional_view(
             "logo_groups": logo_groups,
             "logos_legend": logos_legend,
             "simple_text_visualization": simple_text_visualization,
+            "simple_text_label_mode": simple_text_label_mode,
             "collapse_enabled": collapse_enabled,
             "collapse_rules": collapse_rules,
             "collapse_annotations": collapse_annotations,
@@ -394,6 +396,7 @@ def functional_view(
             "logo_groups": logo_groups,
             "logos_legend": logos_legend,
             "simple_text_visualization": simple_text_visualization,
+            "simple_text_label_mode": simple_text_label_mode,
             "collapse_enabled": collapse_enabled,
             "collapse_rules": collapse_rules,
             "collapse_annotations": collapse_annotations,
@@ -444,6 +447,7 @@ def functional_view(
         logo_groups = resolved.get("logo_groups", logo_groups)
         logos_legend = resolved.get("logos_legend", logos_legend)
         simple_text_visualization = resolved.get("simple_text_visualization", simple_text_visualization)
+        simple_text_label_mode = resolved.get("simple_text_label_mode", simple_text_label_mode)
         collapse_enabled = resolved.get("collapse_enabled", collapse_enabled)
         collapse_rules = resolved.get("collapse_rules", collapse_rules)
         collapse_annotations = resolved.get("collapse_annotations", collapse_annotations)
@@ -457,6 +461,12 @@ def functional_view(
             color_map = dict(color_map)
         if dimension_caps is not None and not isinstance(dimension_caps, dict):
             dimension_caps = dict(dimension_caps)
+
+    simple_text_label_mode = str(simple_text_label_mode or "below").strip().lower()
+    if simple_text_label_mode not in {"inside", "below"}:
+        raise ValueError(
+            "simple_text_label_mode must be one of: 'inside', 'below'."
+        )
 
     if isinstance(text_callable, str):
         try:
@@ -476,6 +486,17 @@ def functional_view(
 
     if styles is None:
         styles = {}
+
+    if simple_text_visualization and simple_text_label_mode == "below":
+        if text_callable is None:
+            text_callable = LAYERED_TEXT_CALLABLES["name_shape"]
+        root_style = styles.get(object)
+        if root_style is None:
+            styles[object] = {"box_text_enabled": False}
+        elif isinstance(root_style, Mapping):
+            root_style_copy = dict(root_style)
+            root_style_copy.setdefault("box_text_enabled", False)
+            styles[object] = root_style_copy
 
     normalized_collapse_rules = _validate_and_normalize_collapse_rules(collapse_rules)
 

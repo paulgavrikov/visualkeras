@@ -201,6 +201,7 @@ class FunctionalOptions:
     logo_groups: Optional[Sequence[Dict[str, Any]]] = None
     logos_legend: Union[bool, Dict[str, Any]] = False
     simple_text_visualization: bool = False
+    simple_text_label_mode: str = "below"
     collapse_enabled: bool = False
     collapse_rules: Optional[Sequence[Mapping[str, Any]]] = None
     collapse_annotations: bool = True
