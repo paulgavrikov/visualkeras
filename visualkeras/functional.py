@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 from collections import deque
 import warnings
+import re
 
 import aggdraw
 import numpy as np
@@ -126,6 +127,7 @@ def functional_view(
     logos_legend: Union[bool, Dict[str, Any]] = False,
     styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None, 
     *,
+    simple_text_visualization: bool = False,
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
     preset: Union[str, None] = None,
 ) -> Image.Image:
@@ -187,6 +189,10 @@ def functional_view(
             "shade_step": shade_step,
             "image_fit": image_fit,
             "image_axis": image_axis,
+            "layered_groups": layered_groups,
+            "logo_groups": logo_groups,
+            "logos_legend": logos_legend,
+            "simple_text_visualization": simple_text_visualization,
             "styles": styles,
         }
         custom_keys = [
@@ -208,6 +214,13 @@ def functional_view(
         defaults["dimension_caps"] = None
         defaults["font"] = None
         defaults["styles"] = None
+        defaults["orientation_rotation"] = None
+        defaults["image_fit"] = "fill"
+        defaults["image_axis"] = "z"
+        defaults["layered_groups"] = None
+        defaults["logo_groups"] = None
+        defaults["logos_legend"] = False
+        defaults["simple_text_visualization"] = False
 
         resolved = dict(defaults)
         if preset is not None:
@@ -265,6 +278,10 @@ def functional_view(
             "shade_step": shade_step,
             "image_fit": image_fit,
             "image_axis": image_axis,
+            "layered_groups": layered_groups,
+            "logo_groups": logo_groups,
+            "logos_legend": logos_legend,
+            "simple_text_visualization": simple_text_visualization,
             "styles": styles,
         }
 
@@ -304,11 +321,19 @@ def functional_view(
         virtual_node_size = resolved["virtual_node_size"]
         render_virtual_nodes = resolved["render_virtual_nodes"]
         draw_volume = resolved["draw_volume"]
-        orientation_rotation = resolved.get("orientation_rotation", None)
-        shade_step = resolved["shade_step"]
-        image_fit = resolved["image_fit"]
-        image_axis = resolved["image_axis"]
+        orientation_rotation = resolved.get("orientation_rotation", orientation_rotation)
+        shade_step = resolved.get("shade_step", shade_step)
+        image_fit = resolved.get("image_fit", image_fit)
+        image_axis = resolved.get("image_axis", image_axis)
+        layered_groups = resolved.get("layered_groups", layered_groups)
+        logo_groups = resolved.get("logo_groups", logo_groups)
+        logos_legend = resolved.get("logos_legend", logos_legend)
+        simple_text_visualization = resolved.get("simple_text_visualization", simple_text_visualization)
         styles = resolved["styles"]
+
+        if simple_text_visualization:
+            draw_volume = False
+            orientation_rotation = None
 
         if color_map is not None and not isinstance(color_map, dict):
             color_map = dict(color_map)
@@ -345,6 +370,23 @@ def functional_view(
         "image_fit": image_fit,
         "image_axis": image_axis,
         "padding": 0,  # separate from global image padding
+
+        # Simple text visualization (2D diagram boxes) defaults
+        "box_orientation": "vertical",
+        "box_text_rotation": None,
+        "box_text_color": font_color,
+        "box_text_font": None,
+        "box_text_font_size": 14,
+        "box_text_padding": 8,
+        "box_text_wrap": "words",
+        "box_text_autoshrink": True,
+        "box_text_min_font_size": 8,
+        "box_text_align": "center",
+        "box_text_valign": "middle",
+        "box_outline_width": 2,
+        "box_fill": None,
+        "box_outline": None,
+        "box_text_enabled": True,
     }
 
     graph = _build_graph(
@@ -367,6 +409,7 @@ def functional_view(
         shade_step=shade_step,
         image_fit=image_fit,
         image_axis=image_axis,
+        simple_text_visualization=simple_text_visualization,
     )
 
     ranks = _assign_ranks(graph.nodes, graph.edges)
@@ -425,6 +468,7 @@ def functional_view(
         layered_groups=layered_groups,
         logo_groups=logo_groups,
         logos_legend=logos_legend,
+        simple_text_visualization=simple_text_visualization,
     )
 
     if to_file is not None:
@@ -453,6 +497,7 @@ def _build_graph(
     shade_step: int,
     image_fit: str,
     image_axis: str,
+    simple_text_visualization: bool = False,
 ) -> FunctionalGraph:
     
     def resolve_style(layer, name) -> Dict[str, Any]:
@@ -474,6 +519,11 @@ def _build_graph(
         
         # Resolve style early to check for image replacement
         node_style = resolve_style(layer, name)
+
+        # Simple diagram mode uses 2D boxes; disable volume depth
+        if simple_text_visualization:
+            node_style = dict(node_style)
+            node_style["draw_volume"] = False
 
         # DEBUG
         if "image" in node_style:
@@ -499,9 +549,27 @@ def _build_graph(
         )
         width = max(min_xy, int(dims[2]))
         height = max(min_xy, int(dims[1]))
-        
+
+        if simple_text_visualization:
+            box_size = node_style.get("box_size")
+            if isinstance(box_size, (tuple, list)) and len(box_size) == 2:
+                try:
+                    width = int(box_size[0])
+                    height = int(box_size[1])
+                except Exception:
+                    pass
+            box_min = node_style.get("box_min_size")
+            if isinstance(box_min, (tuple, list)) and len(box_min) == 2:
+                try:
+                    width = max(width, int(box_min[0]))
+                    height = max(height, int(box_min[1]))
+                except Exception:
+                    pass
+
         # Calculate Depth (de)
         use_volume = node_style.get('draw_volume', draw_volume)
+        if simple_text_visualization:
+            use_volume = False
         de = 0
         if use_volume:
             de = int(width / 3)
@@ -513,7 +581,7 @@ def _build_graph(
                 
                 # Determine fit mode and axis
                 fit_mode = node_style.get("image_fit", image_fit)
-                axis = node_style.get("image_axis", image_axis)
+                axis = ("z" if simple_text_visualization else node_style.get("image_axis", image_axis))
                 
                 if fit_mode == "match_aspect":
                     # Resize surface to match image proportions
@@ -973,6 +1041,225 @@ def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int,
         return draw.textsize(text, font=font)
 
 
+
+
+def _prettify_layer_name(name: str) -> str:
+    if not name:
+        return ""
+    name = name.replace("_", " ").strip()
+    # CamelCase -> spaced
+    name = re.sub(r"(?<!^)(?=[A-Z])", " ", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    return name
+
+
+def _resolve_box_label(node: FunctionalNode) -> str:
+    style = node.style or {}
+    if style.get("box_text") is not None:
+        return str(style.get("box_text"))
+    cb = style.get("box_text_callable")
+    if callable(cb):
+        try:
+            out = cb(node.layer)
+            if out is not None:
+                return str(out)
+        except Exception:
+            pass
+    return _prettify_layer_name(getattr(node.layer_type, "__name__", node.name))
+
+
+def _try_load_font(path: str, size: int) -> Optional[ImageFont.ImageFont]:
+    try:
+        return ImageFont.truetype(path, size)
+    except Exception:
+        return None
+
+
+def _is_font_like(value: Any) -> bool:
+    if value is None:
+        return False
+    return any(hasattr(value, attr) for attr in ("getbbox", "getsize", "getmask"))
+
+
+def _resolve_box_font(style: Mapping[str, Any], fallback: Optional[Any]) -> Tuple[Any, Optional[str], int]:
+    size = int(style.get("box_text_font_size", 14) or 14)
+    src = style.get("box_text_font")
+    if _is_font_like(src):
+        return src, None, size
+    if isinstance(src, str):
+        f = _try_load_font(src, size)
+        if f is not None:
+            return f, src, size
+    if _is_font_like(fallback):
+        return fallback, None, size
+    for cand in ("DejaVuSans.ttf", "arial.ttf"):
+        f = _try_load_font(cand, size)
+        if f is not None:
+            return f, cand, size
+    return ImageFont.load_default(), None, size
+
+
+def _multiline_bbox(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, spacing: int) -> Tuple[int, int, int, int]:
+    # Prefer PIL's bbox helper (handles glyph bearings correctly)
+    if hasattr(draw, "multiline_textbbox"):
+        return draw.multiline_textbbox((0, 0), text, font=font, spacing=spacing, align="left")
+    # Fallback: union per-line bbox
+    lefts, tops, rights, bottoms = [], [], [], []
+    y = 0
+    for line in text.split("\n"):
+        if hasattr(draw, "textbbox"):
+            l, t, r, b = draw.textbbox((0, y), line, font=font)
+        else:
+            w, h = draw.textsize(line, font=font)
+            l, t, r, b = 0, y, w, y + h
+        lefts.append(l); tops.append(t); rights.append(r); bottoms.append(b)
+        y += (b - t) + spacing
+    if not lefts:
+        return (0, 0, 0, 0)
+    return (min(lefts), min(tops), max(rights), max(bottoms))
+
+
+def _render_text_image_bbox(text: str, font: ImageFont.ImageFont, color: Any, spacing: int, margin: int = 2) -> Image.Image:
+    # IMPORTANT: account for negative bearings by offsetting by -left/-top
+    dummy = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    d = ImageDraw.Draw(dummy)
+    l, t, r, b = _multiline_bbox(d, text, font, spacing)
+    w = max(1, int(r - l))
+    h = max(1, int(b - t))
+    img = Image.new("RGBA", (w + 2 * margin, h + 2 * margin), (0, 0, 0, 0))
+    d2 = ImageDraw.Draw(img)
+    d2.multiline_text((margin - l, margin - t), text, font=font, fill=color, spacing=spacing, align="center")
+    return img
+
+
+def _wrap_text_to_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int, mode: str, max_lines: Optional[int]) -> str:
+    mode = (mode or "words").lower()
+    if mode == "none" or max_width <= 0:
+        return text
+    if mode not in {"words", "chars"}:
+        mode = "words"
+    tokens = text.split() if mode == "words" else list(text)
+    lines = []
+    cur = ""
+    for tok in tokens:
+        cand = tok if not cur else (cur + (" " if mode == "words" else "") + tok)
+        l, t, r, b = _multiline_bbox(draw, cand, font, 0)
+        if (r - l) <= max_width or not cur:
+            cur = cand
+        else:
+            lines.append(cur)
+            cur = tok
+            if max_lines is not None and len(lines) >= max_lines:
+                break
+    if cur and (max_lines is None or len(lines) < max_lines):
+        lines.append(cur)
+    if max_lines is not None:
+        lines = lines[:max_lines]
+    return "\n".join(lines)
+
+
+def _draw_box_text_in_rect(
+    base: Image.Image,
+    rect: Tuple[int, int, int, int],
+    text: str,
+    *,
+    style: Mapping[str, Any],
+    fallback_font: Optional[ImageFont.ImageFont],
+    fallback_color: Any,
+    fallback_spacing: int,
+) -> None:
+    if not text:
+        return
+    x1, y1, x2, y2 = rect
+    w = max(1, x2 - x1)
+    h = max(1, y2 - y1)
+
+    pad = style.get("box_text_padding", 8)
+    if isinstance(pad, (tuple, list)) and len(pad) == 2:
+        pad_x, pad_y = int(pad[0]), int(pad[1])
+    else:
+        pad_x = pad_y = int(pad)
+
+    avail_w = max(1, w - 2 * pad_x)
+    avail_h = max(1, h - 2 * pad_y)
+
+    orientation = str(style.get("box_orientation", "vertical") or "vertical").lower()
+    rot = style.get("box_text_rotation")
+    if rot is None:
+        rot = 90 if orientation == "vertical" else 0
+    try:
+        rot = int(rot) % 360
+    except Exception:
+        rot = 0
+    if rot not in (0, 90, 180, 270):
+        rot = 0
+
+    # For 90/270, swap fit constraints pre-rotation
+    pre_w, pre_h = (avail_h, avail_w) if rot in (90, 270) else (avail_w, avail_h)
+
+    spacing = int(style.get("box_text_line_spacing", fallback_spacing) or fallback_spacing)
+    color = style.get("box_text_color", fallback_color)
+
+    wrap_mode = str(style.get("box_text_wrap", "words") or "words").lower()
+    max_lines = style.get("box_text_max_lines")
+    try:
+        max_lines = int(max_lines) if max_lines is not None else None
+    except Exception:
+        max_lines = None
+
+    autoshrink = bool(style.get("box_text_autoshrink", True))
+    min_size = int(style.get("box_text_min_font_size", 8) or 8)
+
+    font, font_path, size0 = _resolve_box_font(style, fallback_font)
+
+    dummy = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    d = ImageDraw.Draw(dummy)
+
+    def measure_fit(fnt: ImageFont.ImageFont) -> Tuple[str, int, int, bool]:
+        wrapped = _wrap_text_to_width(d, text, fnt, pre_w, wrap_mode, max_lines)
+        l, t, r, b = _multiline_bbox(d, wrapped, fnt, spacing)
+        tw = int(r - l)
+        th = int(b - t)
+        return wrapped, tw, th, (tw <= pre_w and th <= pre_h)
+
+    wrapped, tw, th, ok = measure_fit(font)
+    if autoshrink and not ok and font_path:
+        cur = size0
+        while cur > min_size:
+            cur -= 1
+            f2 = _try_load_font(font_path, cur)
+            if f2 is None:
+                break
+            wrapped2, tw2, th2, ok2 = measure_fit(f2)
+            if ok2:
+                font = f2
+                wrapped, tw, th, ok = wrapped2, tw2, th2, ok2
+                break
+
+    txt_img = _render_text_image_bbox(wrapped, font, color, spacing, margin=2)
+    if rot:
+        txt_img = txt_img.rotate(rot, expand=True)
+
+    tw, th = txt_img.size
+
+    align = str(style.get("box_text_align", "center") or "center").lower()
+    valign = str(style.get("box_text_valign", "middle") or "middle").lower()
+
+    if align == "left":
+        px = x1 + pad_x
+    elif align == "right":
+        px = x2 - pad_x - tw
+    else:
+        px = x1 + (w - tw) // 2
+
+    if valign == "top":
+        py = y1 + pad_y
+    elif valign == "bottom":
+        py = y2 - pad_y - th
+    else:
+        py = y1 + (h - th) // 2
+
+    base.alpha_composite(txt_img, (int(px), int(py)))
 def _render_graph(
     graph: FunctionalGraph,
     *,
@@ -993,6 +1280,7 @@ def _render_graph(
     layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
     logo_groups: Optional[Sequence[Dict[str, Any]]] = None,
     logos_legend: Union[bool, Dict[str, Any]] = False,
+    simple_text_visualization: bool = False,
 ) -> Image.Image:
     max_right = padding
     max_bottom = padding
@@ -1077,8 +1365,68 @@ def _render_graph(
     # Flush connectors before pasting images
     draw.flush()
 
+    pending_simple_text: List[Tuple[FunctionalNode, Tuple[int, int, int, int]]] = []
+
     for node in graph.nodes.values():
         if node.kind == "virtual" and not render_virtual_nodes:
+            continue
+
+        if simple_text_visualization:
+            x1 = int(node.x)
+            y1 = int(node.y)
+            x2 = int(node.x + node.width)
+            y2 = int(node.y + node.height)
+
+            # Resolve fill/outline
+            fill = node.style.get("box_fill")
+            if fill is None:
+                fill = node.style.get("fill")
+            if fill is None:
+                fill = color_map.get(node.layer_type, {}).get("fill")
+            if fill is None:
+                fill = color_wheel.get_color(node.layer_type)
+
+            outline = node.style.get("box_outline")
+            if outline is None:
+                outline = node.style.get("outline")
+            if outline is None:
+                outline = color_map.get(node.layer_type, {}).get("outline")
+            if outline is None:
+                outline = "black"
+
+            outline_w = int(node.style.get("box_outline_width", 2) or 2)
+            pen = aggdraw.Pen(get_rgba_tuple(outline), outline_w)
+            brush = aggdraw.Brush(get_rgba_tuple(fill))
+            draw.rectangle((x1, y1, x2, y2), pen, brush)
+
+            # Optional image fill
+            if node.image is not None:
+                draw.flush()
+                fit_mode = node.style.get("image_fit", "fill")
+                quad = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+                try:
+                    apply_affine_transform(img, node.image, quad, fit_mode)
+                except Exception:
+                    pass
+                draw = aggdraw.Draw(img)
+
+            # Optional logos
+            if node.node_id in node_logos:
+                draw.flush()
+                box_tmp = Box()
+                box_tmp.de = 0
+                box_tmp.shade = 0
+                box_tmp.rotation = None
+                box_tmp.x1 = x1
+                box_tmp.y1 = y1
+                box_tmp.x2 = x2
+                box_tmp.y2 = y2
+                for group, logo_img in node_logos[node.node_id]:
+                    draw_node_logo(img, box_tmp, logo_img, group, draw_volume=False)
+                draw = aggdraw.Draw(img)
+
+            if node.kind != "virtual" and bool(node.style.get("box_text_enabled", True)):
+                pending_simple_text.append((node, (x1, y1, x2, y2)))
             continue
 
         box = Box()
@@ -1154,6 +1502,20 @@ def _render_graph(
             draw = aggdraw.Draw(img)
 
     draw.flush()
+
+    if simple_text_visualization and pending_simple_text:
+        # Render inside-box labels with bbox-safe text images (avoids clipping)
+        for node, rect in pending_simple_text:
+            label = _resolve_box_label(node)
+            _draw_box_text_in_rect(
+                img,
+                rect,
+                label,
+                style=node.style or {},
+                fallback_font=font,
+                fallback_color=font_color,
+                fallback_spacing=text_vspacing,
+            )
 
     if text_callable is not None:
         if font is None:

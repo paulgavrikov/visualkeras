@@ -200,6 +200,7 @@ class FunctionalOptions:
     layered_groups: Optional[Sequence[Dict[str, Any]]] = None
     logo_groups: Optional[Sequence[Dict[str, Any]]] = None
     logos_legend: Union[bool, Dict[str, Any]] = False
+    simple_text_visualization: bool = False
     styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
