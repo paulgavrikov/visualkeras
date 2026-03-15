@@ -586,6 +586,16 @@ def functional_view(
     if graph.nodes:
         _mark_inputs_outputs(graph)
 
+    text_top_padding: Dict[int, int] = {}
+    text_bottom_padding: Dict[int, int] = {}
+    if simple_text_visualization and simple_text_label_mode == "below" and text_callable is not None:
+        text_top_padding, text_bottom_padding = _compute_external_text_padding(
+            graph,
+            text_callable=text_callable,
+            text_vspacing=text_vspacing,
+            font=font,
+        )
+
     components = _split_components(graph.nodes, graph.edges)
     components.sort(key=lambda comp: _component_sort_key(graph, comp))
 
@@ -610,12 +620,20 @@ def functional_view(
             column_widths,
             y_offset,
             row_spacing,
+            node_top_padding=text_top_padding,
+            node_bottom_padding=text_bottom_padding,
         )
         if component_height <= 0:
             continue
         y_offset += component_height + component_spacing
 
-    _straighten_layout(graph, ranks, row_spacing)
+    _straighten_layout(
+        graph,
+        ranks,
+        row_spacing,
+        node_top_padding=text_top_padding,
+        node_bottom_padding=text_bottom_padding,
+    )
 
     img = _render_graph(
         graph,
@@ -637,6 +655,7 @@ def functional_view(
         logo_groups=logo_groups,
         logos_legend=logos_legend,
         simple_text_visualization=simple_text_visualization,
+        external_text_bottom_padding=text_bottom_padding,
     )
 
     if to_file is not None:
@@ -1365,6 +1384,51 @@ def _barycenter_key(
     return (barycenter, graph.nodes[node_id].order)
 
 
+def _compute_external_text_padding(
+    graph: FunctionalGraph,
+    *,
+    text_callable: Callable[[int, Any], Tuple[str, bool]],
+    text_vspacing: int,
+    font: Optional[ImageFont.ImageFont],
+) -> Tuple[Dict[int, int], Dict[int, int]]:
+    """Estimate vertical label extents for external text labels.
+
+    The returned maps are keyed by node id and contain pixel extents that should
+    be reserved above or below node rectangles to avoid overlap with neighboring
+    rows when labels are drawn outside boxes.
+    """
+    text_top_padding: Dict[int, int] = {}
+    text_bottom_padding: Dict[int, int] = {}
+    active_font = font or ImageFont.load_default()
+
+    visible_nodes = [
+        node
+        for node in sorted(graph.nodes.values(), key=lambda n: n.order)
+        if node.kind != "virtual"
+    ]
+    for index, node in enumerate(visible_nodes):
+        text, above = text_callable(index, node.layer)
+        text_value = "" if text is None else str(text)
+        if not text_value:
+            continue
+
+        text_height = 0
+        for line in text_value.split("\n"):
+            if hasattr(active_font, "getsize"):
+                text_height += active_font.getsize(line)[1]
+            else:
+                text_height += active_font.getbbox(line)[3]
+        text_height += (len(text_value.split("\n")) - 1) * text_vspacing
+
+        extent = max(0, int(text_height) + 4)
+        if above:
+            text_top_padding[node.node_id] = extent
+        else:
+            text_bottom_padding[node.node_id] = extent
+
+    return text_top_padding, text_bottom_padding
+
+
 def _positions_from_rank_nodes(rank_nodes: Mapping[int, List[int]]) -> Dict[int, int]:
     positions: Dict[int, int] = {}
     for node_list in rank_nodes.values():
@@ -1381,7 +1445,12 @@ def _assign_component_positions(
     column_widths: Mapping[int, int],
     base_y: int,
     row_spacing: int,
+    *,
+    node_top_padding: Optional[Mapping[int, int]] = None,
+    node_bottom_padding: Optional[Mapping[int, int]] = None,
 ) -> int:
+    node_top_padding = node_top_padding or {}
+    node_bottom_padding = node_bottom_padding or {}
     node_set = set(node_ids)
     max_height = 0
     column_heights: Dict[int, int] = {}
@@ -1393,7 +1462,14 @@ def _assign_component_positions(
         column_width = column_widths.get(rank, 0)
         if column_width <= 0:
             column_width = max(graph.nodes[node_id].width for node_id in filtered)
-        column_height = sum(graph.nodes[node_id].height for node_id in filtered)
+        column_height = 0
+        for node_id in filtered:
+            node = graph.nodes[node_id]
+            column_height += (
+                node.height
+                + int(node_top_padding.get(node_id, 0))
+                + int(node_bottom_padding.get(node_id, 0))
+            )
         if len(filtered) > 1:
             column_height += row_spacing * (len(filtered) - 1)
         column_heights[rank] = column_height
@@ -1410,9 +1486,11 @@ def _assign_component_positions(
         y_cursor = base_y + int((max_height - column_height) / 2)
         for node_id in filtered:
             node = graph.nodes[node_id]
+            top_pad = int(node_top_padding.get(node_id, 0))
+            bottom_pad = int(node_bottom_padding.get(node_id, 0))
             node.x = x_positions.get(rank, 0) + int((column_width - node.width) / 2)
-            node.y = y_cursor
-            y_cursor += node.height + row_spacing
+            node.y = y_cursor + top_pad
+            y_cursor = node.y + node.height + bottom_pad + row_spacing
         if column_height:
             max_height = max(max_height, y_cursor - base_y - row_spacing)
 
@@ -1954,6 +2032,7 @@ def _render_graph(
     logo_groups: Optional[Sequence[Dict[str, Any]]] = None,
     logos_legend: Union[bool, Dict[str, Any]] = False,
     simple_text_visualization: bool = False,
+    external_text_bottom_padding: Optional[Mapping[int, int]] = None,
 ) -> Image.Image:
     """Render a positioned ``FunctionalGraph`` to a PIL image.
 
@@ -2001,6 +2080,13 @@ def _render_graph(
         ):
             annotation_offset = int(node.style.get("collapse_annotation_offset", 10) or 10)
             max_bottom = max(max_bottom, node.y + node.height + annotation_offset + padding + 24)
+
+    if external_text_bottom_padding:
+        for node_id, extra in external_text_bottom_padding.items():
+            node = graph.nodes.get(node_id)
+            if node is None:
+                continue
+            max_bottom = max(max_bottom, node.y + node.height + int(extra) + padding)
 
     if layered_groups:
         dummy_img = Image.new("RGBA", (1, 1))
@@ -2273,13 +2359,18 @@ def _render_graph(
 def _straighten_layout(
     graph: FunctionalGraph,
     ranks: Dict[int, int],
-    row_spacing: int
+    row_spacing: int,
+    *,
+    node_top_padding: Optional[Mapping[int, int]] = None,
+    node_bottom_padding: Optional[Mapping[int, int]] = None,
 ) -> None:
     """
     Adjusts y positions to align linear connections straight. 
     Accounts for 3D depth (de) to ensure visual centers align.
     """
     nodes_by_rank = {}
+    node_top_padding = node_top_padding or {}
+    node_bottom_padding = node_bottom_padding or {}
     for node in graph.nodes.values():
         r = ranks.get(node.node_id, 0)
         nodes_by_rank.setdefault(r, []).append(node)
@@ -2302,7 +2393,7 @@ def _straighten_layout(
         node.y = int(new_y)
 
     def resolve_collisions(col_nodes: List[FunctionalNode]):
-        col_nodes.sort(key=lambda n: n.y)
+        col_nodes.sort(key=lambda n: n.y - int(node_top_padding.get(n.node_id, 0)))
         if not col_nodes:
             return
 
@@ -2311,7 +2402,15 @@ def _straighten_layout(
         for i in range(1, len(col_nodes)):
             prev_node = col_nodes[i-1]
             curr_node = col_nodes[i]
-            min_y = current_y_map[prev_node.node_id] + prev_node.height + row_spacing
+            prev_bottom = int(node_bottom_padding.get(prev_node.node_id, 0))
+            curr_top = int(node_top_padding.get(curr_node.node_id, 0))
+            min_y = (
+                current_y_map[prev_node.node_id]
+                + prev_node.height
+                + prev_bottom
+                + row_spacing
+                + curr_top
+            )
             if current_y_map[curr_node.node_id] < min_y:
                 current_y_map[curr_node.node_id] = min_y
 
