@@ -91,6 +91,27 @@ visualkeras.layered_view(model, to_file='output.png') # write to disk
 visualkeras.layered_view(model, to_file='output.png').show() # write and show
 ```
 
+You can also use the unified `show(...)` entry point with typed options:
+```python
+from tensorflow.keras import layers
+from visualkeras.options import FunctionalOptions
+
+img = visualkeras.show(
+    model,
+    mode="functional",
+    options=FunctionalOptions(
+        collapse_enabled=True,
+        collapse_rules=[
+            {"kind": "layer", "selector": layers.Dense, "repeat_count": 4},
+            {"kind": "block", "selector": [layers.Dense, layers.Dropout], "repeat_count": 2, "annotation_position": "below"},
+        ],
+    ),
+)
+```
+
+`show(...)` validates options by mode (for example, `mode="functional"` expects
+`FunctionalOptions`, a mapping, or `None`) and raises a clear `TypeError` for mismatches.
+
 #### Layered View
 To help understand some of the most important parameters we are going to use a VGG16 CNN architecture using `layered_view` (see [example.py](https://github.com/paulgavrikov/visualkeras/blob/master/examples/vgg16.py)).
 ```python
@@ -359,5 +380,4 @@ These are features we plan to add in the future. If you're up for it, open an is
 - [ ] LeNet-style basic sequential visualizations
 - [ ] Concatenation visualizations
 - [ ] More professional and academic visualizations for `graph_view` ([example](https://github.com/paulgavrikov/visualkeras/blob/master/figures/professional_diagram_sample.png))
-- [ ] Annotate repeated layers or blocks (e.g., overarching double-arrow line w/ "3x" over it)
 - [ ] Automated testing with GitHub actions

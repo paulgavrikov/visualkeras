@@ -10,6 +10,7 @@ visualkeras/functional.py
 visualkeras/graph.py
 visualkeras/layer_utils.py
 visualkeras/layered.py
+visualkeras/lenet.py
 visualkeras/options.py
 visualkeras/show.py
 visualkeras/utils.py

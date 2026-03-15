@@ -57,7 +57,7 @@ def _format_shape(shape: Any) -> str:
         dims = [d for d in shape[1:]]
     if not dims:
         return "?"
-    return "×".join(str(d) if d is not None else "?" for d in dims)
+    return " x ".join(str(d) if d is not None else "?" for d in dims)
 
 
 def _layer_name(index: int, layer: Any) -> str:
