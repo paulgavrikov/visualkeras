@@ -372,4 +372,4 @@ You've learned how to:
 - Reproduce visualizations with configuration files
 - Automate documentation generation
 
-Next, explore how to fix visualization issues and debug your models using visualkeras parameters in :doc:`tutorial_07_debugging_visualizations`.
+Next, explore how to fix visualization issues and debug your models using visualkeras parameters in :doc:`tutorial_05_debugging_visualizations`.

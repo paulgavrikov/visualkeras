@@ -63,13 +63,13 @@ The following table summarizes visualkeras compatibility with various TensorFlow
      - ✅ Supported
      - 3.11
      - TensorFlow 2.17+
-     - Linux (primarily)
+     - All
 
    * - Standalone keras package
      - ⚠️ Best effort
      - 3.11-3.12
      - keras >= 3
-     - Linux (primarily)
+     - All
 
 Platform-Specific Installation
 ==============================
@@ -270,4 +270,3 @@ Getting Help
 - 🖼️ **Examples**: :doc:`../examples/index`
 - 📚 **API Reference**: :doc:`../api/index`
 - 🐛 **Issue Tracker**: `GitHub Issues <https://github.com/paulgavrikov/visualkeras/issues>`_
-- 💬 **Discussions**: `GitHub Discussions <https://github.com/paulgavrikov/visualkeras/discussions>`_

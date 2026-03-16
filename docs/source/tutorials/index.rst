@@ -14,7 +14,7 @@ Tutorial Sequence
    tutorial_02_styling_customization
    tutorial_03_advanced_usage
    tutorial_04_export_save_integration
-   tutorial_07_debugging_visualizations
+   tutorial_05_debugging_visualizations
 
 Follow the Tutorials
 ====================
@@ -42,7 +42,7 @@ We recommend working through the tutorials in order:
    - Integration with training pipelines and CI/CD
    - Batch processing multiple models
 
-**Tutorial 7: Debugging Visualizations** (30 min)
+**Tutorial 5: Debugging Visualizations** (30 min)
    - Fixing crowded or unclear layouts
    - Adjusting spacing, padding, and scaling
    - Resolving text overlap and label visibility
