@@ -24,8 +24,8 @@ visualkeras
 
 visualkeras is a Python package to help visualize Keras (either standalone or included in TensorFlow) neural network architectures. It provides a unified, high-level API for creating publication-quality visualizations of your models.
 
-✨ **Key Features**
-==================
+Key Features
+============
 
 - 🎨 **Four visualization modes**: Choose the style that fits your model and audience (layered, graph, functional, lenet)
 - 🎯 **Unified ``show()`` API**: One entry point with ``mode`` parameter to switch between visualization styles

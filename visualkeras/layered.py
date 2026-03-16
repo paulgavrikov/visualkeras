@@ -16,7 +16,11 @@ except:
         try:
             from keras import layers
         except:
-            warnings.warn("Could not import the 'layers' module from Keras. text_callable will not work.")
+            class _LayerNamespace:
+                class Layer:
+                    pass
+
+            layers = _LayerNamespace()
 
 _BUILT_IN_TEXT_CALLABLES = tuple(LAYERED_TEXT_CALLABLES.values())
 
@@ -276,67 +280,10 @@ def layered_view(model,
                  *,
                  options: Union[LayeredOptions, Mapping[str, Any], None] = None,
                  preset: Union[str, None] = None) -> Image:
-    """
-    Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
-    layer) in layered style (great for CNN).
+    """Render a linear Keras model as a layered architecture diagram.
 
-    :param model: A keras model that will be visualized.
-    :param to_file: Path to the file to write the created image to. If the image does not exist yet it will be created, else overwritten. Image type is inferred from the file ending. Providing None will disable writing.
-    :param min_z: Minimum z size in pixel a layer will have.
-    :param min_xy: Minimum x and y size in pixel a layer will have.
-    :param max_z: Maximum z size in pixel a layer will have.
-    :param max_xy: Maximum x and y size in pixel a layer will have.
-    :param scale_z: Scalar multiplier for the z size of each layer.
-    :param scale_xy: Scalar multiplier for the x and y size of each layer.
-    :param type_ignore: List of layer types in the keras model to ignore during drawing.
-    :param index_ignore: List of layer indexes in the keras model to ignore during drawing.
-    :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for not specified classes.
-    :param one_dim_orientation: Axis on which one dimensional layers should be drawn. Can  be 'x', 'y' or 'z'.
-    :param index_2D: When draw_volume is True, the indexes in this list will be drawn in 2D.
-    :param background_fill: Color for the image background. Can be str or (R,G,B,A).
-    :param draw_volume: Flag to switch between 3D volumetric view and 2D box view.
-    :param draw_reversed: Draw 3D boxes reversed, going from front-right to back-left.
-    :param padding: Distance in pixel before the first and after the last layer.
-    :param text_callable: Callable receiving ``(layer_index, layer)`` and returning a
-        ``(text, above)`` tuple describing annotations to draw per layer. Built-in
-        presets are available via ``visualkeras.show(..., text_callable='name')``.
-    :param text_vspacing: The vertical spacing between lines of text which are drawn as a result of the text_callable.
-    :param spacing: Spacing in pixel between two layers
-    :param draw_funnel: If set to True, a funnel will be drawn between consecutive layers
-    :param shade_step: Deviation in lightness for drawing shades (only in volumetric view)
-    :param legend: Add a legend of the layers to the image
-    :param legend_text_spacing_offset: Offset the amount of space allocated for legend text. Useful when legend text is being cut off
-    :param font: Font that will be used for the legend. Leaving this set to None, will use the default font.
-    :param font_color: Color for the font if used. Can be str or (R,G,B,A).
-    :param show_dimension: If legend is set to True and this is set to True, the dimensions of the layers will be shown in the legend.    
-    :param sizing_mode: Strategy for handling layer dimensions. Options are:
-        1) 'accurate': Use actual dimensions with scaling (default, may create very large visualizations);
-        2) 'balanced': Smart scaling that balances accuracy with visual clarity (recommended for modern models);
-        3) 'capped': Cap dimensions at specified limits while preserving ratios;
-        4) 'logarithmic': Use logarithmic scaling for very large dimensions;
-        5) 'relative': True proportional scaling where visual_size = dimension × relative_base_size.
-                      Each layer's visual size is directly proportional to its dimension count.
-    :param dimension_caps: Custom dimension limits when using 'capped' mode. Dict with keys:
-        1) 'channels': Maximum size for channel dimensions (default: max_z);
-        2) 'sequence': Maximum size for sequence/spatial dimensions (default: max_xy);
-        3) 'general': Maximum size for other dimensions (default: max(max_z, max_xy));
-    :param relative_base_size: Base size in pixels for 'relative' sizing mode. 
-        Represents the visual size (in pixels) that a dimension of size 1 would have.
-        All dimensions scale proportionally: visual_size = dimension × relative_base_size.
-        For example, if relative_base_size=5:
-        - A layer with 64 units gets visual size 64×5=320 pixels
-        - A layer with 32 units gets visual size 32×5=160 pixels (exactly half)  
-        - A layer with 16 units gets visual size 16×5=80 pixels (exactly half of 32)
-        This maintains true proportional relationships between all layers (default: 20).
-    :param options: Optional configuration bundle (``LayeredOptions`` or mapping)
-        providing defaults for the renderer. Values passed directly to
-        ``layered_view`` override the bundle.
-    :param preset: Name of an entry in ``visualkeras.LAYERED_PRESETS`` to use as a
-        starting point. Combine with ``options`` or explicit keyword arguments for
-        tweaks.
-
-
-    :return: Generated architecture image.
+    Full documentation:
+    https://visualkeras.readthedocs.io/en/latest/api/layered.html
     """
     using_presets = options is not None or preset is not None
 

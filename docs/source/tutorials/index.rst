@@ -13,6 +13,8 @@ Tutorial Sequence
    tutorial_01_basic_visualization
    tutorial_02_styling_customization
    tutorial_03_advanced_usage
+   tutorial_04_export_save_integration
+   tutorial_07_debugging_visualizations
 
 Follow the Tutorials
 ====================
@@ -20,9 +22,9 @@ Follow the Tutorials
 We recommend working through the tutorials in order:
 
 **Tutorial 1: Basic Visualization** (15 min)
-   - Understanding visualization types (layered vs graph)
+   - Understanding visualization types (layered, graph, functional, lenet)
    - Creating your first visualization
-   - When to use each style
+   - When to use each mode
 
 **Tutorial 2: Styling & Customization** (20 min)
    - Introduction to ``visualkeras.options``
@@ -33,6 +35,18 @@ We recommend working through the tutorials in order:
    - Complex model architectures
    - Custom rendering options
    - Integration with other tools
+
+**Tutorial 4: Export, Save & Integration** (25 min)
+   - Saving in PNG, SVG, and PDF formats
+   - Quality optimization for different use cases
+   - Integration with training pipelines and CI/CD
+   - Batch processing multiple models
+
+**Tutorial 7: Debugging Visualizations** (30 min)
+   - Fixing crowded or unclear layouts
+   - Adjusting spacing, padding, and scaling
+   - Resolving text overlap and label visibility
+   - Choosing the right visualization mode for your model
 
 Getting More Help
 =================

@@ -187,7 +187,7 @@ ImportError: No module named 'visualkeras'
       pip install visualkeras
 
 "ModuleNotFoundError: No module named 'tensorflow'" or "No module named 'keras'"
--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 **Problem**: You're trying to visualize a model but TensorFlow/Keras isn't installed.
 

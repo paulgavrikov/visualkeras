@@ -5,6 +5,7 @@
 [![Test Pass Rate](https://img.shields.io/badge/tests-170%2F170%20passed%20(100%25)-brightgreen)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)
 [![Coverage](https://img.shields.io/badge/coverage-95.09%25-brightgreen)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)
 [![CI](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml/badge.svg)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)
+[![Documentation Status](https://readthedocs.org/projects/visualkeras/badge/?version=latest)](https://visualkeras.readthedocs.io/en/latest/?badge=latest)
 
 Visualkeras is a Python package for visualizing Keras and TensorFlow model architectures. It supports several rendering styles, such as classic layered CNN diagrams, node-based visualizations, and LeNet-style visualizations. It is very easy to get started with visualkeras (see Quickstart), but also highly customizable for advanced users. For help in citing this project, refer [here](#citation-header).
 
