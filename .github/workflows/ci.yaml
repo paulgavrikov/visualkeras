@@ -57,7 +57,7 @@ jobs:
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
             --cov-report=html \
-            --cov-fail-under=50
+            --cov-fail-under=85
 
       - name: Publish coverage summary
         if: always()
