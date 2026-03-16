@@ -1,13 +1,16 @@
 LICENSE
 README.md
 setup.py
+tests/test_graph_renderer.py
 tests/test_layered_renderer.py
 tests/test_options.py
 tests/test_show.py
 visualkeras/__init__.py
+visualkeras/functional.py
 visualkeras/graph.py
 visualkeras/layer_utils.py
 visualkeras/layered.py
+visualkeras/lenet.py
 visualkeras/options.py
 visualkeras/show.py
 visualkeras/utils.py

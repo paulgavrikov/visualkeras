@@ -29,6 +29,7 @@ Dynamic: summary
 
 [![Latest Version](https://img.shields.io/pypi/v/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 [![Download Count](https://img.shields.io/pypi/dm/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
+<!--[![CI](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml/badge.svg)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)-->
 
 ## Introduction
 Visualkeras is a Python package to help visualize Keras (either standalone or included in tensorflow) neural network architectures. It allows easy styling to fit most 
@@ -89,6 +90,27 @@ visualkeras.layered_view(model).show() # display using your system viewer
 visualkeras.layered_view(model, to_file='output.png') # write to disk
 visualkeras.layered_view(model, to_file='output.png').show() # write and show
 ```
+
+You can also use the unified `show(...)` entry point with typed options:
+```python
+from tensorflow.keras import layers
+from visualkeras.options import FunctionalOptions
+
+img = visualkeras.show(
+    model,
+    mode="functional",
+    options=FunctionalOptions(
+        collapse_enabled=True,
+        collapse_rules=[
+            {"kind": "layer", "selector": layers.Dense, "repeat_count": 4},
+            {"kind": "block", "selector": [layers.Dense, layers.Dropout], "repeat_count": 2, "annotation_position": "below"},
+        ],
+    ),
+)
+```
+
+`show(...)` validates options by mode (for example, `mode="functional"` expects
+`FunctionalOptions`, a mapping, or `None`) and raises a clear `TypeError` for mismatches.
 
 #### Layered View
 To help understand some of the most important parameters we are going to use a VGG16 CNN architecture using `layered_view` (see [example.py](https://github.com/paulgavrikov/visualkeras/blob/master/examples/vgg16.py)).
@@ -248,9 +270,9 @@ In relative mode, if one layer has 64 units and the next has 32 units, the secon
 - `relative_base_size=5`: A 64-unit layer gets 320 pixels, a 32-unit layer gets 160 pixels
 - `relative_base_size=20`: A 64-unit layer gets 1280 pixels, a 32-unit layer gets 640 pixels
 
-**Comparison Example**: Using a model with layers of sizes 64â†’32â†’16â†’8:
+**Comparison Example**: Using a model with layers of sizes 64→32→16→8:
 - **Accurate mode**: May show all layers at similar visual sizes (depending on scaling)
-- **Relative mode with base_size=10**: Shows layers at 640â†’320â†’160â†’80 pixels (true proportional scaling)
+- **Relative mode with base_size=10**: Shows layers at 640→320→160→80 pixels (true proportional scaling)
 
 Below is an example visualization of a different model using the relative sizing mode:
 
@@ -271,15 +293,15 @@ def text_callable(layer_index, layer):
 
     # Get the output shape of the layer
     if hasattr(layer, 'output_shape'):
-        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ───────────────────────────────
         # Legacy Keras (standalone 2.x) or TF-Keras <2.11
-        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ───────────────────────────────
         # this will work so long as `layer.output_shape` exists
         output_shape = [x for x in list(layer.output.shape) if x is not None]
     else:
-        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        # Modern TF-Keras (>= 2.11) â€“ attribute removed
-        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ───────────────────────────────
+        # Modern TF-Keras (>= 2.11) – attribute removed
+        # ───────────────────────────────
         output_shape = layer.output.shape.as_list()
 
     # If the output shape is a list of tuples, we only take the first one
@@ -358,5 +380,4 @@ These are features we plan to add in the future. If you're up for it, open an is
 - [ ] LeNet-style basic sequential visualizations
 - [ ] Concatenation visualizations
 - [ ] More professional and academic visualizations for `graph_view` ([example](https://github.com/paulgavrikov/visualkeras/blob/master/figures/professional_diagram_sample.png))
-- [ ] Annotate repeated layers or blocks (e.g., overarching double-arrow line w/ "3x" over it)
 - [ ] Automated testing with GitHub actions

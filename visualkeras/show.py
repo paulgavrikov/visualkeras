@@ -1,165 +1,111 @@
 """High-level convenience API for rendering model visualizations.
 
 This module exposes :func:`visualkeras.show`, a single entry point that selects
-between layered and graph renderers, applies presets or option bundles, and
-still allows callers to override individual parameters.
+between renderers, applies presets or option bundles, and still allows callers
+to override individual parameters.
 """
 
 from __future__ import annotations
 
-from typing import Any, Mapping, MutableMapping, Union
+from typing import Any, Mapping, Optional, Union
 
 from PIL import Image
 
 from .layered import layered_view
 from .graph import graph_view
-from .options import (
-    GraphOptions,
-    LayeredOptions,
-    GRAPH_PRESETS,
-    LAYERED_PRESETS,
-    LAYERED_TEXT_CALLABLES,
-)
+from .functional import functional_view
+from .lenet import lenet_view
+from .options import LayeredOptions, GraphOptions, FunctionalOptions, LenetOptions
 
-_LayeredOptionsType = Union[LayeredOptions, Mapping[str, Any], None]
-_GraphOptionsType = Union[GraphOptions, Mapping[str, Any], None]
+
+LayeredOptionsType = Union[LayeredOptions, Mapping[str, Any], None]
+GraphOptionsType = Union[GraphOptions, Mapping[str, Any], None]
+FunctionalOptionsType = Union[FunctionalOptions, Mapping[str, Any], None]
+LenetOptionsType = Union[LenetOptions, Mapping[str, Any], None]
+ShowOptionsType = Union[LayeredOptionsType, GraphOptionsType, FunctionalOptionsType, LenetOptionsType]
+
+
+def _canonical_mode(mode_norm: str) -> Optional[str]:
+    if mode_norm in {"layered", "layers"}:
+        return "layered"
+    if mode_norm in {"graph", "graph_view"}:
+        return "graph"
+    if mode_norm in {"functional", "func"}:
+        return "functional"
+    if mode_norm in {"lenet", "lenet_style"}:
+        return "lenet"
+    return None
+
+
+def _validate_options_for_mode(mode: str, options: ShowOptionsType) -> None:
+    if options is None or isinstance(options, Mapping):
+        return
+
+    expected_by_mode = {
+        "layered": LayeredOptions,
+        "graph": GraphOptions,
+        "functional": FunctionalOptions,
+        "lenet": LenetOptions,
+    }
+    expected_type = expected_by_mode.get(mode)
+    if expected_type is None:
+        return
+    if not isinstance(options, expected_type):
+        raise TypeError(
+            "Invalid options type for mode '{mode}': expected {expected}, got {got}. "
+            "Pass a matching options dataclass, a mapping, or None.".format(
+                mode=mode,
+                expected=expected_type.__name__,
+                got=type(options).__name__,
+            )
+        )
 
 
 def show(
-    model,
-    mode: str = "layered",
+    model: Any,
     *,
-    preset: Union[str, None] = None,
-    options: Union[LayeredOptions, GraphOptions, Mapping[str, Any], None] = None,
+    mode: str = "layered",
+    preset: Optional[str] = None,
+    options: ShowOptionsType = None,
     **overrides: Any,
 ) -> Image.Image:
-    """Render a model visualization with optional presets or option bundles.
+    """Render a model visualization using a selected renderer.
 
     Parameters
     ----------
     model :
-        A Keras or TensorFlow model instance to visualize.
-    mode : {"layered", "graph"}, default "layered"
-        Selects which renderer to use. ``"layered"`` produces the classic CNN
-        block diagram, while ``"graph"`` builds a node/edge plot.
-    preset : str, optional
-        Name of a preset from :data:`visualkeras.LAYERED_PRESETS` or
-        :data:`visualkeras.GRAPH_PRESETS`. Presets provide curated defaults for
-        common styles. When supplied, their values are merged before applying
-        any explicit overrides.
-    options : LayeredOptions or GraphOptions or Mapping, optional
-        A configuration bundle generated via :class:`LayeredOptions`,
-        :class:`GraphOptions`, or a plain mapping that follows the same field
-        names. These values apply after presets and before ``**overrides``.
+        Keras/TensorFlow model instance.
+    mode :
+        Which renderer to use. One of: ``"layered"``, ``"graph"``, ``"functional"``, ``"lenet"``.
+    preset :
+        Optional preset name for the selected renderer.
+    options :
+        Options bundle (e.g. :class:`LayeredOptions`, :class:`GraphOptions`, :class:`FunctionalOptions`,
+        :class:`LenetOptions`) or a plain mapping of keyword arguments. These values apply after presets
+        and before explicit overrides.
     **overrides :
-        Individual keyword arguments forwarded to the underlying renderer.
-        These take precedence over both presets and option bundles.
+        Keyword arguments forwarded directly to the selected renderer.
 
     Returns
     -------
     PIL.Image.Image
-        The rendered visualization image.
-
-    Examples
-    --------
-    Quick layered view with defaults::
-
-        img = visualkeras.show(model)
-
-    Graph view using a built-in preset and a custom background::
-
-        img = visualkeras.show(
-            model,
-            mode=\"graph\",
-            preset=\"detailed\",
-            background_fill=\"#f7f7f7\"
-        )
-
-    Layered view with an options dataclass and a caption helper::
-
-        opts = visualkeras.LayeredOptions(legend=True)
-        img = visualkeras.show(
-            model,
-            options=opts,
-            text_callable=\"name_shape\"
-        )
+        Rendered visualization.
     """
+    mode_norm = (mode or "").lower().strip()
+    canonical_mode = _canonical_mode(mode_norm)
+    if canonical_mode is None:
+        raise ValueError(
+            "Unknown mode '{mode}'. Expected one of: layered, graph, functional, lenet.".format(mode=mode)
+        )
 
-    mode = mode.lower()
-    if mode not in {"layered", "graph"}:
-        raise ValueError("mode must be 'layered' or 'graph'")
+    _validate_options_for_mode(canonical_mode, options)
 
-    if mode == "layered":
-        params: MutableMapping[str, Any] = {}
-        if preset is not None:
-            try:
-                params.update(LAYERED_PRESETS[preset].to_kwargs())
-            except KeyError as exc:  # pragma: no cover - defensive
-                available = ", ".join(sorted(LAYERED_PRESETS))
-                raise ValueError(
-                    f"Unknown layered preset '{preset}'. "
-                    f"Available presets: {available}"
-                ) from exc
-
-        if options is not None:
-            params.update(_coerce_layered_options(options))
-
-        params.update(overrides)
-
-        text_callable = params.get("text_callable")
-        if isinstance(text_callable, str):
-            try:
-                params["text_callable"] = LAYERED_TEXT_CALLABLES[text_callable]
-            except KeyError as exc:
-                available = ", ".join(sorted(LAYERED_TEXT_CALLABLES))
-                raise ValueError(
-                    f"Unknown text callable preset '{text_callable}'. "
-                    f"Available presets: {available}"
-                ) from exc
-
-        return layered_view(model, **params)
-
-    # mode == "graph"
-    params = {}
-    if preset is not None:
-        try:
-            params.update(GRAPH_PRESETS[preset].to_kwargs())
-        except KeyError as exc:  # pragma: no cover - defensive
-            available = ", ".join(sorted(GRAPH_PRESETS))
-            raise ValueError(
-                f"Unknown graph preset '{preset}'. Available presets: {available}"
-            ) from exc
-
-    if options is not None:
-        params.update(_coerce_graph_options(options))
-
-    params.update(overrides)
-
-    return graph_view(model, **params)
-
-
-def _coerce_layered_options(
-    options: _LayeredOptionsType,
-) -> MutableMapping[str, Any]:
-    if options is None:
-        return {}
-    if isinstance(options, LayeredOptions):
-        return options.to_kwargs()
-    if isinstance(options, Mapping):
-        return dict(options)
-    raise TypeError(
-        "Layered visualizations require a LayeredOptions instance or a mapping."
-    )
-
-
-def _coerce_graph_options(options: _GraphOptionsType) -> MutableMapping[str, Any]:
-    if options is None:
-        return {}
-    if isinstance(options, GraphOptions):
-        return options.to_kwargs()
-    if isinstance(options, Mapping):
-        return dict(options)
-    raise TypeError(
-        "Graph visualizations require a GraphOptions instance or a mapping."
-    )
-
+    if canonical_mode == "layered":
+        return layered_view(model, preset=preset, options=options, **overrides)
+    if canonical_mode == "graph":
+        return graph_view(model, preset=preset, options=options, **overrides)
+    if canonical_mode == "functional":
+        return functional_view(model, preset=preset, options=options, **overrides)
+    if canonical_mode == "lenet":
+        return lenet_view(model, preset=preset, options=options, **overrides)
+    raise AssertionError("unreachable")

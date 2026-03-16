@@ -1,4 +1,4 @@
-from typing import Any, Callable, Mapping, Union
+from typing import Any, Callable, Mapping, Optional, Union, List, Dict, Sequence, Tuple
 import aggdraw
 from PIL import ImageFont
 from math import ceil
@@ -63,6 +63,178 @@ def _shape_to_tuple(shape: Any) -> Any:
         return tuple(shape)
     return shape
 
+def _get_group_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
+    layers_ref = group.get("layers", [])
+    if not layers_ref:
+        return []
+        
+    group_boxes = []
+    for box in boxes:
+        if not hasattr(box, 'layer'):
+            continue
+            
+        layer = box.layer
+        # Check if node matches any layer in the group
+        for layer_ref in layers_ref:
+            if layer is layer_ref:
+                group_boxes.append(box)
+                break
+            # Check name match
+            layer_name = getattr(layer, 'name', '')
+            if isinstance(layer_ref, str) and (layer_name == layer_ref):
+                group_boxes.append(box)
+                break
+    return group_boxes
+
+
+def _get_logo_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
+    layers_ref = group.get("layers", [])
+    if not layers_ref:
+        return []
+        
+    target_boxes = []
+    
+    # Build lookup maps
+    name_to_boxes = {}
+    type_to_boxes = {}
+    
+    for box in boxes:
+        if not hasattr(box, 'layer'): continue
+        
+        layer_name = getattr(box.layer, 'name', None)
+        if layer_name:
+            if layer_name not in name_to_boxes:
+                name_to_boxes[layer_name] = []
+            name_to_boxes[layer_name].append(box)
+            
+        layer_type = type(box.layer)
+        if layer_type not in type_to_boxes:
+            type_to_boxes[layer_type] = []
+        type_to_boxes[layer_type].append(box)
+        
+    for ref in layers_ref:
+        if isinstance(ref, str):
+            if ref in name_to_boxes:
+                target_boxes.extend(name_to_boxes[ref])
+        elif isinstance(ref, type):
+            if ref in type_to_boxes:
+                target_boxes.extend(type_to_boxes[ref])
+                
+    return target_boxes
+
+
+def _draw_layered_group_boxes(draw, boxes, groups, draw_reversed):
+    for group in groups:
+        group_boxes = _get_group_boxes(boxes, group)
+        if not group_boxes: continue
+        
+        min_x = float('inf')
+        max_x = float('-inf')
+        min_y = float('inf')
+        max_y = float('-inf')
+        
+        for box in group_boxes:
+            if draw_reversed:
+                min_x = min(min_x, box.x1 - box.de)
+                max_x = max(max_x, box.x2)
+                min_y = min(min_y, box.y1 - box.de)
+                max_y = max(max_y, box.y2)
+            else:
+                min_x = min(min_x, box.x1)
+                max_x = max(max_x, box.x2 + box.de)
+                min_y = min(min_y, box.y1 - box.de)
+                max_y = max(max_y, box.y2)
+                
+        padding = group.get("padding", 10)
+        min_x -= padding
+        max_x += padding
+        min_y -= padding
+        max_y += padding
+        
+        fill = group.get("fill", (200, 200, 200, 100))
+        outline = group.get("outline", "black")
+        width = group.get("width", 1)
+        
+        pen = aggdraw.Pen(get_rgba_tuple(outline), width)
+        brush = aggdraw.Brush(get_rgba_tuple(fill))
+        
+        draw.rectangle([min_x, min_y, max_x, max_y], pen, brush)
+
+
+def _draw_layered_group_captions(img, boxes, groups, draw_reversed):
+    draw = ImageDraw.Draw(img)
+    for group in groups:
+        caption = group.get("name", group.get("caption"))
+        if not caption: continue
+        
+        group_boxes = _get_group_boxes(boxes, group)
+        if not group_boxes: continue
+        
+        min_x = float('inf')
+        max_x = float('-inf')
+        min_y = float('inf')
+        max_y = float('-inf')
+        
+        for box in group_boxes:
+            if draw_reversed:
+                min_x = min(min_x, box.x1 - box.de)
+                max_x = max(max_x, box.x2)
+                min_y = min(min_y, box.y1 - box.de)
+                max_y = max(max_y, box.y2)
+            else:
+                min_x = min(min_x, box.x1)
+                max_x = max(max_x, box.x2 + box.de)
+                min_y = min(min_y, box.y1 - box.de)
+                max_y = max(max_y, box.y2)
+                
+        padding = group.get("padding", 10)
+        min_x -= padding
+        max_x += padding
+        min_y -= padding
+        max_y += padding
+        
+        font = _get_font(group)
+        color = group.get("font_color", "black")
+        gap = group.get("text_spacing", 5)
+        
+        text_w, text_h = _measure_text(draw, caption, font)
+        
+        center_x = (min_x + max_x) / 2
+        text_x = center_x - text_w / 2
+        text_y = max_y + gap
+        
+        draw.text((text_x, text_y), caption, fill=color, font=font)
+
+
+
+def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
+    font_src = group.get("font", None)
+    font_size = group.get("font_size", 15)
+    
+    if font_src is None:
+         try:
+            return ImageFont.truetype("arial.ttf", font_size)
+         except IOError:
+            return ImageFont.load_default()
+    elif isinstance(font_src, str):
+         try:
+            return ImageFont.truetype(font_src, font_size)
+         except IOError:
+            return ImageFont.load_default()
+    elif isinstance(font_src, ImageFont.ImageFont):
+        return font_src
+    else:
+        return ImageFont.load_default()
+
+
+def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
+    if hasattr(font, "getbbox"):
+        left, top, right, bottom = font.getbbox(text)
+        return right - left, bottom - top
+    else:
+        return draw.textsize(text, font=font)
+
+
 def layered_view(model, 
                  to_file: str = None, 
                  min_z: int = 20, 
@@ -93,6 +265,14 @@ def layered_view(model,
                  sizing_mode: str = 'accurate',
                  dimension_caps: dict = None,
                  relative_base_size: int = 20,
+                 connector_fill: Any = 'gray',
+                 connector_width: int = 1,
+                 image_fit: str = "fill",
+                 image_axis: str = "z",
+                 layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
+                 logo_groups: Optional[Sequence[Dict[str, Any]]] = None,
+                 logos_legend: Union[bool, Dict[str, Any]] = False,
+                 styles: Optional[Mapping[Union[str, type], Dict[str, Any]]] = None,
                  *,
                  options: Union[LayeredOptions, Mapping[str, Any], None] = None,
                  preset: Union[str, None] = None) -> Image:
@@ -186,6 +366,12 @@ def layered_view(model,
             "sizing_mode": 'accurate',
             "dimension_caps": None,
             "relative_base_size": 20,
+            "connector_fill": "gray",
+            "connector_width": 1,
+            "image_fit": "fill",
+            "image_axis": "z",
+            "layered_groups": None,
+            "styles": None,
         })
 
         current_params = {
@@ -218,6 +404,12 @@ def layered_view(model,
             "sizing_mode": sizing_mode,
             "dimension_caps": dimension_caps,
             "relative_base_size": relative_base_size,
+            "connector_fill": connector_fill,
+            "connector_width": connector_width,
+            "image_fit": image_fit,
+            "image_axis": image_axis,
+            "layered_groups": layered_groups,
+            "styles": styles,
         }
 
         custom_keys = [
@@ -242,6 +434,8 @@ def layered_view(model,
         defaults["dimension_caps"] = None
         defaults["font"] = None
         defaults["index_2D"] = []
+        defaults["layered_groups"] = None
+        defaults["styles"] = None
 
         resolved = dict(defaults)
 
@@ -295,6 +489,10 @@ def layered_view(model,
             "sizing_mode": sizing_mode,
             "dimension_caps": dimension_caps,
             "relative_base_size": relative_base_size,
+            "connector_fill": connector_fill,
+            "connector_width": connector_width,
+            "layered_groups": layered_groups,
+            "styles": styles,
         }
 
         for key, value in explicit_values.items():
@@ -302,7 +500,7 @@ def layered_view(model,
                 continue
             if value != defaults[key]:
                 resolved[key] = value
-
+        
         to_file = resolved["to_file"]
         min_z = resolved["min_z"]
         min_xy = resolved["min_xy"]
@@ -332,19 +530,58 @@ def layered_view(model,
         sizing_mode = resolved["sizing_mode"]
         dimension_caps = resolved["dimension_caps"]
         relative_base_size = resolved["relative_base_size"]
+        connector_fill = resolved["connector_fill"]
+        connector_width = resolved["connector_width"]
+        image_fit = resolved["image_fit"]
+        image_axis = resolved["image_axis"]
+        layered_groups = resolved["layered_groups"]
+        styles = resolved["styles"]
 
-        if type_ignore is not None and not isinstance(type_ignore, list):
-            type_ignore = list(type_ignore)
-        if index_ignore is not None and not isinstance(index_ignore, list):
-            index_ignore = list(index_ignore)
-        if index_2D is None:
-            index_2D = []
-        elif not isinstance(index_2D, list):
-            index_2D = list(index_2D)
-        if color_map is not None and not isinstance(color_map, dict):
-            color_map = dict(color_map)
-        if dimension_caps is not None and not isinstance(dimension_caps, dict):
-            dimension_caps = dict(dimension_caps)
+    if styles is not None and not isinstance(styles, dict):
+        styles = dict(styles)
+
+    if styles is None:
+        styles = {}
+
+    global_defaults = {
+        'fill': None, 
+        'outline': 'black',
+        'padding': padding,
+        'spacing': spacing,
+        'scale_z': scale_z,
+        'scale_xy': scale_xy,
+        'min_z': min_z,
+        'max_z': max_z,
+        'min_xy': min_xy,
+        'max_xy': max_xy,
+        'shade_step': shade_step,
+        'font_color': font_color,
+        'image_fit': image_fit,
+        'image_axis': image_axis
+    }
+
+    if type_ignore is not None and not isinstance(type_ignore, list):
+        type_ignore = list(type_ignore)
+    if index_ignore is not None and not isinstance(index_ignore, list):
+        index_ignore = list(index_ignore)
+    if index_2D is None:
+        index_2D = []
+    elif not isinstance(index_2D, list):
+        index_2D = list(index_2D)
+    if color_map is not None and not isinstance(color_map, dict):
+        color_map = dict(color_map)
+    if dimension_caps is not None and not isinstance(dimension_caps, dict):
+        dimension_caps = dict(dimension_caps)
+
+    if isinstance(text_callable, str):
+        try:
+            text_callable = LAYERED_TEXT_CALLABLES[text_callable]
+        except KeyError as exc:
+            available = ", ".join(sorted(LAYERED_TEXT_CALLABLES))
+            raise ValueError(
+                f"Unknown text_callable preset '{text_callable}'. "
+                f"Available presets: {available}"
+            ) from exc
 
     if callable(text_callable) and text_callable not in _BUILT_IN_TEXT_CALLABLES:
         warnings.warn(
@@ -379,16 +616,56 @@ def layered_view(model,
     if color_map is None:
         color_map = dict()
 
+    # Pre-process groups to map layers to their groups
+    layer_to_groups = {}
+    if layered_groups:
+        # Create a map of layer name to index for faster lookup
+        name_to_index = {}
+        for i, layer in enumerate(model.layers):
+            name = getattr(layer, 'name', None)
+            if name:
+                name_to_index[name] = i
+
+        for group in layered_groups:
+            for ref in group.get("layers", []):
+                idx = -1
+                if isinstance(ref, str):
+                    idx = name_to_index.get(ref, -1)
+                else:
+                    # Assume it's a layer object
+                    try:
+                        idx = model.layers.index(ref)
+                    except ValueError:
+                        pass
+                
+                if idx != -1:
+                    layer_to_groups.setdefault(idx, []).append(group)
+
+    last_rendered_index = -1
+
     for index, layer in enumerate(model.layers):
 
         # Ignore layers that the use has opted out to
         if type(layer) in type_ignore or index in index_ignore:
             continue
 
-        # Do no render the SpacingDummyLayer, just increase the pointer
+        # Do not render the SpacingDummyLayer, just increase the pointer
         if type(layer) == SpacingDummyLayer:
             current_z += layer.spacing
             continue
+        
+        # Adjust spacing to prevent group overlap
+        if last_rendered_index != -1 and layered_groups:
+             prev_groups = layer_to_groups.get(last_rendered_index, [])
+             curr_groups = layer_to_groups.get(index, [])
+             
+             exiting = [g for g in prev_groups if g not in curr_groups]
+             entering = [g for g in curr_groups if g not in prev_groups]
+             
+             clearance = max([g.get('padding', 10) for g in exiting] + [0]) + \
+                         max([g.get('padding', 10) for g in entering] + [0])
+             
+             current_z += clearance
 
         layer_type = type(layer)
 
@@ -397,35 +674,95 @@ def layered_view(model,
         elif layer_type not in layer_types:
             layer_types.append(layer_type)
 
-        x = min_xy
-        y = min_xy
-        z = min_z
-
+        # Resolve Layer Name
         try:
-            # Try to get the layer name, with fallback to class name
-            layer_name = getattr(layer, 'name', None)
-            if not layer_name:
-                layer_name = f'{layer.__class__.__name__}_{index}'
+            layer_name = getattr(layer, 'name', None) or f'{layer.__class__.__name__}_{index}'
         except AttributeError:
-            # Fallback if __class__ or __name__ doesn't exist
-            try:
-                layer_name = f'{type(layer).__name__}_{index}'
-            except AttributeError:
-                # Fallback if even type() fails
-                layer_name = f'unknown_layer_{index}'
+            layer_name = f'unknown_{index}'
+
+        # Resolve Styles
+        # Merge legacy color_map into the defaults for backward compatibility.
+        legacy_color = color_map.get(type(layer), {})
+        current_defaults = global_defaults.copy()
+        current_defaults.update(legacy_color)
+        
+        style = resolve_style(layer, layer_name, styles, current_defaults)
 
         # Get the primary shape of the layer's output
         raw_shape = _resolve_layer_output_shape(layer)
         shape = extract_primary_shape(raw_shape, layer_name)
-        
-        # Calculate dimensions with flexible sizing
+
+        # Use Styles for Dimensions
+        # We pass the specific constraints and scalers from the style instead of the global args.
         x, y, z = calculate_layer_dimensions(
-            shape, scale_z, scale_xy,
-            max_z, max_xy, min_z, min_xy,
+            shape, 
+            style['scale_z'], 
+            style['scale_xy'], 
+            style['max_z'], 
+            style['max_xy'], 
+            style['min_z'], 
+            style['min_xy'],
             one_dim_orientation, sizing_mode,
             dimension_caps, relative_base_size
         )
+
+        # --- Image Handling ---
+        image_path = style.get("image")
+        node_image = None
         
+        if image_path:
+            try:
+                node_image = Image.open(image_path).convert("RGBA")
+                fit_mode = style.get("image_fit", image_fit)
+                axis = style.get("image_axis", image_axis)
+                
+                if fit_mode == "match_aspect":
+                    img_w, img_h = node_image.size
+                    img_ratio = img_w / img_h
+                    
+                    if axis == 'z': # Front (Width x Height) -> (z x y)
+                        surf_ratio = z / y if y > 0 else 1
+                        if img_ratio > surf_ratio:
+                            z = int(y * img_ratio)
+                        else:
+                            y = int(z / img_ratio)
+                    elif axis == 'y': # Top (Width x Depth) -> (z x de)
+                        # de = x / 3. We adjust x to achieve target de.
+                        # Ratio = Width / Depth = z / de
+                        # de = z / Ratio
+                        if img_ratio > 0:
+                            de_target = int(z / img_ratio)
+                            x = de_target * 3
+                    elif axis == 'x': # Side (Depth x Height) -> (de x y)
+                        # Ratio = Depth / Height = de / y
+                        # de = y * Ratio
+                        de_target = int(y * img_ratio)
+                        x = de_target * 3
+                
+                # Apply scale_image
+                scale_factor = style.get("scale_image")
+                if scale_factor is not None:
+                    try:
+                        scale_factor = float(scale_factor)
+                        if scale_factor < 0: scale_factor = 0.0
+                    except (ValueError, TypeError):
+                        scale_factor = 1.0
+                    
+                    if axis == 'z':
+                        z = int(z * scale_factor)
+                        y = int(y * scale_factor)
+                    elif axis == 'y':
+                        z = int(z * scale_factor)
+                        x = int(x * scale_factor)
+                    elif axis == 'x':
+                        x = int(x * scale_factor)
+                        y = int(y * scale_factor)
+
+            except Exception as e:
+                warnings.warn(f"Failed to load image for layer '{layer_name}': {e}")
+                image_path = None
+                node_image = None
+
         if legend and show_dimension:
             dimension_string = str(shape)
             dimension_string = dimension_string[1:len(dimension_string)-1].split(", ")
@@ -436,6 +773,25 @@ def layered_view(model,
             dimension_list.append(dimension)
 
         box = Box()
+        box.layer = layer # Store layer for grouping
+        box.style = style  # Store style for later use
+        box.image = node_image
+        if node_image:
+            box.image_fit = style.get("image_fit", image_fit)
+            box.image_axis = style.get("image_axis", image_axis)
+
+        # Use styles for visual properties
+        # If fill is None (default), fallback to the color wheel
+        if style.get('fill') is None:
+            box.fill = color_wheel.get_color(layer_type)
+        else:
+            box.fill = style.get('fill')
+        
+        box.outline = style.get('outline', 'black')
+        box.shade = style.get('shade_step', shade_step)
+        
+        # Update the color_map so the legend reflects this layer's appearance
+        color_map[layer_type] = {'fill': box.fill, 'outline': box.outline}
 
         box.de = 0
         if draw_volume and index not in index_2D:
@@ -452,11 +808,6 @@ def layered_view(model,
         box.x2 = box.x1 + z
         box.y2 = box.y1 + y
 
-        box.fill = color_map.get(layer_type, {}).get('fill', color_wheel.get_color(layer_type))
-        box.outline = color_map.get(layer_type, {}).get('outline', 'black')
-        color_map[layer_type] = {'fill': box.fill, 'outline': box.outline}
-
-        box.shade = shade_step
         boxes.append(box)
         layer_y.append(box.y2 - (box.y1 - box.de))
 
@@ -468,69 +819,190 @@ def layered_view(model,
         if box.x2 + box.de > max_right:
             max_right = box.x2 + box.de
 
-        current_z += z + spacing
+        # Use style-based spacing
+        layer_spacing = style.get('spacing', spacing)
+        current_z += z + layer_spacing
+        
+        last_rendered_index = index
 
     # Generate image
-    img_width = max_right + x_off + padding
+    min_scene_x = float('inf')
+    max_scene_x = float('-inf')
+    max_top_extent = 0
+    max_bottom_extent = 0
 
-    # Check if any text will be written above or below and save the maximum text height for adjusting the image height
-    is_any_text_above = False
-    is_any_text_below = False
-    max_box_with_text_height=0
-    max_box_height = 0
+    for i, box in enumerate(boxes):
+        h = layer_y[i]
+        half_h = h / 2
+
+        max_top_extent = max(max_top_extent, half_h)
+        max_bottom_extent = max(max_bottom_extent, half_h)
+
+        visual_x1 = box.x1 + x_off
+        visual_x2 = box.x2 + x_off
+        if draw_reversed:
+            visual_x1 += box.de
+            visual_x2 += box.de
+
+        min_scene_x = min(min_scene_x, visual_x1)
+        max_scene_x = max(max_scene_x, visual_x2)
+
     if text_callable is not None:
         if font is None:
             font = ImageFont.load_default()
-        i = -1
+
+        box_idx = -1
         for index, layer in enumerate(model.layers):
             if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
                 continue
-            i += 1
-            text, above = text_callable(i, layer)
-            if above:
-                is_any_text_above = True
-            else:
-                is_any_text_below = True
-            
-            text_height = 0
-            for line in text.split('\n'):
-                if hasattr(font, 'getsize'):
-                    line_height = font.getsize(line)[1]
+            box_idx += 1
+
+            box = boxes[box_idx]
+            local_font = box.style.get('font', font)
+            local_vspacing = box.style.get('text_vspacing', text_vspacing)
+
+            text, above = text_callable(box_idx, layer)
+
+            text_w = 0
+            text_h = 0
+            lines = text.split('\n')
+            for line in lines:
+                if hasattr(local_font, 'getsize'):
+                    line_w, line_h = local_font.getsize(line)
                 else:
-                    line_height = font.getbbox(line)[3]
-                text_height += line_height
-            text_height += (len(text.split('\n'))-1)*text_vspacing
-            box_height = abs(boxes[i].y2-boxes[i].y1)-boxes[i].de
-            box_with_text_height = box_height + text_height
-            if box_with_text_height > max_box_with_text_height:
-                max_box_with_text_height = box_with_text_height
-            if box_height > max_box_height:
-                max_box_height = box_height
-    
-    if is_any_text_above:
-        img_height += abs(max_box_height - max_box_with_text_height)*2
-    
+                    bbox = local_font.getbbox(line)
+                    line_w = bbox[2]
+                    line_h = bbox[3]
+                text_w = max(text_w, line_w)
+                text_h += line_h
+
+            text_h += (len(lines) - 1) * local_vspacing
+
+            width = box.x2 - box.x1
+            base_x = box.x1 + x_off
+            if draw_reversed:
+                base_x += box.de
+
+            if above:
+                center_x = base_x + box.de + width / 2
+                max_top_extent = max(max_top_extent, (layer_y[box_idx] / 2) + text_h)
+            else:
+                center_x = base_x + width / 2
+                max_bottom_extent = max(max_bottom_extent, (layer_y[box_idx] / 2) + text_h)
+
+            t_x1 = center_x - text_w / 2
+            t_x2 = center_x + text_w / 2
+
+            min_scene_x = min(min_scene_x, t_x1)
+            max_scene_x = max(max_scene_x, t_x2)
+
+    if layered_groups:
+        dummy_img = Image.new("RGBA", (1, 1))
+        dummy_draw = ImageDraw.Draw(dummy_img)
+
+        for group in layered_groups:
+            group_boxes = _get_group_boxes(boxes, group)
+            if not group_boxes: continue
+            
+            g_min_x = float('inf')
+            g_max_x = float('-inf')
+            g_min_y = float('inf') # relative to center (negative is up)
+            g_max_y = float('-inf')
+            
+            for box in group_boxes:
+                # Reconstruct visual bounds in scene space
+                idx = boxes.index(box)
+                h = layer_y[idx]
+                
+                # Y bounds (relative to center)
+                # Top is -h/2, Bottom is h/2
+                g_min_y = min(g_min_y, -h/2)
+                g_max_y = max(g_max_y, h/2)
+                
+                # X bounds
+                visual_x1 = box.x1 + x_off
+                visual_x2 = box.x2 + x_off
+                
+                if draw_reversed:
+                    visual_x1 += box.de
+                    visual_x2 += box.de
+                    
+                    # Back face extends to left/up
+                    g_min_x = min(g_min_x, visual_x1 - box.de)
+                    g_max_x = max(g_max_x, visual_x2)
+                else:
+                    # Normal mode
+                    # Back face extends to right/up
+                    g_min_x = min(g_min_x, visual_x1)
+                    g_max_x = max(g_max_x, visual_x2 + box.de)
+            
+            # Apply padding
+            padding_val = group.get("padding", 10)
+            g_min_x -= padding_val
+            g_max_x += padding_val
+            g_min_y -= padding_val
+            g_max_y += padding_val
+            
+            # Update scene extents
+            min_scene_x = min(min_scene_x, g_min_x)
+            max_scene_x = max(max_scene_x, g_max_x)
+            max_top_extent = max(max_top_extent, -g_min_y) 
+            max_bottom_extent = max(max_bottom_extent, g_max_y)
+            
+            # Caption
+            caption = group.get("name", group.get("caption"))
+            if caption:
+                font = _get_font(group)
+                text_w, text_h = _measure_text(dummy_draw, caption, font)
+                
+                center_x = (g_min_x + g_max_x) / 2
+                text_x1 = center_x - text_w / 2
+                text_x2 = center_x + text_w / 2
+                
+                gap = group.get("text_spacing", 5)
+                text_bottom = g_max_y + gap + text_h
+                
+                min_scene_x = min(min_scene_x, text_x1)
+                max_scene_x = max(max_scene_x, text_x2)
+                max_bottom_extent = max(max_bottom_extent, text_bottom)
+
+    total_content_height = max_top_extent + max_bottom_extent
+    img_height = total_content_height
+    center_y_pos = max_top_extent
+
+    x_shift = padding - min_scene_x
+    img_width = max_scene_x + x_shift + padding
+
     img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
 
-    # x, y correction (centering)
     for i, node in enumerate(boxes):
-        y_off = (img.height - layer_y[i]) / 2
-        node.y1 += y_off
-        node.y2 += y_off
+        h = layer_y[i]
+        node_top = center_y_pos - h / 2
 
-        node.x1 += x_off
-        node.x2 += x_off
-    
+        node.y1 = node_top + node.de
+        node.y2 = node_top + h
 
-    
-    if is_any_text_above:
-        img_height -= abs(max_box_height - max_box_with_text_height)
-        img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
-    if is_any_text_below:
-        img_height += abs(max_box_height - max_box_with_text_height)
-        img = Image.new('RGBA', (int(ceil(img_width)), int(ceil(img_height))), background_fill)
-    
+        node.x1 += x_shift + x_off
+        node.x2 += x_shift + x_off
+
     draw = aggdraw.Draw(img)
+
+    # Prepare logos
+    box_logos = {}
+    if logo_groups:
+        for group in logo_groups:
+            path = group.get("file")
+            if not path: continue
+            try:
+                logo_img = Image.open(path)
+            except:
+                continue
+            
+            target_boxes = _get_logo_boxes(boxes, group)
+            for box in target_boxes:
+                if id(box) not in box_logos:
+                    box_logos[id(box)] = []
+                box_logos[id(box)].append((group, logo_img))
 
     # Correct x positions of reversed boxes
     if draw_reversed:
@@ -539,6 +1011,9 @@ def layered_view(model,
             # offset = 0
             box.x1 = box.x1 + offset
             box.x2 = box.x2 + offset
+
+    if layered_groups:
+        _draw_layered_group_boxes(draw, boxes, layered_groups, draw_reversed)
 
     # Draw created boxes
 
@@ -574,7 +1049,46 @@ def layered_view(model,
 
             box.draw(draw, draw_reversed=True)
 
+            if id(box) in box_logos:
+                draw.flush()
+                for group, logo_img in box_logos[id(box)]:
+                    draw_node_logo(img, box, logo_img, group, draw_volume, draw_reversed=True)
+                draw = aggdraw.Draw(img)
+
+            if getattr(box, 'image', None):
+                draw.flush()
+                image = box.image
+                fit = box.image_fit
+                axis = box.image_axis
+                x1, y1, x2, y2 = box.x1, box.y1, box.x2, box.y2
+                de = box.de
+                
+                if axis == 'z': # Front
+                    w = x2 - x1
+                    h = y2 - y1
+                    resized = resize_image_to_fit(image, int(w), int(h), fit)
+                    img.paste(resized, (int(x1), int(y1)), resized)
+                    
+                elif axis == 'y': # Top
+                    # Reversed Top Face: TL(x1-de, y1-de), TR(x2-de, y1-de), BR(x2, y1), BL(x1, y1)
+                    p1 = (x1 - de, y1 - de)
+                    p2 = (x2 - de, y1 - de)
+                    p3 = (x2, y1)
+                    p4 = (x1, y1)
+                    apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
+                    
+                elif axis == 'x': # Side
+                    # Reversed Side Face (Left): TL(x1-de, y1-de), TR(x1, y1), BR(x1, y2), BL(x1-de, y2-de)
+                    p1 = (x1 - de, y1 - de)
+                    p2 = (x1, y1)
+                    p3 = (x1, y2)
+                    p4 = (x1 - de, y2 - de)
+                    apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
+                
+                draw = aggdraw.Draw(img)
+
             last_box = box
+
     else:
         for box in boxes:
             pen = aggdraw.Pen(get_rgba_tuple(box.outline))
@@ -593,6 +1107,57 @@ def layered_view(model,
 
             box.draw(draw, draw_reversed=False)
 
+            if id(box) in box_logos:
+                draw.flush()
+                for group, logo_img in box_logos[id(box)]:
+                    draw_node_logo(img, box, logo_img, group, draw_volume, draw_reversed=False)
+                draw = aggdraw.Draw(img)
+
+            if getattr(box, 'image', None):
+                draw.flush()
+                image = box.image
+                fit = box.image_fit
+                axis = box.image_axis
+                x1, y1, x2, y2 = box.x1, box.y1, box.x2, box.y2
+                de = box.de
+                
+                if axis == 'z': # Front
+                    w = x2 - x1
+                    h = y2 - y1
+                    resized = resize_image_to_fit(image, int(w), int(h), fit)
+                    img.paste(resized, (int(x1), int(y1)), resized)
+                    
+                elif axis == 'y': # Top
+                    # Normal Top Face: TL(x1, y1), TR(x2, y1), BR(x2+de, y1-de), BL(x1+de, y1-de)
+                    # Wait, Box.draw normal top:
+                    # draw.polygon([self.x1, self.y1,
+                    #               self.x1 + self.de, self.y1 - self.de,
+                    #               self.x2 + self.de, self.y1 - self.de,
+                    #               self.x2, self.y1
+                    #               ], pen, brush_s1)
+                    # Order: BL, TL, TR, BR (relative to face?)
+                    # Let's map to TL, TR, BR, BL.
+                    # TL: (x1+de, y1-de)
+                    # TR: (x2+de, y1-de)
+                    # BR: (x2, y1)
+                    # BL: (x1, y1)
+                    
+                    p1 = (x1 + de, y1 - de)
+                    p2 = (x2 + de, y1 - de)
+                    p3 = (x2, y1)
+                    p4 = (x1, y1)
+                    apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
+                    
+                elif axis == 'x': # Side
+                    # Normal Side Face (Right): TL(x2, y1), TR(x2+de, y1-de), BR(x2+de, y2-de), BL(x2, y2)
+                    p1 = (x2, y1)
+                    p2 = (x2 + de, y1 - de)
+                    p3 = (x2 + de, y2 - de)
+                    p4 = (x2, y2)
+                    apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
+                
+                draw = aggdraw.Draw(img)
+
             last_box = box
 
     draw.flush()
@@ -604,39 +1169,52 @@ def layered_view(model,
             if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
                 continue
             i += 1
+            
+            # Retrieve Styles
+            box = boxes[i]
+            local_font = box.style.get('font', font)
+            local_font_color = box.style.get('font_color', font_color)
+            local_vspacing = box.style.get('text_vspacing', text_vspacing)
+
             text, above = text_callable(i, layer)
             text_height = 0
             text_x_adjust = []
             for line in text.split('\n'):
-                if hasattr(font, 'getsize'):
-                    line_height = font.getsize(line)[1]
+                # Use local_font for measurements
+                if hasattr(local_font, 'getsize'):
+                    line_height = local_font.getsize(line)[1]
+                    text_x_adjust.append(local_font.getsize(line)[0])
                 else:
-                    line_height = font.getbbox(line)[3]
+                    line_height = local_font.getbbox(line)[3]
+                    text_x_adjust.append(local_font.getbbox(line)[2])
                 
                 text_height += line_height
 
-                if hasattr(font, 'getsize'):
-                    text_x_adjust.append(font.getsize(line)[0])
-                else:
-                    text_x_adjust.append(font.getbbox(line)[2])
-            text_height += (len(text.split('\n'))-1)*text_vspacing
+            # Use local_vspacing
+            text_height += (len(text.split('\n')) - 1) * local_vspacing
 
-            box = boxes[i]
             text_x = box.x1 + (box.x2 - box.x1) / 2
             text_y = box.y2
             if above:
                 text_x = box.x1 + box.de + (box.x2 - box.x1) / 2
                 text_y = box.y1 - box.de - text_height
             
-            text_x -= max(text_x_adjust)/2  # Shift text to the left by half of the text width, so that it is centered
-            # Centering with middle text anchor 'm' does not work with align center
+            # Use max width of the specific font
+            text_x -= max(text_x_adjust or [0]) / 2 
+            
             anchor = 'la'
             if above:
                 anchor = 'la'
         
-            draw_text.multiline_text((text_x, text_y), text, font=font, fill=font_color,
-                                     anchor=anchor, align='center',
-                                     spacing=text_vspacing)
+            draw_text.multiline_text(
+                (text_x, text_y), 
+                text, 
+                font=local_font,
+                fill=local_font_color,
+                anchor=anchor, 
+                align='center',
+                spacing=local_vspacing
+            )
 
     # Create layer color legend
     if legend:
@@ -705,6 +1283,14 @@ def layered_view(model,
                                      spacing=spacing,
                                      background_fill=background_fill, horizontal=True)
         img = vertical_image_concat(img, legend_image, background_fill=background_fill)
+
+    if layered_groups:
+        _draw_layered_group_captions(img, boxes, layered_groups, draw_reversed)
+
+    if logos_legend:
+        if font is None:
+            font = ImageFont.load_default()
+        img = draw_logos_legend(img, logo_groups, logos_legend, background_fill, font, font_color)
 
     if to_file is not None:
         img.save(to_file)

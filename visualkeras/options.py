@@ -1,25 +1,101 @@
 """Typed configuration objects and reusable presets for visualkeras renderers.
 
-These dataclasses mirror the existing keyword arguments accepted by
-``layered_view`` and ``graph_view`` while providing a typed, documented surface
-that is easier to compose, reason about, and share.
+These dataclasses mirror the keyword arguments accepted by ``layered_view``,
+``graph_view``, ``functional_view``, and ``lenet_view`` while providing a typed,
+documented surface that is easier to compose, reason about, and share.
 
-The module intentionally avoids importing TensorFlow/Keras at import time so
-that configuration can be created even in environments where those heavy
-dependencies are unavailable. Any callable or type hints that depend on the
-backend therefore use ``typing.Any`` rather than backend-specific types.
+The renderer functions continue to accept plain keyword arguments; options and
+presets are an opt-in convenience layer.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union
 
+
+StyleMap = Mapping[Union[str, type], Mapping[str, Any]]
+TextCallable = Callable[[int, Any], Tuple[str, bool]]
+
+
+# ---------------------------------------------------------------------------
+# Text callable templates
+# ---------------------------------------------------------------------------
+
+def _safe_shape(layer: Any) -> Any:
+    shape = getattr(layer, "output_shape", None)
+    if shape is not None:
+        return shape
+    output = getattr(layer, "output", None)
+    tensor_shape = getattr(output, "shape", None)
+    if tensor_shape is not None:
+        try:
+            return tuple(tensor_shape.as_list())  # TF TensorShape
+        except Exception:  # noqa: BLE001
+            try:
+                return tuple(tensor_shape)
+            except Exception:  # noqa: BLE001
+                return tensor_shape
+    return None
+
+
+def _format_shape(shape: Any) -> str:
+    if shape is None:
+        return "?"
+    # Multi-output shapes: pick first (best effort).
+    if isinstance(shape, (list, tuple)) and shape and isinstance(shape[0], (list, tuple)):
+        shape = shape[0]
+    if hasattr(shape, "as_list"):
+        try:
+            shape = tuple(shape.as_list())
+        except Exception:  # noqa: BLE001
+            pass
+    if not isinstance(shape, (list, tuple)):
+        return str(shape)
+    dims = [d for d in shape[1:] if d is not None]
+    if not dims:
+        dims = [d for d in shape[1:]]
+    if not dims:
+        return "?"
+    return " x ".join(str(d) if d is not None else "?" for d in dims)
+
+
+def _layer_name(index: int, layer: Any) -> str:
+    """Return a human-friendly layer name with a fallback when missing."""
+    name = getattr(layer, "name", None)
+    if not name:
+        name = f"layer_{index}"
+    return str(name)
+
+
+def _layer_type(index: int, layer: Any) -> str:
+    return type(layer).__name__
+
+
+def _layer_shape(index: int, layer: Any) -> str:
+    return _format_shape(_safe_shape(layer))
+
+
+def _layer_name_shape(index: int, layer: Any) -> str:
+    return f"{_layer_name(index, layer)}\n{_layer_shape(index, layer)}"
+
+
+LAYERED_TEXT_CALLABLES: Dict[str, TextCallable] = {
+    # (text, above)
+    "name": lambda i, layer: (_layer_name(i, layer), False),
+    "type": lambda i, layer: (_layer_type(i, layer), False),
+    "shape": lambda i, layer: (_layer_shape(i, layer), False),
+    "name_shape": lambda i, layer: (_layer_name_shape(i, layer), False),
+}
+
+
+# ---------------------------------------------------------------------------
+# Options dataclasses
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class LayeredOptions:
-    """Configuration bundle for ``layered_view`` rendering."""
-
+    # Mirrors layered_view kwargs (excluding `model`)
     to_file: Optional[str] = None
     min_z: int = 20
     min_xy: int = 20
@@ -27,16 +103,16 @@ class LayeredOptions:
     max_xy: int = 2000
     scale_z: float = 1.5
     scale_xy: float = 4.0
-    type_ignore: tuple[type, ...] = field(default_factory=tuple)
-    index_ignore: tuple[int, ...] = field(default_factory=tuple)
-    color_map: Mapping[type, Mapping[str, Any]] = field(default_factory=dict)
+    type_ignore: Optional[Sequence[type]] = None
+    index_ignore: Optional[Sequence[int]] = None
+    color_map: Optional[Mapping[type, Mapping[str, Any]]] = None
     one_dim_orientation: str = "z"
-    index_2D: tuple[int, ...] = field(default_factory=tuple)
+    index_2D: Sequence[int] = field(default_factory=tuple)
     background_fill: Any = "white"
     draw_volume: bool = True
     draw_reversed: bool = False
     padding: int = 10
-    text_callable: Optional[Callable[[int, Any], Tuple[str, bool]]] = None
+    text_callable: Optional[TextCallable] = None
     text_vspacing: int = 4
     spacing: int = 10
     draw_funnel: bool = True
@@ -49,48 +125,23 @@ class LayeredOptions:
     sizing_mode: str = "accurate"
     dimension_caps: Optional[Mapping[str, int]] = None
     relative_base_size: int = 20
+    connector_fill: Any = "gray"
+    connector_width: int = 1
+    image_fit: str = "fill"
+    image_axis: str = "z"
+    layered_groups: Optional[Sequence[Dict[str, Any]]] = None
+    logo_groups: Optional[Sequence[Dict[str, Any]]] = None
+    logos_legend: Union[bool, Dict[str, Any]] = False
+    styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
-        """Return a shallow dict compatible with ``layered_view``."""
-        return {
-            "to_file": self.to_file,
-            "min_z": self.min_z,
-            "min_xy": self.min_xy,
-            "max_z": self.max_z,
-            "max_xy": self.max_xy,
-            "scale_z": self.scale_z,
-            "scale_xy": self.scale_xy,
-            "type_ignore": tuple(self.type_ignore),
-            "index_ignore": tuple(self.index_ignore),
-            "color_map": self.color_map,
-            "one_dim_orientation": self.one_dim_orientation,
-            "index_2D": tuple(self.index_2D),
-            "background_fill": self.background_fill,
-            "draw_volume": self.draw_volume,
-            "draw_reversed": self.draw_reversed,
-            "padding": self.padding,
-            "text_callable": self.text_callable,
-            "text_vspacing": self.text_vspacing,
-            "spacing": self.spacing,
-            "draw_funnel": self.draw_funnel,
-            "shade_step": self.shade_step,
-            "legend": self.legend,
-            "legend_text_spacing_offset": self.legend_text_spacing_offset,
-            "font": self.font,
-            "font_color": self.font_color,
-            "show_dimension": self.show_dimension,
-            "sizing_mode": self.sizing_mode,
-            "dimension_caps": self.dimension_caps,
-            "relative_base_size": self.relative_base_size,
-        }
+        return dict(self.__dict__)
 
 
 @dataclass(frozen=True)
 class GraphOptions:
-    """Configuration bundle for ``graph_view`` rendering."""
-
     to_file: Optional[str] = None
-    color_map: Mapping[type, Mapping[str, Any]] = field(default_factory=dict)
+    color_map: Optional[Mapping[type, Mapping[str, Any]]] = None
     node_size: int = 50
     background_fill: Any = "white"
     padding: int = 10
@@ -101,128 +152,145 @@ class GraphOptions:
     ellipsize_after: int = 10
     inout_as_tensor: bool = True
     show_neurons: bool = True
+    styles: Optional[StyleMap] = None
+    image_fit: str = "contain"
+    circular_crop: bool = True
+    layered_groups: Optional[Sequence[Dict[str, Any]]] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
-        """Return a shallow dict compatible with ``graph_view``."""
-        return {
-            "to_file": self.to_file,
-            "color_map": self.color_map,
-            "node_size": self.node_size,
-            "background_fill": self.background_fill,
-            "padding": self.padding,
-            "layer_spacing": self.layer_spacing,
-            "node_spacing": self.node_spacing,
-            "connector_fill": self.connector_fill,
-            "connector_width": self.connector_width,
-            "ellipsize_after": self.ellipsize_after,
-            "inout_as_tensor": self.inout_as_tensor,
-            "show_neurons": self.show_neurons,
-        }
+        return dict(self.__dict__)
 
 
-# --- Text callable templates ----------------------------------------------- #
+@dataclass(frozen=True)
+class FunctionalOptions:
+    to_file: Optional[str] = None
+    color_map: Optional[Mapping[type, Mapping[str, Any]]] = None
+    background_fill: Any = "white"
+    padding: int = 20
+    column_spacing: int = 80
+    row_spacing: int = 40
+    component_spacing: int = 80
+    connector_fill: Any = "gray"
+    connector_width: int = 2
+    connector_arrow: bool = False
+    connector_padding: int = 5
+    min_z: int = 20
+    min_xy: int = 20
+    max_z: int = 400
+    max_xy: int = 2000
+    scale_z: float = 1.5
+    scale_xy: float = 4.0
+    one_dim_orientation: str = "z"
+    sizing_mode: str = "balanced"
+    dimension_caps: Optional[Mapping[str, int]] = None
+    relative_base_size: int = 20
+    text_callable: Optional[TextCallable] = None
+    text_vspacing: int = 4
+    font: Any = None
+    font_color: Any = "black"
+    add_output_nodes: bool = False
+    layout_iterations: int = 4
+    virtual_node_size: int = 12
+    render_virtual_nodes: bool = False
+    draw_volume: bool = False
+    orientation_rotation: Optional[float] = None
+    shade_step: int = 10
+    image_fit: str = "fill"
+    image_axis: str = "z"
+    layered_groups: Optional[Sequence[Dict[str, Any]]] = None
+    logo_groups: Optional[Sequence[Dict[str, Any]]] = None
+    logos_legend: Union[bool, Dict[str, Any]] = False
+    simple_text_visualization: bool = False
+    simple_text_label_mode: str = "below"
+    collapse_enabled: bool = False
+    collapse_rules: Optional[Sequence[Mapping[str, Any]]] = None
+    collapse_annotations: bool = True
+    styles: Optional[StyleMap] = None
 
-def _layer_name(index: int, layer: Any) -> str:
-    """Return a human-friendly layer name with a fallback when missing."""
-    name = getattr(layer, "name", None)
-    if not name:
-        name = f"layer_{index}"
-    return str(name)
-
-
-def _layer_class(layer: Any) -> str:
-    """Return the class name of a layer with a sensible default."""
-    try:
-        return layer.__class__.__name__
-    except AttributeError:
-        return "Layer"
-
-
-def _format_shape_text(layer: Any) -> str:
-    """Format the primary output shape of a layer for display."""
-    shape = getattr(layer, "output_shape", None)
-    if shape is None:
-        return "shape: ?"
-
-    try:
-        from .layer_utils import extract_primary_shape  # Local import to avoid cycles
-
-        primary_shape = extract_primary_shape(shape, getattr(layer, "name", None))
-    except Exception:  # noqa: BLE001 - best-effort formatting
-        primary_shape = shape
-
-    return f"shape: {primary_shape}"
-
-
-LayeredTextCallable = Callable[[int, Any], Tuple[str, bool]]
-
-
-def text_name_only(index: int, layer: Any) -> Tuple[str, bool]:
-    """Show just the layer name beneath the block."""
-    return (_layer_name(index, layer), False)
-
-
-def text_type_and_name(index: int, layer: Any) -> Tuple[str, bool]:
-    """Show the layer type and name above the block."""
-    layer_type = _layer_class(layer)
-    name = _layer_name(index, layer)
-    label = f"{layer_type}\n{name}"
-    return (label, True)
-
-
-def text_name_and_shape(index: int, layer: Any) -> Tuple[str, bool]:
-    """Show the layer name and formatted shape beneath the block."""
-    name = _layer_name(index, layer)
-    shape_text = _format_shape_text(layer)
-    label = f"{name}\n{shape_text}"
-    return (label, False)
+    def to_kwargs(self) -> Dict[str, Any]:
+        return dict(self.__dict__)
 
 
-LAYERED_TEXT_CALLABLES: Dict[str, LayeredTextCallable] = {
-    "name": text_name_only,
-    "type_name": text_type_and_name,
-    "name_shape": text_name_and_shape,
-}
-"""Reusable caption generators keyed by a human-friendly identifier."""
+@dataclass(frozen=True)
+class LenetOptions:
+    """Configuration for :func:`visualkeras.lenet_view`."""
+    to_file: Optional[str] = None
+    min_xy: int = 20
+    max_xy: int = 220
+    scale_xy: float = 4.0
+    type_ignore: Optional[Sequence[type]] = None
+    index_ignore: Optional[Sequence[int]] = None
+    color_map: Optional[Mapping[type, Mapping[str, Any]]] = None
+    background_fill: Any = "black"
+    padding: int = 20
+    layer_spacing: int = 40
+    map_spacing: int = 4
+    max_visual_channels: int = 12
+    connector_fill: Any = "gray"
+    connector_width: int = 1
+    patch_fill: Any = "#7db7ff"
+    patch_outline: Any = "black"
+    patch_scale: float = 1.0
+    patch_alpha_on_image: int = 140
+    seed: Optional[int] = None
+    draw_connections: bool = True
+    draw_patches: bool = True
+    font: Any = None
+    font_color: Any = "white"
+    top_label_padding: int = 6
+    bottom_label_padding: int = 6
+    top_label: bool = True
+    bottom_label: bool = True
+    styles: Optional[StyleMap] = None
+
+    def to_kwargs(self) -> Dict[str, Any]:
+        return dict(self.__dict__)
 
 
-# --- Built-in presets ----------------------------------------------------- #
+# ---------------------------------------------------------------------------
+# Presets
+# ---------------------------------------------------------------------------
 
 LAYERED_PRESETS: Dict[str, LayeredOptions] = {
-    # Mirrors the function defaults used across the README's quick-start.
     "default": LayeredOptions(),
-    # Matches the "flat style" example showcased in the documentation.
-    "flat": LayeredOptions(draw_volume=False, draw_funnel=False, shade_step=0),
-    # Emphasizes clean spacing and 2D presentation for print-ready figures.
+    "compact": LayeredOptions(spacing=6, padding=6, connector_width=1),
     "presentation": LayeredOptions(
-        draw_volume=False,
-        draw_funnel=True,
-        spacing=40,
-        padding=30,
-        scale_xy=2.5,
-        scale_z=1.0,
-        legend=True,
-        show_dimension=True,
-        sizing_mode="balanced",
+        spacing=18,
+        padding=20,
+        connector_width=2,
         text_callable=LAYERED_TEXT_CALLABLES["name_shape"],
+        legend=True,
     ),
 }
 """Curated presets for layered renderings keyed by human-friendly names."""
 
 
 GRAPH_PRESETS: Dict[str, GraphOptions] = {
-    # Mirrors the defaults highlighted in README and usage examples.
     "default": GraphOptions(),
-    # Keeps diagrams compact for notebooks or reports with limited space.
-    "compact": GraphOptions(layer_spacing=180, node_spacing=8, node_size=40),
-    # Reflects the advanced customization showcased in usage_examples.md.
-    "detailed": GraphOptions(
-        node_size=60,
-        connector_width=2,
-        layer_spacing=180,
-        node_spacing=40,
-        padding=40,
-        ellipsize_after=8,
-    ),
+    "compact": GraphOptions(layer_spacing=180, node_size=40),
+    "presentation": GraphOptions(layer_spacing=300, node_size=60, connector_width=2),
 }
 """Curated presets for graph renderings keyed by human-friendly names."""
+
+
+FUNCTIONAL_PRESETS: Dict[str, FunctionalOptions] = {
+    "default": FunctionalOptions(),
+    "compact": FunctionalOptions(column_spacing=60, row_spacing=30, connector_width=1, component_spacing=60),
+    "presentation": FunctionalOptions(
+        column_spacing=120,
+        row_spacing=50,
+        connector_width=2,
+        component_spacing=100,
+        sizing_mode="balanced",
+        text_callable=LAYERED_TEXT_CALLABLES["name_shape"],
+    ),
+}
+"""Curated presets for functional renderings keyed by human-friendly names."""
+
+
+LENET_PRESETS: Dict[str, LenetOptions] = {
+    "default": LenetOptions(),
+    "compact": LenetOptions(layer_spacing=28, map_spacing=3, max_xy=180, padding=15),
+    "presentation": LenetOptions(layer_spacing=55, map_spacing=5, max_xy=260, connector_width=2),
+}
+"""Curated presets for lenet-style renderings keyed by human-friendly names."""
