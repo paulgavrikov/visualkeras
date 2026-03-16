@@ -1,5 +1,4 @@
 import importlib
-import types
 
 import pytest
 
@@ -7,8 +6,10 @@ import visualkeras
 show_module = importlib.import_module("visualkeras.show")
 show = visualkeras.show
 from visualkeras.options import (
+    FunctionalOptions,
     LayeredOptions,
     GraphOptions,
+    LenetOptions,
     LAYERED_PRESETS,
     GRAPH_PRESETS,
 )
@@ -43,7 +44,7 @@ def test_show_defaults_layered(monkeypatch):
 
     assert result == "layered-image"
     assert captured["model"] == "dummy-model"
-    assert captured["kwargs"] == {}
+    assert captured["kwargs"] == {"preset": None, "options": None}
 
 
 def test_show_graph_mode(monkeypatch):
@@ -73,8 +74,8 @@ def test_show_with_layered_options(monkeypatch):
     result = show("model", options=opts, spacing=42)
 
     assert result == "layered-image"
-    assert captured["kwargs"]["legend"] is True
-    assert captured["kwargs"]["draw_volume"] is False
+    assert captured["kwargs"]["options"] == opts
+    assert captured["kwargs"]["preset"] is None
     assert captured["kwargs"]["spacing"] == 42
 
 
@@ -93,12 +94,12 @@ def test_show_with_graph_options_mapping(monkeypatch):
     result = show("model", mode="graph", options=mapping, connector_width=3)
 
     assert result == "graph-image"
-    assert captured["kwargs"]["layer_spacing"] == 120
-    assert captured["kwargs"]["node_spacing"] == 11
+    assert captured["kwargs"]["options"] == mapping
+    assert captured["kwargs"]["preset"] is None
     assert captured["kwargs"]["connector_width"] == 3
 
 
-def test_show_preset_merge(monkeypatch):
+def test_show_preset_is_forwarded(monkeypatch):
     captured = {}
 
     def fake_layered(model, **kwargs):
@@ -111,7 +112,8 @@ def test_show_preset_merge(monkeypatch):
 
     result = show("model", preset="test", spacing=10)
     assert result == "layered-image"
-    assert captured["kwargs"]["draw_reversed"] is True
+    assert captured["kwargs"]["preset"] == "test"
+    assert captured["kwargs"]["options"] is None
     assert captured["kwargs"]["spacing"] == 10
 
 
@@ -126,10 +128,45 @@ def test_show_text_callable_name(monkeypatch):
 
     show("model", text_callable="name")
 
-    assert callable(captured["kwargs"]["text_callable"])
-    text, above = captured["kwargs"]["text_callable"](0, types.SimpleNamespace(name="foo", output_shape=(None, 8)))
-    assert "foo" in text
-    assert isinstance(above, bool)
+    assert captured["kwargs"]["text_callable"] == "name"
+
+
+def test_show_functional_dispatch(monkeypatch):
+    captured = {}
+
+    def fake_functional(model, **kwargs):
+        captured["model"] = model
+        captured["kwargs"] = kwargs
+        return "functional-image"
+
+    monkeypatch.setattr(show_module, "functional_view", fake_functional)
+    options = FunctionalOptions(column_spacing=123)
+
+    result = show("model", mode="func", options=options, connector_width=5)
+    assert result == "functional-image"
+    assert captured["model"] == "model"
+    assert captured["kwargs"]["options"] == options
+    assert captured["kwargs"]["preset"] is None
+    assert captured["kwargs"]["connector_width"] == 5
+
+
+def test_show_lenet_dispatch(monkeypatch):
+    captured = {}
+
+    def fake_lenet(model, **kwargs):
+        captured["model"] = model
+        captured["kwargs"] = kwargs
+        return "lenet-image"
+
+    monkeypatch.setattr(show_module, "lenet_view", fake_lenet)
+    options = LenetOptions(layer_spacing=55)
+
+    result = show("model", mode="lenet_style", options=options, draw_connections=False)
+    assert result == "lenet-image"
+    assert captured["model"] == "model"
+    assert captured["kwargs"]["options"] == options
+    assert captured["kwargs"]["preset"] is None
+    assert captured["kwargs"]["draw_connections"] is False
 
 
 def test_show_invalid_mode():
@@ -137,18 +174,24 @@ def test_show_invalid_mode():
         show("model", mode="unknown")
 
 
-def test_show_invalid_layered_preset(monkeypatch):
-    monkeypatch.setattr(show_module, "layered_view", lambda *a, **k: None)
-
+def test_show_invalid_layered_preset():
     with pytest.raises(ValueError):
-        show("model", preset="does-not-exist")
+        show("model", preset="does-not-exist", options=LayeredOptions())
 
 
-def test_show_invalid_graph_preset(monkeypatch):
-    monkeypatch.setattr(show_module, "graph_view", lambda *a, **k: None)
-
+def test_show_invalid_graph_preset():
     with pytest.raises(ValueError):
-        show("model", mode="graph", preset="missing")
+        show("model", mode="graph", preset="missing", options=GraphOptions())
+
+
+def test_show_invalid_functional_preset():
+    with pytest.raises(ValueError):
+        show("model", mode="functional", preset="missing", options=FunctionalOptions())
+
+
+def test_show_invalid_lenet_preset():
+    with pytest.raises(ValueError):
+        show("model", mode="lenet", preset="missing", options=LenetOptions())
 
 
 def test_show_invalid_options_type():
@@ -157,3 +200,14 @@ def test_show_invalid_options_type():
 
     with pytest.raises(TypeError):
         show("model", mode="graph", options=object())
+
+    with pytest.raises(TypeError):
+        show("model", mode="functional", options=object())
+
+    with pytest.raises(TypeError):
+        show("model", mode="lenet", options=object())
+
+
+def test_validate_options_for_unknown_mode_is_noop():
+    # Direct helper call: unknown mode should early-return without raising.
+    show_module._validate_options_for_mode("unknown-mode", object())

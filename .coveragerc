@@ -1,0 +1,12 @@
+[run]
+branch = True
+source = visualkeras
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 2
+exclude_lines =
+    pragma: no cover
+    raise AssertionError
+    if __name__ == .__main__.:

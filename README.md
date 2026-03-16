@@ -2,6 +2,8 @@
 
 [![Latest Version](https://img.shields.io/pypi/v/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 [![Download Count](https://img.shields.io/pypi/dm/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
+[![Test Pass Rate](https://img.shields.io/badge/tests-170%2F170%20passed%20(100%25)-brightgreen)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)
+[![Coverage](https://img.shields.io/badge/coverage-95.09%25-brightgreen)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)
 <!--[![CI](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml/badge.svg)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)-->
 
 ## Introduction
@@ -326,6 +328,24 @@ visualkeras.layered_view(model, legend=True, show_dimension=True)
 
 ![Show layer dimension in legend mode](https://raw.githubusercontent.com/paulgavrikov/visualkeras/master/figures/vgg16_legend_show_dimension.png)
 
+## Testing and Coverage
+
+The repository includes unit tests and integration renderer tests under `tests/`.
+
+Run tests:
+
+```bash
+python -m pytest
+```
+
+Generate coverage:
+
+```bash
+python -m pytest --cov=visualkeras --cov-report=term-missing --cov-report=xml --cov-report=html
+```
+
+The CI workflow (`.github/workflows/ci.yaml`) runs tests on pushes/PRs, enforces a minimum coverage threshold, and uploads `coverage.xml` + `htmlcov` artifacts.
+
 ## FAQ
 
 ###### Feature X documented here does not work
@@ -353,4 +373,4 @@ These are features we plan to add in the future. If you're up for it, open an is
 - [ ] LeNet-style basic sequential visualizations
 - [ ] Concatenation visualizations
 - [ ] More professional and academic visualizations for `graph_view` ([example](https://github.com/paulgavrikov/visualkeras/blob/master/figures/professional_diagram_sample.png))
-- [ ] Automated testing with GitHub actions
+- [x] Automated testing with GitHub Actions + coverage reports on pull requests

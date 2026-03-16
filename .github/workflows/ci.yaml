@@ -9,22 +9,28 @@ on:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
 
       - name: Install dependencies (unit)
         run: |
           python -m pip install --upgrade pip
+          pip install -e .
           pip install -r requirements-dev.txt
 
       - name: Run unit tests
-        run: pytest tests/test_options.py tests/test_show.py
+        run: python -m pytest -m "not integration" -v
 
-  renderers:
+  renderers-and-coverage:
     runs-on: ubuntu-latest
     needs: unit
     steps:
@@ -32,16 +38,43 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
+          cache: "pip"
 
-      - name: Install dependencies (renderers)
+      - name: Install dependencies (renderers + coverage)
         run: |
           python -m pip install --upgrade pip
+          pip install -e .
           pip install -r requirements-dev.txt
-          pip install tensorflow aggdraw
+          pip install tensorflow==2.17.0
 
-      - name: Regenerate renderer baselines (optional)
-        run: python tests/renderer_baselines/generate_renderer_references.py
+      - name: Run full test suite with coverage
+        env:
+          TF_CPP_MIN_LOG_LEVEL: "2"
+        run: |
+          python -m pytest -v \
+            --cov=visualkeras \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html \
+            --cov-fail-under=85
 
-      - name: Run renderer tests
-        run: pytest tests/test_layered_renderer.py tests/test_graph_renderer.py
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          {
+            echo "## Coverage Summary"
+            echo '```text'
+            python -m coverage report --show-missing
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: error
