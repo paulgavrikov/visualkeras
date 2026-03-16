@@ -24,7 +24,7 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 import visualkeras
@@ -96,9 +96,9 @@ def main() -> None:
             type_ignore=[tf.keras.layers.InputLayer],
             legend_text_spacing_offset=0,
         ),
-        "layered_flat_preset": lambda: visualkeras.show(
+        "layered_compact_preset": lambda: visualkeras.show(
             model,
-            preset="flat",
+            preset="compact",
             spacing=20,
         ),
         "layered_text_name": lambda: visualkeras.show(
@@ -172,10 +172,10 @@ def main() -> None:
             show_neurons=False,
             background_fill="white",
         ),
-        "graph_detailed_preset": lambda: visualkeras.show(
+        "graph_presentation_preset": lambda: visualkeras.show(
             model,
             mode="graph",
-            preset="detailed",
+            preset="presentation",
             connector_fill="black",
         ),
         "graph_tensor_nodes": lambda: visualkeras.graph_view(

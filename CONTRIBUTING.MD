@@ -91,6 +91,18 @@ We use `pytest` for tests located under `tests/`.
 python -m pytest -v
 ```
 
+For fast local feedback (skip integration renderer tests):
+
+```bash
+python -m pytest -m "not integration" -v
+```
+
+To generate coverage reports locally:
+
+```bash
+python -m pytest --cov=visualkeras --cov-report=term-missing --cov-report=xml --cov-report=html
+```
+
 Notes:
 - Several tests construct small Keras models; TensorFlow/Keras must be installed for these to run.
 - If you cannot install TensorFlow locally, run only non-TF tests or skip them selectively.
