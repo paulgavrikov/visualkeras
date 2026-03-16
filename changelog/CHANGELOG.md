@@ -7,7 +7,7 @@ Compatibility and support policy:
 - Added a canonical support policy with explicit Python, backend, and OS tiers.
 - Aligned packaging metadata (`python_requires`, Python classifiers, OS classifiers) with the support matrix.
 - Aligned CI to the support matrix:
-  - Cross-platform unit matrix (Linux/macOS/Windows on Python 3.10-3.12).
+  - Cross-platform unit matrix (Linux/macOS/Windows on Python 3.9-3.12).
   - Full renderer + coverage job on Linux/Python 3.11 with TensorFlow 2.17.
   - Standalone `keras` smoke check on Linux/Python 3.11.
 - Retired legacy Travis CI configuration to avoid conflicting support claims.

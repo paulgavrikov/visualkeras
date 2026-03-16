@@ -89,7 +89,7 @@ pip install "keras>=3,<4" tensorflow==2.17.0
 
 Current compatibility guarantees are tracked in the Support Matrix section in `README.md`.
 
-- Core package support: Python 3.10, 3.11, 3.12.
+- Core package support: Python 3.9, 3.10, 3.11, 3.12.
 - Full renderer/integration support: Python 3.11 with TensorFlow 2.17 (`tf.keras`) on Linux.
 - Standalone `keras` path is best-effort.
 

@@ -19,11 +19,11 @@ This table summarizes the compatibility of visualkeras with various pieces of th
 
 | Scope | Status | Python | TensorFlow / Keras | Operating Systems | CI validation |
 |---|---|---|---|---|---|
-| Core package (`visualkeras` import, options, helper/unit behavior) | Supported | 3.6, 3.7, 3.8, 3.9, 3.10, 3.11, 3.12 | Not required | Linux, macOS, Windows | Unit tests (`-m "not integration"`) |
+| Core package (`visualkeras` import, options, helper/unit behavior) | Supported | 3.9, 3.10, 3.11, 3.12 | Not required | Linux, macOS, Windows | Unit tests (`-m "not integration"`) |
 | Full renderer workflows via `tf.keras` | Supported | 3.11 | TensorFlow 2.17 (`tf.keras`) | Linux (Ubuntu) | Full integration tests + coverage |
 | Standalone `keras` package path (`import keras`) | Best effort | 3.11, 3.12 | `keras>=3,<4` + TensorFlow backend | Linux (Ubuntu) | Smoke check |
 
-We support Python versions 3.6 and up.
+We support Python versions 3.9 and up.
 
 <h2 id="citation-header"> Citation </h2>
 
