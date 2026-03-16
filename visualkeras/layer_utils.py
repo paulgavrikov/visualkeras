@@ -9,7 +9,9 @@ except ModuleNotFoundError:
     try:
         from keras.layers import Layer
     except ModuleNotFoundError:
-        pass
+        class Layer:  # type: ignore[no-redef]
+            def __init__(self, *args, **kwargs):
+                super().__init__()
 
 
 class SpacingDummyLayer(Layer):
@@ -406,38 +408,10 @@ def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
 def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, min_xy,
                                one_dim_orientation='y', sizing_mode='accurate',
                                dimension_caps=None, relative_base_size=20):
-    """
-    Calculate layer dimensions for visualization with flexible sizing strategies.
+    """Calculate pixel dimensions for a layer box under the selected sizing mode.
 
-    Args:
-        shape (tuple): The layer shape (batch_size, dim1, dim2, ...)
-        scale_z (float): Base scaling factor for z-dimension
-        scale_xy (float): Base scaling factor for xy-dimensions
-        max_z (int): Maximum z size in pixels
-        max_xy (int): Maximum xy size in pixels
-        min_z (int): Minimum z size in pixels
-        min_xy (int): Minimum xy size in pixels
-        one_dim_orientation (str): Orientation for 1D layers ('x','y','z')        sizing_mode (str): 'accurate', 'capped', 'balanced', 'logarithmic', or 'relative'
-        dimension_caps (dict): Custom caps for 'channels','sequence','general'
-        relative_base_size (int): Base size in pixels for relative scaling mode. 
-            Represents the visual size (in pixels) that a dimension of size 1 would have.
-            All dimensions scale proportionally: visual_size = dimension × relative_base_size.
-            For example, if relative_base_size=5:
-            - A layer with 64 units gets visual size 64×5=320 pixels
-            - A layer with 32 units gets visual size 32×5=160 pixels (exactly half)
-            - A layer with 16 units gets visual size 16×5=80 pixels (exactly half of 32)
-            This maintains true proportional relationships between all layers. (default: 20)
-
-    Returns:
-        tuple: (x, y, z) pixel dimensions for the layer box
-          Sizing Modes:
-        - 'accurate': Use actual dimensions with scaling (may create very large visualizations)
-        - 'balanced': Smart scaling that balances accuracy with visual clarity
-        - 'capped': Cap dimensions at specified limits while preserving ratios
-        - 'logarithmic': Use logarithmic scaling for very large dimensions
-        - 'relative': True proportional scaling where visual_size = dimension × relative_base_size.
-                     Each layer's visual size is directly proportional to its dimension count.
-                     If one layer has 2x the dimensions of another, it will be 2x the visual size.
+    Full documentation:
+    https://visualkeras.readthedocs.io/en/latest/api/layer_utils_details.html
     """
 
     import math

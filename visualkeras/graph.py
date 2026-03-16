@@ -27,39 +27,10 @@ def graph_view(model, to_file: str = None,
                layered_groups: Optional[Sequence[Dict[str, Any]]] = None,
                *, options: Union[GraphOptions, Mapping[str, Any], None] = None,
                preset: Union[str, None] = None) -> Image:
-    """
-    Generates a architecture visualization for a given linear keras model (i.e. one input and output tensor for each
-    layer) in graph style.
+    """Render a Keras model as a graph-style architecture diagram.
 
-    :param model: A keras model that will be visualized.
-    :param to_file: Path to the file to write the created image to. If the image does not exist yet it will be created,
-    else overwritten. Image type is inferred from the file ending. Providing None will disable writing.
-    :param color_map: Dict defining fill and outline for each layer by class type. Will fallback to default values for
-    not specified classes.
-    :param node_size: Size in pixel each node will have.
-    :param background_fill: Color for the image background. Can be str or (R,G,B,A).
-    :param padding: Distance in pixel before the first and after the last layer.
-    :param layer_spacing: Spacing in pixel between two layers
-    :param node_spacing: Spacing in pixel between nodes
-    :param connector_fill: Color for the connectors. Can be str or (R,G,B,A).
-    :param connector_width: Line-width of the connectors in pixel.
-    :param ellipsize_after: Maximum number of neurons per layer to draw. If a layer is exceeding this, the remaining
-    neurons will be drawn as ellipses.
-    :param inout_as_tensor: If True there will be one input and output node for each tensor, else the tensor will be
-    flattened and one node for each scalar will be created (e.g. a (10, 10) shape will be represented by 100 nodes)
-    :param show_neurons: If True a node for each neuron in supported layers is created (constrained by ellipsize_after),
-    else each layer is represented by a node
-    :param styles: Mapping keyed by layer class or layer name. Values override defaults on a per-layer basis.
-        Supported keys include: fill, outline, node_size, node_spacing, layer_spacing,
-        connector_fill, connector_width, ellipsize_after, show_neurons, box_scale.
-    :param image_fit: Default image fitting mode ('contain', 'cover', 'fill', 'match_aspect').
-    :param circular_crop: If True, images on nodes will be cropped to a circle. Default is True.
-    :param layered_groups: List of dicts defining groups of layers to highlight with a background rectangle.
-    :param options: Optional ``GraphOptions`` (or mapping) providing a configuration bundle.
-        Explicit keyword arguments override the bundle.
-    :param preset: Name of a preset from ``visualkeras.GRAPH_PRESETS`` to use as the base style.
-
-    :return: Generated architecture image.
+    Full documentation:
+    https://visualkeras.readthedocs.io/en/latest/api/graph.html
     """
     using_presets = options is not None or preset is not None
 
@@ -684,5 +655,3 @@ def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int,
         return right - left, bottom - top
     else:
         return draw.textsize(text, font=font)
-
-

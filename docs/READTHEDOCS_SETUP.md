@@ -13,7 +13,7 @@ Before starting, ensure you have:
 1. A GitHub repository (visualkeras is already on GitHub)
 2. A ReadTheDocs account (free at <https://readthedocs.org>)
 3. Documentation source files in the docs directory (already done)
-4. .readthedocs.yml in the repository root (already done)
+4. .readthedocs.yaml in the repository root (already done)
 
 ## Step-by-Step Setup
 
@@ -31,14 +31,14 @@ After signing in to ReadTheDocs:
    - **Name**: visualkeras
    - **Repository URL**: <https://github.com/paulgavrikov/visualkeras>
    - **Repository Type**: Git
-   - **Default Version**: camera-ready (or master as default)
-   - **Default Branch**: camera-ready
+   - **Default Version**: latest (recommended) or stable
+   - **Default Branch**: your repository default branch on GitHub
 
 4. Click "Create Project"
 
 ### 3. Configure Build Settings
 
-RTD should automatically detect the .readthedocs.yml file. Verify the settings:
+RTD should automatically detect the .readthedocs.yaml file. Verify the settings:
 
 1. Go to your project's admin page
 2. Click "Settings"
@@ -46,6 +46,25 @@ RTD should automatically detect the .readthedocs.yml file. Verify the settings:
    - Documentation type: Sphinx HTML
    - Python configuration file: docs/source/conf.py
    - Webhook URL: (RTD generates this automatically)
+
+### 3a. Configure Versions and Redirects in RTD
+
+The config file handles build settings only. Version behavior and redirects should be managed in the Read the Docs dashboard:
+
+1. Go to **Admin > Versions**
+2. Confirm which branch should power **latest**
+3. Set the default version to **latest** or **stable**
+4. Activate or hide release branches/tags as needed
+
+If you want RTD to automatically activate versions for new branches or tags:
+
+1. Go to **Admin > Automation Rules**
+2. Add rules for tags, release branches, or pull requests as needed
+
+If you need URL redirects for moved pages:
+
+1. Go to **Admin > Redirects**
+2. Add redirect rules there instead of putting them in `.readthedocs.yaml`
 
 ### 4. Configure GitHub Webhook
 
@@ -64,7 +83,7 @@ For automatic builds on push:
 
 ## Configuration Details
 
-### .readthedocs.yml Explained
+### .readthedocs.yaml Explained
 
 The configuration file controls how RTD builds your docs:
 
@@ -80,7 +99,6 @@ Specifies the build environment. Python 3.11 ensures compatibility with modern p
 
 ```yaml
 python:
-  version: 3.11
   install:
     - requirements: docs/requirements.txt
     - method: pip
@@ -113,7 +131,7 @@ In RTD project settings, update project metadata to set custom display names.
 
 ### Configure Search Behavior
 
-In .readthedocs.yml, adjust search ranking:
+In .readthedocs.yaml, adjust search ranking:
 
 ```yaml
 search:
@@ -123,11 +141,11 @@ search:
 
 ### Set Version Aliases
 
-In RTD Admin > Settings, you can:
+In RTD Admin > Versions and Automation Rules, you can:
 
-- Set "latest" to point to "master" or "camera-ready"
+- Control which branch/tag is active as ``latest``
 - Choose which versions to display
-- Create redirects for moved pages
+- Automate activation for new tags or branches
 
 ### Add Custom Domain
 
@@ -143,7 +161,7 @@ To use visualkeras.org instead of readthedocs.org:
 
 If autodoc fails to import visualkeras:
 
-1. Ensure the package is explicitly installed in .readthedocs.yml:
+1. Ensure the package is explicitly installed in .readthedocs.yaml:
 
    ```yaml
    python:
@@ -168,7 +186,7 @@ If styling or links are broken:
 
 If documentation takes too long to build:
 
-1. Disable PDF/EPUB generation in .readthedocs.yml
+1. Disable PDF/EPUB generation in .readthedocs.yaml
 2. Reduce number of documentation files
 3. Move computationally expensive examples to gallery
 

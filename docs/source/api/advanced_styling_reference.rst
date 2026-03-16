@@ -242,14 +242,25 @@ Style Keys Reference
 
 Available style parameters per layer:
 
-============= ======== ======================================================================================
-Key           Type     Description
-============= ======== ======================================================================================
-``fill``      color    Layer background/fill color
-``outline``   color    Layer border color
-``line_width``int      Border thickness in pixels
-``text``      str      Custom text to display in/for the layer
-============= ======== ======================================================================================
+.. list-table::
+   :header-rows: 1
+   :widths: 20 15 65
+
+   * - Key
+     - Type
+     - Description
+   * - ``fill``
+     - color
+     - Layer background/fill color
+   * - ``outline``
+     - color
+     - Layer border color
+   * - ``line_width``
+     - int
+     - Border thickness in pixels
+   * - ``text``
+     - str
+     - Custom text to display in or for the layer
 
 Image Embedding (face_image)
 =============================
@@ -289,14 +300,25 @@ Basic Syntax (LeNet Mode)
 Image Options Reference
 ------------------------
 
-================= ======== =========================================================================
-Key                Type     Description
-================= ======== =========================================================================
-``face_image``    path/str Path to image file or PIL.Image object
-``face_image_fit`` str      Fit mode: ``'cover'``, ``'contain'``, ``'fill'``, ``'stretch'``
-``face_image_alpha``int     Transparency 0 (transparent) to 255 (opaque). Default: 255
-``face_image_inset``int     Border/inset in pixels. Default: 0
-================= ======== =========================================================================
+.. list-table::
+   :header-rows: 1
+   :widths: 20 15 65
+
+   * - Key
+     - Type
+     - Description
+   * - ``face_image``
+     - path/str
+     - Path to an image file or a ``PIL.Image`` object
+   * - ``face_image_fit``
+     - str
+     - Fit mode: ``'cover'``, ``'contain'``, ``'fill'``, or ``'match_aspect'``
+   * - ``face_image_alpha``
+     - int
+     - Transparency from 0 (transparent) to 255 (opaque)
+   * - ``face_image_inset``
+     - int
+     - Border inset in pixels
 
 Fit Mode Behavior
 ------------------
@@ -329,13 +351,18 @@ These options control global image behavior in layered mode:
 ImageAxis Options
 ------------------
 
-==== ============================================
- Axis Description
-==== ============================================
-``'x'``  Image axis along width
-``'y'``  Image axis along height
-``'z'``  Image axis along depth/channels (default)
-==== ============================================
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Axis
+     - Description
+   * - ``'x'``
+     - Image axis along width
+   * - ``'y'``
+     - Image axis along height
+   * - ``'z'``
+     - Image axis along depth/channels (default)
 
 ImageFit Options
 -----------------
@@ -423,13 +450,18 @@ RenderShape Properties (for LeNet)
 
 When using label callables in LeNet mode, the ``RenderShape`` object provides:
 
-==== ========================================
- Attr  Description
-==== ========================================
-``dH``  Height of feature map visualization (pixels)
-``dW``  Width of feature map visualization (pixels)
-``dZ``  Number of channels (depth)
-==== ========================================
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Attr
+     - Description
+   * - ``dH``
+     - Height of the feature-map visualization in pixels
+   * - ``dW``
+     - Width of the feature-map visualization in pixels
+   * - ``dZ``
+     - Number of channels (depth)
 
 Dimension Display Options
 ==========================
@@ -477,14 +509,20 @@ Control how layer sizes are calculated.
 Available Modes
 ----------------
 
-=========== ====================================================================
- Mode       Description
-=========== ====================================================================
-``'accurate'`` Use actual tensor dimensions (default, most precise)
-``'balanced'`` Balance readability with accuracy
-``'logarithmic'`` Logarithmic scaling (helps visualize large range of sizes)
-``'relative'`` Relative to a base size (controlled by relative_base_size)
-=========== ====================================================================
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Mode
+     - Description
+   * - ``'accurate'``
+     - Use actual tensor dimensions (default and most precise)
+   * - ``'balanced'``
+     - Balance readability with accuracy
+   * - ``'logarithmic'``
+     - Use logarithmic scaling to handle a large range of sizes
+   * - ``'relative'``
+     - Scale relative to a base size controlled by ``relative_base_size``
 
 Example
 --------

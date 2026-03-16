@@ -70,7 +70,6 @@ napoleon_use_admonition_for_references = True
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
-    'keras': ('https://www.tensorflow.org/api_docs/python', None),
 }
 
 # Type hints configuration

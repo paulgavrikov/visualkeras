@@ -140,16 +140,16 @@ When visualizing a model with skip connections using ``mode='functional'``, visu
 
 **Error Message:**
 
-```
-Traceback (most recent call last):
-  File "reproduce_bug.py", line 20, in <module>
-    img = visualkeras.show(model, mode='functional')
-  File ".../visualkeras/show.py", line 115, in show
-    return functional_view(model, preset=preset, options=options, **overrides)
-  File ".../visualkeras/functional.py", line 245, in functional_view
-    dims = shape_dict[layer.name]
-TypeError: 'NoneType' object is not subscriptable
-```
+.. code-block:: text
+
+    Traceback (most recent call last):
+      File "reproduce_bug.py", line 20, in <module>
+        img = visualkeras.show(model, mode='functional')
+      File ".../visualkeras/show.py", line 115, in show
+        return functional_view(model, preset=preset, options=options, **overrides)
+      File ".../visualkeras/functional.py", line 245, in functional_view
+        dims = shape_dict[layer.name]
+    TypeError: 'NoneType' object is not subscriptable
 
 **Expected Behavior:**
 
