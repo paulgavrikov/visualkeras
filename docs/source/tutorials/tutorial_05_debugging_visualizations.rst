@@ -1,5 +1,5 @@
 ========================================================
-Tutorial 7: Debugging Visualizations with Parameters
+Tutorial 5: Debugging Visualizations with Parameters
 ========================================================
 
 *Estimated time: 30 minutes*

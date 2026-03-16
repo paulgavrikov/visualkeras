@@ -2,7 +2,7 @@
 Examples
 ========
 
-Non-trivial examples demonstrating real-world usage of visualkeras. Each example shows how to visualize different types of neural network architectures.
+Examples demonstrating real-world usage of visualkeras. Each example shows how to visualize different types of neural network architectures.
 
 Example Gallery
 ===============

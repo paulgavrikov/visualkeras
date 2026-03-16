@@ -171,4 +171,3 @@ Need Help?
 - 📖 Check the :doc:`tutorials/index`
 - 🖼️ Browse the :doc:`examples/index`
 - 🐛 `Report an issue on GitHub <https://github.com/paulgavrikov/visualkeras/issues>`_
-- 💬 `Start a discussion <https://github.com/paulgavrikov/visualkeras/discussions>`_

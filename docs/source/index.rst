@@ -27,13 +27,13 @@ visualkeras is a Python package to help visualize Keras (either standalone or in
 Key Features
 ============
 
-- 🎨 **Four visualization modes**: Choose the style that fits your model and audience (layered, graph, functional, lenet)
-- 🎯 **Unified ``show()`` API**: One entry point with ``mode`` parameter to switch between visualization styles
-- 🎨 **Flexible styling**: Customize colors, fonts, sizes, spacing, and more via options objects or parameters
-- 📊 **Multiple output formats**: PNG, SVG, and more
-- 🔄 **Supports all model types**: Sequential, Functional, Subclassed models
-- 🚀 **Easy to use**: Simple, discoverable API with sensible defaults and curated presets
-- 📈 **Publication-ready**: Generate figures suitable for papers, presentations, and technical documentation
+Visualkeras provides several ways to visualize Keras and TensorFlow models. It includes layered diagrams for
+sequential CNN style architectures, graph based views for model topology, a functional view for more complex
+structures, and a LeNet inspired mode for feature map style presentations.
+
+The library also gives you control over how the result looks. You can adjust spacing, colors, labels, sizing, and
+other rendering options without changing the model itself. Images can be shown directly in Python or saved for papers,
+slides, and documentation.
 
 Quick Links
 ===========
@@ -63,7 +63,7 @@ Quick Links
       :link: examples/index
       :link-type: doc
 
-      Gallery of non-trivial examples and use cases.
+      Gallery of examples and use cases.
 
    .. grid-item-card:: 📚 API Reference
       :link: api/index
@@ -116,7 +116,6 @@ Support & Community
 ===================
 
 - 🐛 **Found a bug?** `Open an issue on GitHub <https://github.com/paulgavrikov/visualkeras/issues>`_ — see :doc:`bug_reporting` for tips on filing a great bug report
-- 💡 **Have a suggestion?** `Start a discussion <https://github.com/paulgavrikov/visualkeras/discussions>`_
 - 📝 **Want to contribute?** See our `contributing guide <https://github.com/paulgavrikov/visualkeras/blob/master/CONTRIBUTING.MD>`_
 
 Citation

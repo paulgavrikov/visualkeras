@@ -118,5 +118,4 @@ Getting Help
 
 - 📖 **Learning?** Start with :doc:`../quickstart` or :doc:`../tutorials/index`
 - 🖼️ **Examples?** Browse the :doc:`../examples/index`
-- ❓ **Questions?** Check `GitHub Discussions <https://github.com/paulgavrikov/visualkeras/discussions>`_
 - 🐛 **Issues?** Visit `GitHub Issues <https://github.com/paulgavrikov/visualkeras/issues>`_
