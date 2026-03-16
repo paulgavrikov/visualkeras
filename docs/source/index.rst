@@ -110,11 +110,12 @@ Table of Contents
    tutorials/index
    examples/index
    api/index
+   bug_reporting
 
 Support & Community
 ===================
 
-- 🐛 **Found a bug?** `Open an issue on GitHub <https://github.com/paulgavrikov/visualkeras/issues>`_
+- 🐛 **Found a bug?** `Open an issue on GitHub <https://github.com/paulgavrikov/visualkeras/issues>`_ — see :doc:`bug_reporting` for tips on filing a great bug report
 - 💡 **Have a suggestion?** `Start a discussion <https://github.com/paulgavrikov/visualkeras/discussions>`_
 - 📝 **Want to contribute?** See our `contributing guide <https://github.com/paulgavrikov/visualkeras/blob/master/CONTRIBUTING.MD>`_
 
