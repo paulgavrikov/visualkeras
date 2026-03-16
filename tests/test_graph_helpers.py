@@ -202,3 +202,40 @@ def test_graph_get_font_default_fallback_path(monkeypatch):
     monkeypatch.setattr(graph.ImageFont, "truetype", fake_truetype)
     font = graph._get_font({})
     assert font is not None
+
+
+def test_graph_view_shift_image_warning_and_fallback_layer_name(monkeypatch, tmp_path):
+    class _Layer:
+        pass
+
+    layer = _Layer()
+    layer.input_shape = (None, 3)
+    layer.output = SimpleNamespace(name="tensor_in")
+
+    layer2 = SimpleNamespace(name="dense_out", units=2, output=SimpleNamespace(name="tensor_out"))
+
+    model = SimpleNamespace(
+        output_names=["out"],
+        outputs=[layer2.output],
+        layers=[layer, layer2],
+        output_shape=(None, 3),
+    )
+
+    monkeypatch.setattr(
+        graph,
+        "model_to_adj_matrix",
+        lambda m: ({id(layer): 0, id(layer2): 1}, np.array([[0, 1], [0, 0]])),
+    )
+    monkeypatch.setattr(graph, "model_to_hierarchy_lists", lambda m, *_: [[layer], [layer2]])
+    monkeypatch.setattr(graph, "augment_output_layers", lambda m, l, mapping, adj: (mapping, adj))
+    monkeypatch.setattr(graph, "is_internal_input", lambda l: l is layer)
+
+    img = graph.graph_view(
+        model,
+        inout_as_tensor=False,
+        show_neurons=True,
+        styles={_Layer: {"image": str(tmp_path / "missing.png")}},
+        layered_groups=[{"name": "HugePad", "layers": [layer], "padding": 120, "text_spacing": 6}],
+    )
+    assert isinstance(img, Image.Image)
+    assert img.width > 0 and img.height > 0

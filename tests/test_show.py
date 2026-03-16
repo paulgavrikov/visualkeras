@@ -206,3 +206,8 @@ def test_show_invalid_options_type():
 
     with pytest.raises(TypeError):
         show("model", mode="lenet", options=object())
+
+
+def test_validate_options_for_unknown_mode_is_noop():
+    # Direct helper call: unknown mode should early-return without raising.
+    show_module._validate_options_for_mode("unknown-mode", object())

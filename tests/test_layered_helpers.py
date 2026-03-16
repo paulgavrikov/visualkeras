@@ -1,9 +1,12 @@
 from types import SimpleNamespace
+from types import MappingProxyType
 
 import aggdraw
+import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 import visualkeras.layered as layered
+from visualkeras.layer_utils import SpacingDummyLayer
 
 
 class _TensorShape:
@@ -145,3 +148,83 @@ def test_font_and_measure_helpers():
             return (len(text) * 2, 7)
 
     assert layered._measure_text(FakeDraw(), "abcd", FakeFont()) == (8, 7)
+
+
+def test_layered_view_invalid_options_and_text_callable():
+    model = SimpleNamespace(layers=[SimpleNamespace(name="a", output_shape=(None, 4, 4, 2))])
+
+    with pytest.raises(TypeError):
+        layered.layered_view(model, options=object())
+
+    with pytest.raises(ValueError, match="Unknown text_callable preset"):
+        layered.layered_view(model, text_callable="does-not-exist")
+
+
+def test_layered_view_fake_model_branch_paths(tmp_path):
+    icon = tmp_path / "icon.png"
+    Image.new("RGBA", (30, 18), (20, 120, 230, 255)).save(icon)
+
+    class NamedLayer:
+        def __init__(self, name, shape):
+            self.name = name
+            self.output_shape = shape
+
+    class NamelessLayer:
+        output_shape = (None, 6, 6, 3)
+
+        def __getattribute__(self, name):
+            if name == "name":
+                raise AttributeError("missing name")
+            return object.__getattribute__(self, name)
+
+    l1 = NamedLayer("conv_a", (None, 8, 8, 4))
+    l2 = NamedLayer("conv_b", (None, 6, 6, 6))
+    l3 = NamelessLayer()
+    spacer = SpacingDummyLayer(spacing=7)
+    model = SimpleNamespace(layers=[l1, spacer, l2, l3])
+
+    styles = MappingProxyType(
+        {
+            "conv_a": {
+                "image": str(icon),
+                "image_fit": "match_aspect",
+                "image_axis": "y",
+                "scale_image": 1.3,
+            },
+            "conv_b": {
+                "image": str(icon),
+                "image_fit": "match_aspect",
+                "image_axis": "x",
+                "scale_image": "bad-value",
+            },
+            "unknown_3": {
+                "image": str(tmp_path / "missing.png"),
+                "image_fit": "match_aspect",
+                "image_axis": "z",
+                "scale_image": -2,
+            },
+        }
+    )
+
+    img = layered.layered_view(
+        model,
+        draw_volume=True,
+        draw_reversed=True,
+        legend=True,
+        show_dimension=True,
+        legend_text_spacing_offset=1,
+        text_callable=lambda i, layer: (f"Layer {i}", i % 2 == 0),
+        layered_groups=[
+            {"name": "Main", "layers": ["conv_a", l2], "padding": 6, "text_spacing": 3},
+            {"name": "MissingRef", "layers": [object()], "padding": 5},
+        ],
+        type_ignore=tuple(),
+        index_ignore=(99,),
+        index_2D=(0,),
+        color_map=MappingProxyType({}),
+        dimension_caps=MappingProxyType({"channels": 120, "sequence": 140}),
+        styles=styles,
+    )
+
+    assert isinstance(img, Image.Image)
+    assert img.width > 0 and img.height > 0

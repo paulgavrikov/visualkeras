@@ -11,6 +11,7 @@ from visualkeras.options import (
     GRAPH_PRESETS,
     LAYERED_TEXT_CALLABLES,
 )
+import visualkeras.options as options_mod
 
 
 def test_layered_options_default_keys():
@@ -259,4 +260,59 @@ def test_layered_text_callable_signatures(name):
     text, above = func(0, type("DummyLayer", (), {"name": "foo", "output_shape": (None, 8)})())
     assert isinstance(text, str)
     assert isinstance(above, bool)
-    assert text, "Text callable should return non-empty text"
+
+
+def test_safe_shape_and_format_shape_fallback_branches():
+    class TensorShapeExplodes:
+        @staticmethod
+        def as_list():
+            raise RuntimeError("bad as_list")
+
+        def __iter__(self):
+            raise RuntimeError("bad iter")
+
+        def __str__(self):
+            return "tensor-shape-object"
+
+    layer = type("Layer", (), {"output_shape": None, "output": type("Out", (), {"shape": TensorShapeExplodes()})()})()
+    raw = options_mod._safe_shape(layer)
+    assert str(raw) == "tensor-shape-object"
+
+    assert options_mod._format_shape(None) == "?"
+    assert options_mod._format_shape("raw-shape") == "raw-shape"
+    assert options_mod._format_shape((None, None, None)) == "? x ?"
+
+    # Multi-output shape branch picks first entry.
+    assert options_mod._format_shape(((None, 8, 4), (None, 2))) == "8 x 4"
+
+    class TensorShapeAsList:
+        @staticmethod
+        def as_list():
+            return [None, 3, 7]
+
+    assert options_mod._format_shape(TensorShapeAsList()) == "3 x 7"
+
+
+def test_layer_name_and_name_shape_fallback():
+    layer = type("LayerNoName", (), {"name": ""})()
+    assert options_mod._layer_name(5, layer) == "layer_5"
+    text = options_mod._layer_name_shape(2, type("LayerWithShape", (), {"name": None, "output_shape": (None, 4, 9)})())
+    assert "layer_2" in text
+    assert "4 x 9" in text
+
+
+def test_additional_shape_formatting_edge_cases():
+    layer = type("Layer", (), {"output_shape": None, "output": None})()
+    assert options_mod._safe_shape(layer) is None
+
+    class AsListRaises:
+        @staticmethod
+        def as_list():
+            raise RuntimeError("boom")
+
+        def __str__(self):
+            return "as-list-raises"
+
+    assert options_mod._format_shape(AsListRaises()) == "as-list-raises"
+    # Rank-1-like tuple should produce '?' (no displayable dims).
+    assert options_mod._format_shape((None,)) == "?"
