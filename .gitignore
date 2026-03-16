@@ -1,0 +1,55 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
+.hypothesis/
+
+# Packaging/build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Type-check/lint caches
+.mypy_cache/
+.ruff_cache/
+
+# Tooling environments
+.tox/
+.nox/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Notebook and OS files
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+
+# Local temp/log files
+*.log
+tmp/
+temp/
+
+# docs
+sphinx-output.txt
+docs/sphinx-output.txt

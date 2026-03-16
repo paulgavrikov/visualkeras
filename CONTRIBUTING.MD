@@ -78,10 +78,20 @@ pip install -r requirements-dev.txt
 Some tests and examples require TensorFlow/Keras. To run all the tests:
 
 ```bash
-pip install tensorflow keras  # or tensorflow-cpu for CPU-only
+pip install tensorflow==2.17.0
 ```
 
-Newer Python versions almost always work with visualkeras, particularly because our underlying packages are constantly being updated. However, we only guarantee functionality for 3.6-3.8.
+For standalone Keras smoke checks:
+
+```bash
+pip install "keras>=3,<4" tensorflow==2.17.0
+```
+
+Current compatibility guarantees are tracked in the Support Matrix section in `README.md`.
+
+- Core package support: Python 3.9, 3.10, 3.11, 3.12.
+- Full renderer/integration support: Python 3.11 with TensorFlow 2.17 (`tf.keras`) on Linux.
+- Standalone `keras` path is best-effort.
 
 ### Running tests
 
