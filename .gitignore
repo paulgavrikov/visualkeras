@@ -49,3 +49,7 @@ Thumbs.db
 *.log
 tmp/
 temp/
+
+# docs
+sphinx-output.txt
+docs/sphinx-output.txt
