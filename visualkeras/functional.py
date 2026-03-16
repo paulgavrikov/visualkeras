@@ -1429,6 +1429,78 @@ def _compute_external_text_padding(
     return text_top_padding, text_bottom_padding
 
 
+def _resolve_external_label_x_collisions(
+    labels: List[Dict[str, Any]],
+    *,
+    image_width: int,
+    edge_padding: int,
+    min_gap: int = 8,
+    y_tolerance: int = 2,
+) -> None:
+    """Shift external labels horizontally to reduce same-row overlap.
+
+    Labels are grouped by overlapping y-ranges (with a small tolerance). Within
+    each group, labels are ordered by preferred x and nudged to satisfy a
+    minimum horizontal gap where possible.
+    """
+    if len(labels) < 2:
+        return
+
+    sorted_indices = sorted(range(len(labels)), key=lambda idx: labels[idx]["y"])
+    groups: List[List[int]] = []
+    current_group = [sorted_indices[0]]
+    current_bottom = labels[sorted_indices[0]]["y"] + labels[sorted_indices[0]]["h"]
+
+    for idx in sorted_indices[1:]:
+        label = labels[idx]
+        y1 = label["y"]
+        y2 = y1 + label["h"]
+        if y1 <= current_bottom + y_tolerance:
+            current_group.append(idx)
+            current_bottom = max(current_bottom, y2)
+        else:
+            groups.append(current_group)
+            current_group = [idx]
+            current_bottom = y2
+    groups.append(current_group)
+
+    left_bound = float(edge_padding)
+    right_bound = float(max(edge_padding, image_width - edge_padding))
+    available = max(1.0, right_bound - left_bound)
+
+    for group in groups:
+        if len(group) < 2:
+            continue
+
+        ordered = sorted(group, key=lambda idx: labels[idx]["x_pref"])
+        widths = [float(max(1, labels[idx]["w"])) for idx in ordered]
+        required = sum(widths) + float(min_gap * (len(ordered) - 1))
+
+        xs = [float(labels[idx]["x_pref"]) for idx in ordered]
+        if required > available:
+            x_cursor = left_bound
+            for i in range(len(xs)):
+                xs[i] = x_cursor
+                x_cursor += widths[i] + min_gap
+        else:
+            xs[0] = max(xs[0], left_bound)
+            for i in range(1, len(xs)):
+                xs[i] = max(xs[i], xs[i - 1] + widths[i - 1] + min_gap)
+
+            overflow = (xs[-1] + widths[-1]) - right_bound
+            if overflow > 0:
+                xs = [x - overflow for x in xs]
+
+            if xs[0] < left_bound:
+                x_cursor = left_bound
+                for i in range(len(xs)):
+                    xs[i] = x_cursor
+                    x_cursor += widths[i] + min_gap
+
+        for i, idx in enumerate(ordered):
+            labels[idx]["x"] = int(round(xs[i]))
+
+
 def _positions_from_rank_nodes(rank_nodes: Mapping[int, List[int]]) -> Dict[int, int]:
     positions: Dict[int, int] = {}
     for node_list in rank_nodes.values():
@@ -2299,13 +2371,20 @@ def _render_graph(
         if font is None:
             font = ImageFont.load_default()
         draw_text = ImageDraw.Draw(img)
-        for index, node in enumerate(sorted(graph.nodes.values(), key=lambda n: n.order)):
-            if node.kind == "virtual":
-                continue
+        external_labels: List[Dict[str, Any]] = []
+        visible_nodes = [
+            node
+            for node in sorted(graph.nodes.values(), key=lambda n: n.order)
+            if node.kind != "virtual"
+        ]
+        for index, node in enumerate(visible_nodes):
             text, above = text_callable(index, node.layer)
+            text_value = "" if text is None else str(text)
+            if not text_value:
+                continue
             text_height = 0
             text_widths = []
-            for line in text.split("\n"):
+            for line in text_value.split("\n"):
                 if hasattr(font, "getsize"):
                     text_widths.append(font.getsize(line)[0])
                     text_height += font.getsize(line)[1]
@@ -2313,7 +2392,7 @@ def _render_graph(
                     bbox = font.getbbox(line)
                     text_widths.append(bbox[2])
                     text_height += bbox[3]
-            text_height += (len(text.split("\n")) - 1) * text_vspacing
+            text_height += (len(text_value.split("\n")) - 1) * text_vspacing
 
             de = getattr(node, 'de', 0)
             real_width = node.width - de
@@ -2328,10 +2407,30 @@ def _render_graph(
                 text_y = face_y - text_height - 4
             else:
                 text_y = face_y + real_height + 4
-                
+
+            text_width = max(text_widths or [0])
+            external_labels.append(
+                {
+                    "x": float(text_x),
+                    "x_pref": float(text_x),
+                    "y": int(text_y),
+                    "w": int(text_width),
+                    "h": int(text_height),
+                    "text": text_value,
+                }
+            )
+
+        _resolve_external_label_x_collisions(
+            external_labels,
+            image_width=img.size[0],
+            edge_padding=padding,
+            min_gap=8,
+        )
+
+        for label in external_labels:
             draw_text.multiline_text(
-                (text_x, text_y),
-                text,
+                (label["x"], label["y"]),
+                label["text"],
                 font=font,
                 fill=font_color,
                 spacing=text_vspacing,
