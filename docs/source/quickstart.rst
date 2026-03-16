@@ -16,7 +16,7 @@ Install visualkeras using pip:
 Your First Visualization
 ========================
 
-Let's create a simple neural network and visualize it:
+Let's create a simple neural network and visualize it using the unified ``show()`` API:
 
 .. code-block:: python
 
@@ -37,19 +37,54 @@ Let's create a simple neural network and visualize it:
        keras.layers.Dense(10)
    ])
 
-   # Display the model architecture
-   visualkeras.layered_view(model).show()
+   # Display the model architecture using show() with mode parameter
+   image = visualkeras.show(model, mode='layered')
+   image.show()
 
 What Just Happened?
 ===================
 
-visualkeras generated a **layered view** of your model, showing:
+visualkeras generated a **layered view** of your model (using ``mode='layered'``), showing:
 
 - Each layer as a colored block
 - Tensor shapes flowing through the network
 - How data is transformed at each step
 
+The ``show()`` function is the unified API that supports four visualization modes.
+
 This layered view is great for understanding **Convolutional Neural Networks (CNNs)**.
+
+Using Presets
+==============
+
+visualkeras includes curated presets for different use cases:
+
+.. code-block:: python
+
+   # Compact layout (minimal spacing)
+   compact = visualkeras.show(model, mode='layered', preset='compact')
+
+   # Presentation style (large, detailed, suitable for papers/slides)
+   presentation = visualkeras.show(model, mode='layered', preset='presentation')
+
+   # Default balanced style
+   default = visualkeras.show(model, mode='layered', preset='default')
+
+Trying Different Modes
+======================
+
+The ``show()`` API makes it easy to experiment with different visualization styles:
+
+.. code-block:: python
+
+   # These all work with the same function - just change the mode
+   
+   layered_viz = visualkeras.show(model, mode='layered')        # Layer stacks
+   graph_viz = visualkeras.show(model, mode='graph')            # Computational graph
+   functional_viz = visualkeras.show(model, mode='functional')  # Layered + graph hybrid
+   lenet_viz = visualkeras.show(model, mode='lenet')             # Classic feature map style
+
+Try each mode to see which best represents your model!
 
 Next Steps
 ==========
@@ -66,25 +101,46 @@ For more control over styling, see :doc:`tutorials/index`.
 Common Customizations
 =====================
 
-Changing Colors
----------------
+Changing Colors and Styles
+---------------------------
+
+Use the unified ``show()`` API with color customization:
 
 .. code-block:: python
 
-   visualkeras.layered_view(model, color_map={
-       keras.layers.Conv2D: 'Blue',
-       keras.layers.MaxPooling2D: 'Green',
-       keras.layers.Dense: 'Red'
-   }).show()
+   # Define colors with fill and outline for each layer type
+   image = visualkeras.show(
+       model,
+       mode='layered',
+       color_map={
+           keras.layers.Conv2D: {'fill': '#3498db', 'outline': '#2980b9'},
+           keras.layers.MaxPooling2D: {'fill': '#2ecc71', 'outline': '#27ae60'},
+           keras.layers.Dense: {'fill': '#e74c3c', 'outline': '#c0392b'}
+       }
+   )
+   image.show()
 
-Using Graph View Instead
--------------------------
+Using Different Visualization Modes
+-------------------------------------
 
-For more complex models, use graph view:
+visaalkeras supports four visualization modes. Each mode is useful for different model types:
 
 .. code-block:: python
 
-   visualkeras.graph_view(model).show()
+   # Layered view: Great for CNNs, shows stacked feature maps
+   layered = visualkeras.show(model, mode='layered')
+   
+   # Graph view: Shows computational structure for any model type
+   graph = visualkeras.show(model, mode='graph')
+   
+   # Functional view: Graph-aware layering (bridges both approaches)
+   functional = visualkeras.show(model, mode='functional')
+   
+   # LeNet view: Classic feature map stack visualization
+   lenet = visualkeras.show(model, mode='lenet')
+   
+   # Use presets for publication-ready output
+   publication = visualkeras.show(model, mode='layered', preset='presentation')
 
 Saving to File
 --------------

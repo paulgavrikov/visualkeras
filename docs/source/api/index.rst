@@ -32,6 +32,7 @@ Module Documentation
    lenet_style
    layer_utils_details
    options
+   advanced_styling_reference
    utils_details
 
 Quick Reference

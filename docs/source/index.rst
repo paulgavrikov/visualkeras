@@ -22,17 +22,18 @@ visualkeras
 
    <br><br>
 
-visualkeras is a Python package to help visualize Keras (either standalone or included in TensorFlow) neural network architectures. It allows easy styling to fit most needs.
+visualkeras is a Python package to help visualize Keras (either standalone or included in TensorFlow) neural network architectures. It provides a unified, high-level API for creating publication-quality visualizations of your models.
 
 ✨ **Key Features**
 ==================
 
-- 🎨 **Multiple visualization styles**: Layered view (great for CNNs) and graph view (works for all models)
-- 🎯 **Flexible styling**: Customize colors, fonts, sizes, and transparency
+- 🎨 **Four visualization modes**: Choose the style that fits your model and audience (layered, graph, functional, lenet)
+- 🎯 **Unified ``show()`` API**: One entry point with ``mode`` parameter to switch between visualization styles
+- 🎨 **Flexible styling**: Customize colors, fonts, sizes, spacing, and more via options objects or parameters
 - 📊 **Multiple output formats**: PNG, SVG, and more
-- 🔄 **Supports various model types**: Sequential, Functional, and more
-- 🚀 **Easy to use**: Simple API, works with Keras and tf.keras
-- 📈 **Publication-ready**: Generate figures suitable for papers and presentations
+- 🔄 **Supports all model types**: Sequential, Functional, Subclassed models
+- 🚀 **Easy to use**: Simple, discoverable API with sensible defaults and curated presets
+- 📈 **Publication-ready**: Generate figures suitable for papers, presentations, and technical documentation
 
 Quick Links
 ===========

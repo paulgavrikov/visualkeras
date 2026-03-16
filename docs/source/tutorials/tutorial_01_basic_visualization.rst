@@ -23,27 +23,39 @@ Prerequisites
 - Basic knowledge of Keras/TensorFlow models
 - Jupyter notebook or Python IDE
 
-Visualization Styles
-====================
+Visualization Modes
+===================
 
-visualkeras provides two main visualization approaches:
+visualkeras provides **four visualization modes**, all accessed through the unified ``show()`` API:
 
-**Layered View**
-    - Shows layers stacked on top of each other
-    - Great for Convolutional Neural Networks (CNNs)
-    - Shows tensor dimensions flowing through layers
-    - Can become cluttered with very deep networks
+**mode='layered'** — Stacked layers
+    - Shows layers as 3D blocks stacked vertically
+    - Great for CNNs and image processing networks
+    - Emphasizes tensor dimensions flowing through layers
+    - Best for understanding layer-by-layer transformations
 
-**Graph View**
-    - Shows model as a computational graph
+**mode='graph'** — Computational graph
+    - Shows model as a connected graph
     - Works with any model type (Sequential, Functional, Subclassed)
-    - Shows connections between layers clearly
-    - Best for understanding complex architectures
+    - Clear visualization of connections and branching
+    - Best for complex models with multiple paths
+
+**mode='functional'** — Graph-aware layering
+    - Combines best of both: layered appearance with graph awareness
+    - Shows connections while maintaining layer structure
+    - Ideal for CNNs with skip connections or multi-branch architectures
+    - Supports collapse rules to merge repeated layer sequences
+
+**mode='lenet'** — Feature map stack
+    - Classic "feature map stacks" visualization style
+    - Shows channels as individual map visualizations
+    - Perfect for publishing CNN architectures in papers
+    - Ideal for detailed architectural diagrams
 
 Creating Your First Visualization
 ==================================
 
-Let's start with a simple Sequential model:
+Let's start with a simple CNN and see all four modes:
 
 .. code-block:: python
 
@@ -61,39 +73,58 @@ Let's start with a simple Sequential model:
         keras.layers.Dense(10, activation='softmax')
     ])
 
-    # Display the model
-    image = visualkeras.layered_view(model)
+    # The unified show() API with mode parameter
+    # Try different modes to see what works best for your use case
+    
+    # Layered view
+    image = visualkeras.show(model, mode='layered')
     image.show()
 
-This creates a visual representation showing each layer and how data flows through the network.
+The unified ``show()`` API makes it easy to try different visualization styles without changing function calls.
 
-When to Use Each Style
-======================
+Comparing All Four Modes
+========================
 
-Use **Layered View** when:
-    - Your model is a CNN or image processing network
-    - You want to emphasize layer stacking
-    - The model has relatively few layers (< 30)
-    - You're presenting to people unfamiliar with neural networks
-
-Use **Graph View** when:
-    - Your model is complex with multiple paths
-    - You have skip connections or parallel layers
-    - You want a compact representation
-    - You're visualizing a Functional or Subclassed model
-
-Quick Comparison
-================
+Here's how to visualize your model in all four modes:
 
 .. code-block:: python
 
     import visualkeras
 
-    # Layered view (usually better for CNNs)
-    visualkeras.layered_view(model).show()
+    # Try each visualization mode
+    layered = visualkeras.show(model, mode='layered')
+    graph = visualkeras.show(model, mode='graph')
+    functional = visualkeras.show(model, mode='functional')
+    lenet = visualkeras.show(model, mode='lenet')
 
-    # Graph view (usually better for complex architectures)
-    visualkeras.graph_view(model).show()
+Each mode reveals different aspects of your architecture. Experiment to find what works best for your presentation or publication.
+
+When to Use Each Mode
+=====================
+
+**Use Layered** when:
+    - Visualizing CNNs or image processing networks
+    - Want to emphasize layer stacking and tensor shapes
+    - Have relatively simple sequential architectures
+    - Presenting to people new to neural networks
+
+**Use Graph** when:
+    - Working with complex models with many branches
+    - Have skip connections or parallel layers
+    - Want the most compact representation
+    - Visualizing Functional or Subclassed models
+
+**Use Functional** when:
+    - Have a CNN with non-sequential elements (skip connections)
+    - Want layered appearance but with graph connections shown
+    - Need something between pure layered and pure graph
+    - Working with complex feature extraction pipelines
+
+**Use LeNet** when:
+    - Publishing architectures in academic papers
+    - Want classic "feature maps on paper" style
+    - Need detailed per-channel visualization
+    - Designing presentation slides with detailed diagrams
 
 Common Issues
 =============
