@@ -2,6 +2,8 @@
 
 [![Latest Version](https://img.shields.io/pypi/v/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
 [![Download Count](https://img.shields.io/pypi/dm/visualkeras.svg)](https://pypi.python.org/pypi/visualkeras)
+[![Test Pass Rate](https://img.shields.io/badge/tests-170%2F170%20passed%20(100%25)-brightgreen)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)
+[![Coverage](https://img.shields.io/badge/coverage-95.09%25-brightgreen)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)
 <!--[![CI](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml/badge.svg)](https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml)-->
 
 ## Introduction
