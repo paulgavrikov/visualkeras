@@ -4,10 +4,36 @@ Layer Utils
 
 Utility functions and classes for working with layers.
 
-.. automodule:: visualkeras.layer_utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
+API Reference
+=============
+
+.. autoclass:: visualkeras.layer_utils.SpacingDummyLayer
+
+.. autofunction:: visualkeras.layer_utils.get_layers
+
+.. autofunction:: visualkeras.layer_utils.get_incoming_layers
+
+.. autofunction:: visualkeras.layer_utils.get_outgoing_layers
+
+.. autofunction:: visualkeras.layer_utils.model_to_adj_matrix
+
+.. autofunction:: visualkeras.layer_utils.find_layer_by_id
+
+.. autofunction:: visualkeras.layer_utils.find_layer_by_name
+
+.. autofunction:: visualkeras.layer_utils.find_input_layers
+
+.. autofunction:: visualkeras.layer_utils.find_output_layers
+
+.. autofunction:: visualkeras.layer_utils.model_to_hierarchy_lists
+
+.. autofunction:: visualkeras.layer_utils.augment_output_layers
+
+.. autofunction:: visualkeras.layer_utils.is_internal_input
+
+.. autofunction:: visualkeras.layer_utils.extract_primary_shape
+
+.. autofunction:: visualkeras.layer_utils.calculate_layer_dimensions
 
 SpacingDummyLayer
 =================

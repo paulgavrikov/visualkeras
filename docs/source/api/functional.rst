@@ -24,10 +24,7 @@ The functional renderer combines the best of layered and graph visualization: it
 API Reference
 =============
 
-.. automodule:: visualkeras.functional
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autofunction:: visualkeras.functional.functional_view
 
 Key Parameters
 ==============

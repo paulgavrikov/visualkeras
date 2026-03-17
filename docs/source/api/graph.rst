@@ -24,10 +24,7 @@ The graph renderer displays neural network architectures as computational graphs
 API Reference
 =============
 
-.. automodule:: visualkeras.graph
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autofunction:: visualkeras.graph.graph_view
 
 Key Parameters
 ==============

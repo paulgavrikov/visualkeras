@@ -4,10 +4,30 @@ Options
 
 Configuration objects and presets for all renderers.
 
-.. automodule:: visualkeras.options
-   :members:
-   :undoc-members:
-   :show-inheritance:
+API Reference
+=============
+
+.. autoclass:: visualkeras.options.LayeredOptions
+   :members: to_kwargs
+
+.. autoclass:: visualkeras.options.GraphOptions
+   :members: to_kwargs
+
+.. autoclass:: visualkeras.options.FunctionalOptions
+   :members: to_kwargs
+
+.. autoclass:: visualkeras.options.LenetOptions
+   :members: to_kwargs
+
+.. autodata:: visualkeras.options.LAYERED_TEXT_CALLABLES
+
+.. autodata:: visualkeras.options.LAYERED_PRESETS
+
+.. autodata:: visualkeras.options.GRAPH_PRESETS
+
+.. autodata:: visualkeras.options.FUNCTIONAL_PRESETS
+
+.. autodata:: visualkeras.options.LENET_PRESETS
 
 Using Options Objects
 =====================
@@ -16,14 +36,14 @@ Instead of passing many individual parameters, you can use options objects for c
 
 .. code-block:: python
 
-    from visualkeras.options import LayeredOptions
+    from visualkeras.options import LayeredOptions, LAYERED_TEXT_CALLABLES
 
     # Define once
     my_options = LayeredOptions(
         spacing=15,
         padding=20,
         legend=True,
-        text_callable='name_shape'
+        text_callable=LAYERED_TEXT_CALLABLES['name_shape']
     )
 
     # Reuse for all models
@@ -76,4 +96,3 @@ Pre-defined text callable functions for annotating layers in layered view:
         model,
         text_callable=LAYERED_TEXT_CALLABLES['name_shape']
     ).show()
-

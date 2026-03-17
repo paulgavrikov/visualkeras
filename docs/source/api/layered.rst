@@ -23,10 +23,7 @@ The layered renderer displays neural network architectures as stacked 3D layer b
 API Reference
 =============
 
-.. automodule:: visualkeras.layered
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autofunction:: visualkeras.layered.layered_view
 
 Usage Examples
 ==============
