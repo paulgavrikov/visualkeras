@@ -126,7 +126,6 @@ Table of Contents
 =================
 
 .. toctree::
-   :hidden:
    :maxdepth: 2
 
    quickstart
