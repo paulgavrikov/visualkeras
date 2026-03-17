@@ -4,6 +4,10 @@ Utils
 
 Utility functions for visualkeras.
 
+**Note:** This section is mainly useful for advanced customization of
+visualkeras, low-level rendering work, or contributing to the visualkeras
+codebase. Most users will not need these utilities directly.
+
 Style Helpers
 =============
 

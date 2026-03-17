@@ -26,6 +26,14 @@ API Reference
 
 .. autofunction:: visualkeras.graph.graph_view
 
+Configuration Options
+=====================
+
+Use :py:class:`visualkeras.options.GraphOptions` when you want to bundle graph
+layout, node styling, connector behavior, and related settings for reuse.
+Curated presets are available through
+:py:data:`visualkeras.options.GRAPH_PRESETS`.
+
 Key Parameters
 ==============
 
@@ -101,4 +109,5 @@ See Also
 
 - :doc:`../examples/functional_models` for examples
 - :doc:`../tutorials/tutorial_01_basic_visualization` for tutorial
-- :doc:`options` for GraphOptions reference
+- :py:class:`visualkeras.options.GraphOptions` for the full options API
+- :doc:`options` for presets and shared options documentation

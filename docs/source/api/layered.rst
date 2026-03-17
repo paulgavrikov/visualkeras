@@ -25,6 +25,13 @@ API Reference
 
 .. autofunction:: visualkeras.layered.layered_view
 
+Configuration Options
+=====================
+
+Use :py:class:`visualkeras.options.LayeredOptions` when you want to bundle a
+layered configuration and reuse it across multiple renders. Curated presets are
+available through :py:data:`visualkeras.options.LAYERED_PRESETS`.
+
 Usage Examples
 ==============
 
@@ -87,4 +94,5 @@ See Also
 - :doc:`../examples/sequential_models` for simple model examples
 - :doc:`../tutorials/tutorial_01_basic_visualization` for tutorial
 - :doc:`../tutorials/tutorial_02_styling_customization` for styling guide
-- :doc:`options` for LayeredOptions reference
+- :py:class:`visualkeras.options.LayeredOptions` for the full options API
+- :doc:`options` for presets and shared options documentation

@@ -20,6 +20,15 @@ class SpacingDummyLayer(Layer):
     This layer has no semantic effect on the underlying model architecture. It
     exists so that renderers can detect intentional spacing between model
     sections without requiring a separate external layout description.
+
+    Parameters
+    ----------
+    spacing : int, default=50
+        Requested amount of visual separation associated with this layer.
+
+        Renderers may interpret this as extra layout space between neighboring
+        blocks. The value exists to support intentional grouping in diagrams and
+        is not used during model training or inference.
     """
 
     def __init__(self, spacing: int = 50):

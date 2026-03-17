@@ -106,6 +106,16 @@ class LayeredOptions:
     :func:`visualkeras.layered_view`. Use this object when you want to keep
     layered sizing, labeling, grouping, connector styling, and per-layer
     overrides together as one reusable configuration.
+
+    ``LayeredOptions`` is most useful when the same visual style should be
+    applied to several related models, notebooks, or documentation examples. It
+    keeps a long list of renderer settings in one typed object rather than
+    repeating them across many calls.
+
+    The class is intentionally thin. It does not introduce a second styling
+    system or any extra resolution rules beyond what ``layered_view`` already
+    supports. Its main job is to make a layered configuration easier to read,
+    store, and reuse.
     """
     # Mirrors layered_view kwargs (excluding `model`)
     to_file: Optional[str] = None
@@ -159,6 +169,15 @@ class GraphOptions:
     :func:`visualkeras.graph_view`. Use this object when you want to preserve a
     consistent graph layout, connector style, node presentation, and image or
     grouping behavior across multiple renders.
+
+    ``GraphOptions`` works well when topology diagrams should share the same
+    spacing, node sizing, connector styling, and image treatment across several
+    models. It is especially useful in projects that generate many related
+    figures and want a stable visual language.
+
+    Like the other options classes, this object is only a structured container
+    for renderer arguments. It uses the same precedence model as the renderer
+    itself when combined with presets and explicit keyword overrides.
     """
     to_file: Optional[str] = None
     color_map: Optional[Mapping[type, Mapping[str, Any]]] = None
@@ -191,6 +210,15 @@ class FunctionalOptions:
     functional layout controls, connector routing, sizing behavior, collapse
     rules, annotations, and style overrides together as one reusable
     configuration.
+
+    ``FunctionalOptions`` is the most useful options class when your models
+    have richer graph structure and the configuration naturally includes many
+    related decisions about spacing, collapse behavior, annotation style, and
+    per-layer rendering rules.
+
+    It is still only a container for renderer arguments. The renderer remains
+    the authoritative source for parameter behavior, and explicit keyword
+    arguments still override values stored in the options object.
     """
     to_file: Optional[str] = None
     color_map: Optional[Mapping[type, Mapping[str, Any]]] = None
@@ -249,6 +277,14 @@ class LenetOptions:
     :func:`visualkeras.lenet_view`. Use this object when you want to preserve a
     consistent LeNet-style layout, connector behavior, patch styling, label
     spacing, and per-layer overrides across multiple renders.
+
+    ``LenetOptions`` is most helpful when publication-oriented LeNet-style
+    figures should share the same stack spacing, label treatment, patch
+    appearance, and embedded-image behavior across several examples.
+
+    As with the other options classes, this dataclass does not change renderer
+    semantics. It provides a clearer, reusable way to package a LeNet-style
+    configuration before passing it to ``lenet_view`` or ``show``.
     """
     to_file: Optional[str] = None
     min_xy: int = 20
