@@ -25,10 +25,7 @@ The LeNet renderer displays neural networks using classic "feature map stack" di
 API Reference
 =============
 
-.. automodule:: visualkeras.lenet
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. autofunction:: visualkeras.lenet.lenet_view
 
 Key Parameters
 ==============
@@ -102,7 +99,7 @@ Custom Label Functions
 
 .. code-block:: python
 
-    from visualkeras.options import LenetOptions
+    import visualkeras
     
     def top_label(layer, shape):
         return f"{shape.dH}×{shape.dW}×{shape.dZ}"
@@ -110,12 +107,12 @@ Custom Label Functions
     def bottom_label(layer, shape):
         return layer.__class__.__name__
     
-    options = LenetOptions(
+    image = visualkeras.show(
+        model,
+        mode='lenet',
         top_label_callable=top_label,
         bottom_label_callable=bottom_label,
     )
-    
-    image = visualkeras.show(model, mode='lenet', options=options)
 
 With Embedded Images
 --------------------
