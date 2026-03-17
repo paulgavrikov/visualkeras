@@ -12,10 +12,15 @@ Please read the main project docs first.
 
 - [README](https://github.com/paulgavrikov/visualkeras/blob/master/README.md)
 - [Documentation site](https://visualkeras.readthedocs.io/)
+- [Architecture guide](https://github.com/paulgavrikov/visualkeras/blob/master/ARCHITECTURE.md)
 - [Open issues](https://github.com/paulgavrikov/visualkeras/issues)
 
 For larger changes, open an issue first. That helps avoid duplicate work and
 makes sure the change fits the project.
+
+If you plan to work on internals, renderer behavior, or shared helpers, read
+the architecture guide as well. It gives a short overview of how the package is
+organized and where different kinds of changes should live.
 
 ## Questions
 
@@ -187,6 +192,9 @@ clever code.
 Please add or update tests for behavior changes when it makes sense. For visual
 changes, stable checks on image size, object counts, labels, or related output
 are often better than brittle full image assertions.
+
+For broader internal changes, see
+[ARCHITECTURE.md](https://github.com/paulgavrikov/visualkeras/blob/master/ARCHITECTURE.md).
 
 ## Docstrings
 

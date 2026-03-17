@@ -171,6 +171,7 @@ Particularly useful sections include:
 - Tutorials: <https://visualkeras.readthedocs.io/en/latest/tutorials/index.html>
 - Examples: <https://visualkeras.readthedocs.io/en/latest/examples/index.html>
 - API reference: <https://visualkeras.readthedocs.io/en/latest/api/index.html>
+- Architecture guide: [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Compatibility
 
@@ -199,6 +200,7 @@ If you find this project helpful for your research, please cite it:
 
 - Issues: <https://github.com/paulgavrikov/visualkeras/issues>
 - Contributing guide: `CONTRIBUTING.MD`
+- Architecture guide: `ARCHITECTURE.md`
 
 ## License
 
