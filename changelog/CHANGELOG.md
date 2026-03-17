@@ -2,20 +2,125 @@
 
 All notable changes to this project will be documented in this file, starting from version 0.0.1.
 
-## Unreleased
+## Unreleased (to be version 0.3.0)
 
-[update before version 0.3.0 release]
+Tenth release. This update is a major expansion of the library when compared
+with `v0.2.0`. It adds two new renderers, a unified high level API, a much
+richer styling system, and a broad set of rendering improvements across the
+existing visualization modes.
 
-Compatibility and support policy:
+Features and library changes
 
-- Added a canonical support policy with explicit Python, backend, and OS tiers.
-- Aligned packaging metadata (`python_requires`, Python classifiers, OS classifiers) with the support matrix.
-- Aligned CI to the support matrix:
-  - Cross-platform unit matrix (Linux/macOS/Windows on Python 3.9-3.12).
-  - Full renderer + coverage job on Linux/Python 3.11 with TensorFlow 2.17.
-  - Standalone `keras` smoke check on Linux/Python 3.11.
-- Retired legacy Travis CI configuration to avoid conflicting support claims.
-- Updated README and CONTRIBUTING compatibility statements to match the matrix.
+- Added `visualkeras.show(...)` as a unified entry point for rendering model
+  visualizations. It selects a renderer by mode and supports presets, options
+  objects, and explicit keyword overrides.
+- Added top level exports for `show`, `functional_view`, `lenet_view`,
+  `FunctionalOptions`, `LenetOptions`, `FUNCTIONAL_PRESETS`, and
+  `LENET_PRESETS` so they can be imported directly from `visualkeras`.
+- Added a new `functional_view` renderer for functional Keras models. This
+  renderer supports branch aware layout, multi input and multi output models,
+  rank based graph placement, routed connectors, disconnected components, and
+  optional volumetric boxes.
+- Added a new `lenet_view` renderer for classic feature map stack diagrams.
+  This mode renders CNN style models as offset map stacks with dedicated
+  connection primitives and label controls.
+- Added `FunctionalOptions` and `LenetOptions` dataclasses and extended the
+  structured options system beyond `LayeredOptions` and `GraphOptions`.
+- Added curated presets for functional and LeNet style rendering through
+  `FUNCTIONAL_PRESETS` and `LENET_PRESETS`.
+- Expanded `LAYERED_TEXT_CALLABLES` so common caption formats can be selected
+  by name instead of rewriting annotation callbacks.
+
+Layered renderer
+
+- Added stylesheet style per-layer overrides through the `styles` argument.
+  These overrides can be keyed by layer class or layer name and provide
+  fine grained control beyond `color_map`.
+- Added per-layer image support for layered diagrams.
+- Added `image_fit` and `image_axis` controls so images can be resized and
+  placed on the intended layer face in volumetric mode.
+- Added connector styling with `connector_fill` and `connector_width`.
+- Added grouped stage highlighting through `layered_groups`.
+- Added group captions for layered group overlays.
+- Added automatic canvas expansion when group captions or text would otherwise
+  overflow the rendered image.
+- Added logo overlays and logo legends through `logo_groups` and
+  `logos_legend`.
+
+Graph renderer
+
+- Added stylesheet style per-layer overrides through the `styles` argument.
+- Added embedded node images with configurable fit behavior through
+  `image_fit`.
+- Added `circular_crop` for image based node rendering.
+- Added grouped highlights and group captions through `layered_groups`.
+- Improved handling of output nodes when `inout_as_tensor=False` so graph
+  diagrams avoid duplicated terminal layers.
+- Improved graph layout stability around connectors and spacing.
+
+Functional renderer
+
+- Added optional volumetric rendering for functional models.
+- Added stylesheet style per-layer overrides through the `styles` argument.
+- Added embedded images for functional diagrams.
+- Added `image_fit` and `image_axis` controls for image placement on functional
+  boxes.
+- Added grouped highlights and group captions through `layered_groups`.
+- Added logo overlays and legends through `logo_groups` and `logos_legend`.
+- Added `simple_text_visualization` for compact text first functional diagrams.
+- Added `simple_text_label_mode` to control where labels appear in simple text
+  mode.
+- Added block and layer collapsing through `collapse_enabled`,
+  `collapse_rules`, and `collapse_annotations`.
+- Added annotation placement and overflow handling for collapsed blocks and
+  group labels.
+
+LeNet style renderer
+
+- Added `lenet_view` as a new renderer for LeNet inspired feature map stack
+  diagrams.
+- Added support for spatial stacks, vector stacks, and dedicated connector
+  types between them.
+- Added top and bottom label callables so stack annotations can be customized.
+- Added per-side label toggles and padding controls.
+- Added per-layer face images through style keys such as `face_image`,
+  `face_image_fit`, `face_image_alpha`, and `face_image_inset`.
+- Added patch styling controls including `patch_fill`, `patch_outline`,
+  `patch_scale`, and `patch_alpha_on_image`.
+- Added `max_visual_channels` to cap the number of maps drawn for high channel
+  layers.
+- Added `seed` for reproducible randomized patch placement.
+- Improved connection routing so LeNet style connectors render more cleanly.
+
+Options and presets
+
+- Expanded `LayeredOptions` with support for connector styling, image handling,
+  grouped overlays, logo overlays, legends for logos, and stylesheet style
+  overrides.
+- Expanded `GraphOptions` with support for stylesheet style overrides, image
+  fit mode, circular image crops, and grouped overlays.
+- Added `FunctionalOptions` to cover functional layout, connector routing,
+  sizing, annotation, logo, image, text, and collapse features.
+- Added `LenetOptions` to cover LeNet style layout, connector behavior, patch
+  styling, label controls, and per-layer style overrides.
+- Extended the `preset=` and `options=` workflow to the new renderers and kept
+  explicit keyword arguments as the final override layer.
+
+Bug fixes and behavior improvements
+
+- Fixed blank spaces and connector jogging issues in graph renderings.
+- Fixed connector jogging issues in volumetric functional renderings.
+- Fixed the right and left axis handling in volumetric functional
+  visualizations.
+- Fixed text rendering issues in graph diagrams.
+- Prevented embedded graph images from being drawn on ellipsis markers.
+- Improved circular crop quality for graph node images.
+- Improved the handling of special characters in rendered text.
+- Improved 3D box rotation and dimension handling.
+- Improved the placement of captions and labels when vertical or horizontal
+  overflow occurs.
+- Improved compatibility with modern Keras and TensorFlow internals for layer
+  discovery, output name handling, and model graph traversal.
 
 ## 0.2.0 (2025-10-13)
 
