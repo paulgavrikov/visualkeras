@@ -556,6 +556,12 @@ def _enforce_in_out_patch_separation(
 
 @dataclass
 class RenderShape:
+    """Canonical shape record used by the LeNet renderer.
+
+    The renderer normalizes layer outputs into this structure so that spatial
+    feature maps and vector-like outputs can be handled through one drawing
+    pipeline.
+    """
     kind: str  # "spatial" or "vector"
     h: int
     w: int
@@ -624,7 +630,7 @@ def _canonicalize_shape(layer: Any, shape: Any) -> RenderShape:
 # ---------------------------------------------------------------------------
 
 class FeatureMapStack:
-    """A stack of 2D feature maps drawn as offset rectangles (LeNet style)."""
+    """Draw a LeNet-style stack of offset feature-map rectangles."""
 
     def __init__(
         self,
@@ -705,7 +711,7 @@ class FeatureMapStack:
 
 
 class PyramidConnection:
-    """Kernel/pool receptive-field style connector between two spatial stacks."""
+    """Draw a receptive-field style connection between two spatial stacks."""
 
     def __init__(
         self,
@@ -758,7 +764,7 @@ class PyramidConnection:
 
 
 class FunnelConnection:
-    """Connector from spatial stack to vector stack."""
+    """Draw a funnel-style connector from a spatial stack to a vector stack."""
 
     def __init__(
         self,
@@ -789,7 +795,7 @@ class FunnelConnection:
 
 
 class FullConnection:
-    """Simple connector between vector stacks (dense/flatten/etc)."""
+    """Draw a dense-style connector between two vector-like stacks."""
 
     def __init__(
         self,
@@ -911,7 +917,205 @@ def lenet_view(
     options: Union[LenetOptions, Mapping[str, Any], None] = None,
     preset: Optional[str] = None,
 ) -> Image.Image:
-    """Generate a LeNet-style visualization for a Keras/TensorFlow model."""
+    """Render a Keras model using a LeNet-style feature-map diagram.
+
+    This renderer emphasizes stacked feature maps and left-to-right progression.
+    It is especially useful for CNN-focused figures, publication graphics, and
+    teaching material that should resemble classic LeNet-style architecture
+    diagrams.
+
+    Parameters
+    ----------
+    model : Any
+        Keras model instance to visualize.
+
+        LeNet view works best for sequential or mostly sequential models where
+        channel progression and stage-by-stage feature-map flow are the main
+        story.
+    to_file : str, optional
+        Path to save the rendered image. The image format is inferred from the
+        file extension.
+
+        The rendered ``PIL.Image`` is returned whether or not this value is
+        supplied. Use this when you want to save the figure and keep working
+        with the in-memory image.
+    min_xy : int, default=20
+        Minimum rendered width and height for a feature-map face in pixels.
+
+        This prevents small feature maps from becoming visually insignificant in
+        diagrams that also contain much larger spatial layers.
+    max_xy : int, default=220
+        Maximum rendered width and height for a feature-map face in pixels.
+
+        Use this to keep very large early feature maps from dominating the
+        overall composition.
+    scale_xy : float, default=4.0
+        Multiplier applied to feature-map width and height before clamping.
+
+        This is one of the main controls for the overall apparent scale of the
+        stacks in the figure.
+    type_ignore : sequence of type, optional
+        Layer classes to exclude from rendering.
+
+        This is useful for hiding utility layers that add noise to the diagram
+        without changing the main architectural story.
+    index_ignore : sequence of int, optional
+        Layer indices to exclude from rendering.
+
+        Use this when you need precise control over individual layers rather
+        than excluding every instance of a class.
+    color_map : mapping, optional
+        Mapping from layer class to broad style values such as ``fill`` and
+        ``outline``.
+
+        This is the quickest way to define a consistent color language by layer
+        type. Use ``styles`` when you need per-layer overrides.
+    background_fill : Any, default='black'
+        Background color for the final image.
+
+        Dark backgrounds often work well in LeNet mode because they increase
+        contrast with the stacked feature maps and connectors.
+    padding : int, default=20
+        Outer padding around the full diagram in pixels.
+
+        Increase this when labels or wide stacks feel too close to the image
+        boundary.
+    layer_spacing : int, default=40
+        Horizontal spacing between successive stacks.
+
+        This is the main control for how compact or open the left-to-right flow
+        feels.
+    map_spacing : int, default=4
+        Offset between visible feature maps within a stack.
+
+        Larger values emphasize the layered stack effect. Smaller values create
+        a tighter and more compact look.
+    max_visual_channels : int, default=12
+        Maximum number of feature maps to draw for a single layer.
+
+        This keeps high-channel layers readable. Additional channels are still
+        represented conceptually, but they are not all drawn individually.
+    connector_fill : Any, default='gray'
+        Color used for connections between stacks.
+
+        Neutral connector colors are usually best because the stack fills and
+        labels already carry most of the semantic styling.
+    connector_width : int, default=1
+        Line width used for connections between stacks.
+
+        Increase this for large exported figures or diagrams intended for
+        presentation screens.
+    patch_fill : Any, default='#7db7ff'
+        Default fill color used for receptive-field or projection patches.
+
+        Patches help explain how one stack maps into the next. Choose a color
+        that remains visible against both the stack fill and the background.
+    patch_outline : Any, default='black'
+        Outline color used for receptive-field or projection patches.
+
+        A clear outline helps patches remain visible even when the fill color is
+        partially transparent.
+    patch_scale : float, default=1.0
+        Relative size multiplier applied to connector patches.
+
+        Increase this when patches should read more prominently. Reduce it when
+        they distract from the stacks themselves.
+    patch_alpha_on_image : int, default=140
+        Alpha value used when a patch is drawn over an embedded face image.
+
+        Lower values let the underlying image remain more visible. Higher values
+        make the patch read more strongly.
+    seed : int, optional
+        Seed used for deterministic placement of randomized patch elements.
+
+        Set this when you want repeated renders to remain visually consistent.
+    draw_connections : bool, default=True
+        If ``True``, draw connections between successive stacks.
+
+        Disable this when you want a cleaner figure that focuses only on the
+        stacks and labels.
+    draw_patches : bool, default=True
+        If ``True``, draw receptive-field and projection patches where
+        applicable.
+
+        Patches are often useful in explanatory figures, but turning them off
+        can simplify the diagram considerably.
+    font : PIL.ImageFont.ImageFont, optional
+        Font used for top and bottom labels.
+
+        A custom font is useful when the figure needs to match an existing
+        document or slide style.
+    font_color : Any, default='white'
+        Text color used for labels.
+
+        This should contrast clearly with ``background_fill`` and remain legible
+        against the rendered stacks.
+    top_label_callable : callable, optional
+        Callable receiving ``(layer, render_shape)`` and returning the label to
+        place above a stack.
+
+        This is the main hook for custom top annotations such as tensor sizes or
+        stage identifiers.
+    bottom_label_callable : callable, optional
+        Callable receiving ``(layer, render_shape)`` and returning the label to
+        place below a stack.
+
+        This is often used for layer names or layer types while the top label
+        communicates tensor shape.
+    top_label : bool, default=True
+        If ``True``, render top labels.
+
+        Disable this when the figure should stay compact or when only one label
+        position is needed.
+    bottom_label : bool, default=True
+        If ``True``, render bottom labels.
+
+        This is often paired with ``top_label`` to split different kinds of
+        information across two lines of annotation.
+    top_label_padding : int, default=6
+        Vertical padding between a stack and its top label.
+
+        Increase this when multiline labels or large fonts feel cramped.
+    bottom_label_padding : int, default=6
+        Vertical padding between a stack and its bottom label.
+
+        Increase this when bottom labels collide with other elements or need
+        more breathing room.
+    styles : mapping, optional
+        Fine-grained per-layer style overrides keyed by layer name or layer
+        class.
+
+        Use this for embedded images, per-layer patch settings, stack spacing
+        overrides, and other local adjustments that are too specific for
+        ``color_map``. Supported keys include ``face_image``,
+        ``face_image_fit``, ``face_image_alpha``, and ``face_image_inset``.
+    options : LenetOptions or mapping, optional
+        Configuration bundle applied after ``preset`` and before explicit
+        keyword arguments.
+
+        Use this when you want to reuse a LeNet-style configuration across
+        multiple models or examples.
+    preset : str, optional
+        Name of a preset from ``visualkeras.LENET_PRESETS``. LeNet mode
+        currently provides ``default``, ``compact``, and ``presentation``.
+
+        Presets are intended as convenient starting points rather than fixed
+        modes. They can be refined further with ``options`` and explicit
+        overrides.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Rendered LeNet-style diagram.
+
+    Notes
+    -----
+    Configuration precedence is ``preset`` followed by ``options`` followed by
+    explicit keyword arguments.
+
+    Full documentation:
+    https://visualkeras.readthedocs.io/en/latest/api/lenet_style.html
+    """
     # --- preset/options resolution (match layered/graph/functional behavior) ---
     if preset is not None or options is not None:
         defaults = LenetOptions().to_kwargs()

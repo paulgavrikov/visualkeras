@@ -15,6 +15,12 @@ except ModuleNotFoundError:
 
 
 class SpacingDummyLayer(Layer):
+    """Placeholder layer used only to create visual gaps in a diagram.
+
+    This layer has no semantic effect on the underlying model architecture. It
+    exists so that renderers can detect intentional spacing between model
+    sections without requiring a separate external layout description.
+    """
 
     def __init__(self, spacing: int = 50):
         super().__init__()
@@ -22,20 +28,26 @@ class SpacingDummyLayer(Layer):
 
 
 def get_layers(model):
-    """Return the list of layers tracked by a Keras/TF model.
+    """Return the sequence of layers tracked by a Keras model.
 
-    Handles both classic Sequential/Functional models and newer Keras/TensorFlow
-    tracking attributes.
+    This helper normalizes the internal layer container differences between
+    older and newer Keras or TensorFlow builds. It is used throughout the
+    renderers whenever they need a stable ordered list of layers.
 
-    Args:
-        model: A `keras` or `tf.keras` model instance.
+    Parameters
+    ----------
+    model : Any
+        Keras or TensorFlow model instance.
 
-    Returns:
-        list: The sequence of layers tracked by the model.
+    Returns
+    -------
+    list
+        Sequence of layers tracked by the model.
 
-    Raises:
-        RuntimeError: If the model does not expose known layer containers
-            (neither `_layers` nor `_self_tracked_trackables`).
+    Raises
+    ------
+    RuntimeError
+        If the model does not expose a supported internal layer container.
     """
     if hasattr(model, '_layers'):
         return model._layers
@@ -45,17 +57,20 @@ def get_layers(model):
 
 
 def get_incoming_layers(layer):
-    """Yield incoming (parent) layers for a given layer.
+    """Yield the layers that feed directly into ``layer``.
 
-    Supports both legacy Node API (TF/Keras <= 2.15) and the new Node API
-    (TF >= 2.16 / Keras >= 3). This provides a uniform iterator of inbound
-    layers regardless of backend/version differences.
+    This helper abstracts over the legacy and modern Keras node APIs so the
+    rest of the package can treat inbound edges uniformly.
 
-    Args:
-        layer: A Keras/TensorFlow layer instance.
+    Parameters
+    ----------
+    layer : Any
+        Keras or TensorFlow layer instance whose parents should be discovered.
 
-    Yields:
-        Layer objects that directly connect to the provided layer.
+    Yields
+    ------
+    Any
+        Layer objects that connect directly into ``layer``.
     """
     for i, node in enumerate(layer._inbound_nodes):
         if hasattr(node, 'inbound_layers'):
@@ -76,24 +91,41 @@ def get_incoming_layers(layer):
 
 
 def get_outgoing_layers(layer):
-    """Yield outgoing (child) layers for a given layer."""
+    """Yield the layers that receive output directly from ``layer``.
+
+    Parameters
+    ----------
+    layer : Any
+        Keras or TensorFlow layer instance whose children should be discovered.
+
+    Yields
+    ------
+    Any
+        Layer objects that consume the output of ``layer``.
+    """
     for i, node in enumerate(layer._outbound_nodes):
         yield node.outbound_layer
 
 
 def model_to_adj_matrix(model):
-    """Build an adjacency matrix of layer connectivity for a model.
+    """Build an adjacency matrix describing model connectivity.
 
-    Ensures the model is built, then maps each layer to a unique index and
-    records incoming->outgoing connections as a matrix.
+    The returned matrix records directed layer-to-layer edges using the model's
+    internal graph representation. This is a foundational helper for renderers
+    that need to reason about graph structure, hierarchy levels, or terminal
+    nodes.
 
-    Args:
-        model: A `keras` or `tf.keras` model instance.
+    Parameters
+    ----------
+    model : Any
+        Keras or TensorFlow model instance.
 
-    Returns:
-        tuple: `(id_to_num_mapping, adj_matrix)` where `id_to_num_mapping` maps
-        Python `id(layer)` to a numeric index (column/row), and `adj_matrix` is
-        a square NumPy array counting edges between layers.
+    Returns
+    -------
+    tuple
+        Two-item tuple ``(id_to_num_mapping, adj_matrix)`` where
+        ``id_to_num_mapping`` maps ``id(layer)`` to a row or column index and
+        ``adj_matrix`` is a square NumPy array counting directed edges.
     """
     if hasattr(model, 'built'):
         if not model.built:
@@ -123,14 +155,19 @@ def model_to_adj_matrix(model):
 
 
 def find_layer_by_id(model, _id):
-    """Find a layer by its Python object id.
+    """Return a model layer by its Python object id.
 
-    Args:
-        model: A `keras` or `tf.keras` model instance.
-        _id: The result of `id(layer)` for the layer to find.
+    Parameters
+    ----------
+    model : Any
+        Keras or TensorFlow model instance to search.
+    _id : int
+        Result of calling ``id(layer)`` for the target layer.
 
-    Returns:
-        The matching layer instance, or `None` if not found.
+    Returns
+    -------
+    Any or None
+        Matching layer instance, or ``None`` if no layer has the requested id.
     """
     for layer in get_layers(model):  # manually because get_layer may not access model._layers
         if id(layer) == _id:
@@ -139,14 +176,20 @@ def find_layer_by_id(model, _id):
 
 
 def find_layer_by_name(model, name):
-    """Find a layer by its name attribute.
+    """Return a model layer by its ``name`` attribute.
 
-    Args:
-        model: A `keras` or `tf.keras` model instance.
-        name: Layer name to search for.
+    Parameters
+    ----------
+    model : Any
+        Keras or TensorFlow model instance to search.
+    name : str
+        Layer name to match.
 
-    Returns:
-        The matching layer instance, or `None` if not found.
+    Returns
+    -------
+    Any or None
+        Matching layer instance, or ``None`` if no layer has the requested
+        name.
     """
     for layer in get_layers(model):
         if layer.name == name:
@@ -155,18 +198,25 @@ def find_layer_by_name(model, name):
 
 
 def find_input_layers(model, id_to_num_mapping=None, adj_matrix=None):
-    """Yield model input layers based on zero in-degree in the graph.
+    """Yield graph input layers for a model.
 
-    If an adjacency matrix is not provided, it is constructed via
-    `model_to_adj_matrix`.
+    Inputs are identified as layers with zero in-degree in the model adjacency
+    matrix. Precomputed graph structures may be supplied when this helper is
+    used inside a larger connectivity pipeline.
 
-    Args:
-        model: Model whose inputs should be discovered.
-        id_to_num_mapping: Optional precomputed id->index mapping.
-        adj_matrix: Optional precomputed adjacency matrix.
+    Parameters
+    ----------
+    model : Any
+        Model whose input layers should be discovered.
+    id_to_num_mapping : dict, optional
+        Precomputed mapping from ``id(layer)`` to adjacency-matrix index.
+    adj_matrix : numpy.ndarray, optional
+        Precomputed adjacency matrix.
 
-    Yields:
-        Layer objects that represent graph inputs.
+    Yields
+    ------
+    Any
+        Layers that behave as graph inputs.
     """
     if adj_matrix is None:
         id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
@@ -176,10 +226,21 @@ def find_input_layers(model, id_to_num_mapping=None, adj_matrix=None):
 
 
 def find_output_layers(model):
-    """Yield model output layers for both legacy and modern Keras APIs.
+    """Yield graph output layers for a model.
 
-    For older Keras (<3), uses `model.output_names`. For newer versions, walks
-    `model.outputs` to find the producing layers via `_keras_history`.
+    This helper supports both older and newer Keras APIs by using
+    ``model.output_names`` when available and falling back to output tensor
+    provenance when necessary.
+
+    Parameters
+    ----------
+    model : Any
+        Model whose output-producing layers should be discovered.
+
+    Yields
+    ------
+    Any
+        Layers that produce model outputs.
     """
     if hasattr(model, 'output_names'):
         # For older Keras versions (<3)
@@ -195,13 +256,25 @@ def find_output_layers(model):
 
 
 def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
-    """Topologically group layers into hierarchy levels.
+    """Group model layers into topological hierarchy levels.
 
-    Starting from input layers (zero in-degree), iteratively adds layers whose
-    inbound dependencies are satisfied by previously seen layers.
+    Starting from graph inputs, this helper collects each successive wave of
+    layers whose inbound dependencies have already been satisfied. The result is
+    useful for renderers that organize diagrams by rank or stage.
 
-    Returns:
-        list[list[Layer]]: A list of layers per hierarchy level.
+    Parameters
+    ----------
+    model : Any
+        Model whose layers should be grouped.
+    id_to_num_mapping : dict, optional
+        Precomputed mapping from ``id(layer)`` to adjacency-matrix index.
+    adj_matrix : numpy.ndarray, optional
+        Precomputed adjacency matrix.
+
+    Returns
+    -------
+    list of list
+        Layers grouped by hierarchy level from inputs to outputs.
     """
     if adj_matrix is None:
         id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
@@ -231,11 +304,27 @@ def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
 
 
 def augment_output_layers(model, output_layers, id_to_num_mapping, adj_matrix):
-    """Append dummy output layers and connect real outputs to them.
+    """Append synthetic output layers to an existing adjacency graph.
 
-    Useful to ensure terminal nodes exist for visualization that expects explicit
-    sinks. Extends both the mapping and adjacency matrix in place and returns
-    the updated structures.
+    Some renderers benefit from explicit terminal nodes even when the original
+    model ends on real layers. This helper extends both the adjacency matrix and
+    the id mapping so those synthetic sinks can be treated like ordinary nodes.
+
+    Parameters
+    ----------
+    model : Any
+        Source model whose output layers should be connected to synthetic sinks.
+    output_layers : sequence
+        Synthetic output-layer objects to append.
+    id_to_num_mapping : dict
+        Existing mapping from ``id(layer)`` to adjacency-matrix index.
+    adj_matrix : numpy.ndarray
+        Existing adjacency matrix to extend.
+
+    Returns
+    -------
+    tuple
+        Updated ``(id_to_num_mapping, adj_matrix)`` pair.
     """
 
     adj_matrix = np.pad(adj_matrix, ((0, len(output_layers)), (0, len(output_layers))), mode='constant', constant_values=0)
@@ -253,10 +342,21 @@ def augment_output_layers(model, output_layers, id_to_num_mapping, adj_matrix):
 
 
 def is_internal_input(layer):
-    """Return True if a layer represents an internal Input layer across Keras/TF versions.
+    """Return whether ``layer`` should be treated as an internal input layer.
 
-    This checks several possible class paths to be compatible with legacy and
-    modern backends.
+    Keras and TensorFlow have exposed input-layer classes from several import
+    paths over time. This helper centralizes the compatibility checks so the
+    renderers can treat all of them consistently.
+
+    Parameters
+    ----------
+    layer : Any
+        Layer instance to classify.
+
+    Returns
+    -------
+    bool
+        ``True`` when the layer behaves like an internal input node.
     """
     # Treat any InputLayer class as internal input
     if layer.__class__.__name__ == 'InputLayer':
@@ -308,40 +408,29 @@ def is_internal_input(layer):
     return False
 
 def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
-    """
-    Extract the primary shape from a layer's output shape to handle multi-output scenarios.
-    
-    This function addresses the issue where some layers (like TransformerBlock in ViT models)
-    have multiple outputs, resulting in a tuple of shapes rather than a single shape tuple.
-    For visualization purposes, we need to extract the primary/main output shape.
-    
-    Args:
-        layer_output_shape: The output shape from a Keras layer. Can be:
-            - A single shape tuple: (None, height, width, channels)
-            - A tuple of shape tuples: ((None, 197, 1024), (None, 16, None, None))
-            - A list of shape tuples: [(None, 197, 1024), (None, 16, None, None)]
-    
-    Returns:
-        tuple: The primary shape tuple to use for visualization. Always returns a single
-            shape tuple in the format (batch_size, dim1, dim2, ...).
-    
-    Examples:
-        >>> # Single output case
-        >>> extract_primary_shape((None, 224, 224, 3))
-        (None, 224, 224, 3)
-        
-        >>> # Multi-output case (TransformerBlock)
-        >>> extract_primary_shape(((None, 197, 1024), (None, 16, None, None)))
-        (None, 197, 1024)
-        
-        >>> # List of outputs case
-        >>> extract_primary_shape([(None, 197, 1024), (None, 16, None, None)])
-        (None, 197, 1024)
-    
-    Notes:
-        - For multi-output layers, the first output is considered the primary output
-        - The function assumes the primary output contains the main feature representations
-        - Secondary outputs (like attention weights) are ignored for visualization purposes
+    """Return the primary output shape for visualization.
+
+    Some layers expose multiple output shapes, but most renderers need a single
+    representative tensor shape. This helper selects the first output as the
+    primary one and emits a warning when information is being discarded.
+
+    Parameters
+    ----------
+    layer_output_shape : tuple or list
+        Output shape reported by a Keras layer. This may be a single shape, a
+        tuple of shapes, or a list of shapes.
+    layer_name : str, optional
+        Layer name used to provide more informative warnings.
+
+    Returns
+    -------
+    tuple
+        Single shape tuple to use for visualization.
+
+    Raises
+    ------
+    RuntimeError
+        If the shape uses an unsupported container format.
     """
     # Handle None or empty cases
     layer_info = f" (layer: {layer_name})" if layer_name else ""
@@ -408,7 +497,47 @@ def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
 def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, min_xy,
                                one_dim_orientation='y', sizing_mode='accurate',
                                dimension_caps=None, relative_base_size=20):
-    """Calculate pixel dimensions for a layer box under the selected sizing mode.
+    """Calculate rendered box dimensions for a layer shape.
+
+    This helper converts a tensor shape into the pixel dimensions used by
+    layered and functional renderers. The exact conversion depends on the
+    selected sizing mode and on the scaling, minimum, and maximum bounds that
+    accompany it.
+
+    Parameters
+    ----------
+    shape : tuple
+        Tensor shape to convert. The batch dimension is ignored when present.
+    scale_z : float
+        Multiplier applied to depth-like dimensions before clamping.
+    scale_xy : float
+        Multiplier applied to width and height dimensions before clamping.
+    max_z : int
+        Upper bound for the rendered depth dimension.
+    max_xy : int
+        Upper bound for rendered width and height.
+    min_z : int
+        Lower bound for the rendered depth dimension.
+    min_xy : int
+        Lower bound for rendered width and height.
+    one_dim_orientation : {'y', 'z'}, default='y'
+        Axis used when rendering one-dimensional layers.
+    sizing_mode : {'accurate', 'capped', 'balanced', 'logarithmic', 'relative'}, default='accurate'
+        Strategy used to transform tensor dimensions into pixels.
+    dimension_caps : mapping, optional
+        Optional per-dimension caps used by sizing modes that support them.
+    relative_base_size : int, default=20
+        Base pixel size used by ``relative`` mode.
+
+    Returns
+    -------
+    tuple of int
+        Three-item tuple ``(x, y, z)`` describing the rendered dimensions.
+
+    Notes
+    -----
+    See the layer-utils API page for a fuller discussion of the sizing modes
+    and their tradeoffs.
 
     Full documentation:
     https://visualkeras.readthedocs.io/en/latest/api/layer_utils_details.html

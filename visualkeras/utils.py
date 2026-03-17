@@ -10,8 +10,27 @@ def resolve_style(
     styles: Mapping[Union[str, type], Dict[str, Any]], 
     defaults: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """
-    Generic style resolver.
+    """Resolve the effective style for a render target.
+
+    Styles are applied in two passes. Class-based rules are merged following the
+    target's method-resolution order, then name-based overrides are applied on
+    top of that result.
+
+    Parameters
+    ----------
+    target : Any
+        Layer or render object whose style should be resolved.
+    name : str
+        Concrete layer or node name used for name-based overrides.
+    styles : mapping
+        Style mapping keyed by layer class or layer name.
+    defaults : dict
+        Default style values to start from.
+
+    Returns
+    -------
+    dict
+        Fully resolved style mapping for ``target``.
     """
     final_style = defaults.copy()
     
@@ -26,6 +45,7 @@ def resolve_style(
 
 
 class RectShape:
+    """Base rectangle-like drawing primitive used by multiple renderers."""
     x1: int
     x2: int
     y1: int
@@ -54,12 +74,14 @@ class RectShape:
         self._outline = get_rgba_tuple(v)
 
     def _get_pen_brush(self):
+        """Return aggdraw pen and brush objects for the current style."""
         pen = aggdraw.Pen(self._outline)
         brush = aggdraw.Brush(self._fill)
         return pen, brush
 
 
 class Box(RectShape):
+    """Rectangular layer primitive with optional 3D depth or rotation."""
     de: int
     shade: int
     rotation: Optional[float] = None  # Rotation around Y axis in degrees
@@ -68,10 +90,19 @@ class Box(RectShape):
     _projected_faces: Dict[int, List[Tuple[float, float]]] = None
 
     def get_face_quad(self, face_index: int) -> List[Tuple[float, float]]:
-        """
-        Returns the 4 projected screen coordinates [(x,y), ...] for the specified face.
-        Face Indices:
-        0: Front, 1: Back, 2: Right, 3: Left, 4: Top, 5: Bottom
+        """Return the projected quadrilateral for a visible box face.
+
+        Parameters
+        ----------
+        face_index : int
+            Face identifier where ``0`` is front, ``1`` is back, ``2`` is
+            right, ``3`` is left, ``4`` is top, and ``5`` is bottom.
+
+        Returns
+        -------
+        list of tuple
+            Four projected ``(x, y)`` coordinates for the requested face, or an
+            empty list if the face projection is not available.
         """
         if self._projected_faces and face_index in self._projected_faces:
             return self._projected_faces[face_index]
@@ -266,6 +297,7 @@ class Box(RectShape):
 
 
 class Circle(RectShape):
+    """Circular node primitive used by graph-style renderings."""
 
     def draw(self, draw: ImageDraw):
         pen, brush = self._get_pen_brush()
@@ -273,6 +305,7 @@ class Circle(RectShape):
 
 
 class Ellipses(RectShape):
+    """Ellipsis marker used when neuron counts are truncated visually."""
 
     def draw(self, draw: ImageDraw):
         pen, brush = self._get_pen_brush()
@@ -284,12 +317,14 @@ class Ellipses(RectShape):
 
 
 class ColorWheel:
+    """Assign repeatable colors to layer classes from a finite palette."""
 
     def __init__(self, colors: list = None):
         self._cache = dict()
         self.colors = colors if colors is not None else ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#073b4c", "#ffadad", "#caffbf", "#9bf6ff", "#a0c4ff", "#bdb2ff"]
 
     def get_color(self, class_type: type):
+        """Return a stable palette color for ``class_type``."""
         if class_type not in self._cache.keys():
             index = len(self._cache.keys()) % len(self.colors)
             self._cache[class_type] = self.colors[index]
@@ -297,6 +332,7 @@ class ColorWheel:
 
 
 def fade_color(color: tuple, fade_amount: int) -> tuple:
+    """Return ``color`` darkened by ``fade_amount`` while preserving alpha."""
     r = max(0, color[0] - fade_amount)
     g = max(0, color[1] - fade_amount)
     b = max(0, color[2] - fade_amount)
@@ -304,10 +340,18 @@ def fade_color(color: tuple, fade_amount: int) -> tuple:
 
 
 def get_rgba_tuple(color: Any) -> tuple:
-    """
+    """Normalize a color value into an ``(R, G, B, A)`` tuple.
 
-    :param color:
-    :return: (R, G, B, A) tuple
+    Parameters
+    ----------
+    color : Any
+        Pillow-compatible color value. This may be a tuple, an integer-packed
+        RGBA value, or a named or hex color string.
+
+    Returns
+    -------
+    tuple
+        Four-item RGBA tuple.
     """
     if isinstance(color, tuple):
         rgba = color
@@ -322,16 +366,28 @@ def get_rgba_tuple(color: Any) -> tuple:
 
 
 def get_keys_by_value(d, v):
+    """Yield all keys in ``d`` whose value equals ``v``."""
     for key in d.keys():  # reverse search the dict for the value
         if d[key] == v:
             yield key
 
 
 def self_multiply(tensor_tuple: tuple):
-    """
+    """Multiply the numeric entries of a shape-like tuple together.
 
-    :param tensor_tuple:
-    :return:
+    ``None`` values are ignored so partially specified tensor shapes can still
+    be reduced into a usable best-effort product.
+
+    Parameters
+    ----------
+    tensor_tuple : tuple
+        Shape-like tuple whose entries should be multiplied.
+
+    Returns
+    -------
+    int
+        Product of the non-``None`` entries, or ``0`` when no numeric entries
+        are available.
     """
     tensor_list = list(tensor_tuple)
     if None in tensor_list:
@@ -345,13 +401,21 @@ def self_multiply(tensor_tuple: tuple):
 
 
 def vertical_image_concat(im1: Image, im2: Image, background_fill: Any = 'white'):
-    """
-    Vertical concatenation of two PIL images.
+    """Stack two images vertically on a shared background.
 
-    :param im1: top image
-    :param im2: bottom image
-    :param background_fill: Color for the image background. Can be str or (R,G,B,A).
-    :return: concatenated image
+    Parameters
+    ----------
+    im1 : PIL.Image.Image
+        Image placed on top.
+    im2 : PIL.Image.Image
+        Image placed below ``im1``.
+    background_fill : Any, default='white'
+        Background color used for the combined canvas.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Vertically concatenated image.
     """
     dst = Image.new('RGBA', (max(im1.width, im2.width), im1.height + im2.height), background_fill)
     dst.paste(im1, (0, 0))
@@ -361,18 +425,31 @@ def vertical_image_concat(im1: Image, im2: Image, background_fill: Any = 'white'
 
 def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horizontal: bool = True, padding: int = 0,
                   spacing: int = 0, background_fill: Any = 'white'):
-    """
-    Creates a linear layout of a passed list of images in horizontal or vertical orientation. The layout will wrap in x
-    or y dimension if a maximum value is exceeded.
+    """Arrange images in a wrapped horizontal or vertical strip.
 
-    :param images: List of PIL images
-    :param max_width: Maximum width of the image. Only enforced in horizontal orientation.
-    :param max_height: Maximum height of the image. Only enforced in vertical orientation.
-    :param horizontal: If True, will draw images horizontally, else vertically.
-    :param padding: Top, bottom, left, right border distance in pixels.
-    :param spacing: Spacing in pixels between elements.
-    :param background_fill: Color for the image background. Can be str or (R,G,B,A).
-    :return:
+    Parameters
+    ----------
+    images : list
+        Sequence of ``PIL.Image`` objects to arrange.
+    max_width : int, default=-1
+        Maximum layout width. This is only enforced in horizontal mode.
+    max_height : int, default=-1
+        Maximum layout height. This is only enforced in vertical mode.
+    horizontal : bool, default=True
+        If ``True``, lay out images left to right and wrap into new rows when
+        necessary. If ``False``, lay out images top to bottom and wrap into new
+        columns.
+    padding : int, default=0
+        Outer padding around the full layout.
+    spacing : int, default=0
+        Gap between adjacent images.
+    background_fill : Any, default='white'
+        Background color for the layout canvas.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Composite image containing the arranged inputs.
     """
     coords = list()
     width = 0
@@ -411,6 +488,8 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
     return layout
 
 class Ribbon:
+    """Connector primitive that draws a shaded ribbon between two points."""
+
     def __init__(self, x1, y1, x2, y2, de, width, color, shade_step):
         self.x1, self.y1 = x1, y1
         self.x2, self.y2 = x2, y2
@@ -423,6 +502,7 @@ class Ribbon:
         self.z_sort = (x1 + x2) / 2 + (y1 + y2) / 2
 
     def draw(self, draw: aggdraw.Draw):
+        """Draw the ribbon onto an aggdraw canvas."""
         pen = aggdraw.Pen("black", 0.5) # Thin outline for crispness
         
         # Colors
@@ -486,6 +566,24 @@ class Ribbon:
 
 
 def resize_image_to_fit(image: Image.Image, target_width: int, target_height: int, fit_mode: str) -> Image.Image:
+    """Resize an image to fit a target box using a named fit strategy.
+
+    Parameters
+    ----------
+    image : PIL.Image.Image
+        Source image to resize.
+    target_width : int
+        Target width in pixels.
+    target_height : int
+        Target height in pixels.
+    fit_mode : {'fill', 'contain', 'cover', 'match_aspect'}
+        Strategy used to fit the image into the target box.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Resized image prepared for the requested fit mode.
+    """
     if target_width <= 0 or target_height <= 0:
         return image
         
@@ -572,9 +670,19 @@ def _calculate_affine_coeffs(quad, src_size):
     return tuple(sol_x) + tuple(sol_y)
 
 def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, quad: list, fit_mode: str):
-    """
-    Maps source_img onto the quadrilateral defined by quad [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
-    on target_img.
+    """Project ``source_img`` onto a quadrilateral within ``target_img``.
+
+    Parameters
+    ----------
+    target_img : PIL.Image.Image
+        Destination image that receives the transformed source.
+    source_img : PIL.Image.Image
+        Source image to project.
+    quad : list
+        Four ``(x, y)`` points defining the destination quadrilateral.
+    fit_mode : str
+        Fit mode passed through to :func:`resize_image_to_fit` before the
+        projection is applied.
     """
     # Calculate bounding box of the quad to determine target size
     xs = [p[0] for p in quad]
@@ -613,6 +721,24 @@ def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, qua
 
 
 def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dict[str, Any], draw_volume: bool, draw_reversed: bool = False):
+    """Draw a logo image onto one face of a rendered box.
+
+    Parameters
+    ----------
+    img : PIL.Image.Image
+        Target image that will receive the logo.
+    box : Box
+        Rendered box whose projected face will be used as the destination.
+    logo_img : PIL.Image.Image
+        Logo image to place on the box face.
+    group : dict
+        Logo-group configuration containing placement options such as axis,
+        size, corner, and padding.
+    draw_volume : bool
+        Whether the target box is being rendered volumetrically.
+    draw_reversed : bool, default=False
+        Whether the layered perspective is reversed.
+    """
     axis = group.get("axis", "z")
     if not draw_volume:
         axis = "z"
@@ -710,6 +836,29 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
 
 
 def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], legend_config: Union[bool, Dict[str, Any]], background_fill: Any, font: ImageFont.ImageFont, font_color: Any) -> Image.Image:
+    """Append a legend describing configured logo groups.
+
+    Parameters
+    ----------
+    img : PIL.Image.Image
+        Base image that may receive a legend below it.
+    logo_groups : sequence of dict
+        Logo-group definitions used by the renderer.
+    legend_config : bool or dict
+        Legend toggle or configuration mapping.
+    background_fill : Any
+        Background color used for the legend canvas.
+    font : PIL.ImageFont.ImageFont
+        Font used for legend labels.
+    font_color : Any
+        Text color used for legend labels.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Original image when no legend is requested, otherwise the image with an
+        appended legend.
+    """
     if not legend_config:
         return img
         

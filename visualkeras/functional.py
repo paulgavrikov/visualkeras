@@ -44,6 +44,13 @@ from .utils import (
 
 @dataclass
 class FunctionalNode:
+    """Internal node record used by the functional renderer.
+
+    Instances of this dataclass represent the normalized nodes that move
+    through the functional layout pipeline. They are exposed in the API
+    reference because the module is documented with ``automodule``, but most
+    users interact with them indirectly through :func:`functional_view`.
+    """
     layer: Any
     node_id: int
     name: str
@@ -67,12 +74,14 @@ class FunctionalNode:
 
 @dataclass(frozen=True)
 class FunctionalEdge:
+    """Directed edge connecting two :class:`FunctionalNode` objects."""
     src: int
     dst: int
 
 
 @dataclass
 class FunctionalGraph:
+    """Normalized graph container used during functional layout and rendering."""
     nodes: Dict[int, FunctionalNode]
     edges: List[FunctionalEdge]
     inputs: List[int]
@@ -241,24 +250,284 @@ def functional_view(
     options: Union[FunctionalOptions, Mapping[str, Any], None] = None,
     preset: Union[str, None] = None,
 ) -> Image.Image:
-    """Render a functional model using a multi-stream layered layout.
-    
-    :param layered_groups: List of dicts defining groups of layers to highlight with a background rectangle.
-                           Each dict can contain:
-                           - 'layers': List of layer names or objects.
-                           - 'fill': Background color (default: semi-transparent gray).
-                           - 'outline': Border color (default: black).
-                           - 'width': Border thickness (default: 1).
-                           - 'padding': Padding around the group (default: 10).
-    :param logo_groups: List of dicts defining groups of layers to add logos to.
-                        Each dict can contain:
-                        - 'name': Name of the group (for legend).
-                        - 'file': Path to the logo image.
-                        - 'axis': Axis orientation ('x', 'y', 'z'). Default 'z'.
-                        - 'size': Tuple (w, h) or float (scale relative to face min dimension).
-                        - 'corner': Corner position ('top-left', 'top-right', 'bottom-left', 'bottom-right', 'center').
-                        - 'layers': List of layer names or types.
-    :param logos_legend: Boolean or dict to configure the logo legend.
+    """Render a functional model using a graph-aware layered layout.
+
+    This renderer sits between layered view and graph view. It preserves more
+    layer-level geometry than a pure topology diagram while still handling
+    branches, merges, multi-input paths, and other functional-model structure.
+
+    Parameters
+    ----------
+    model : Any
+        Keras model instance to visualize.
+
+        Functional view is most useful when the model has a meaningful graph
+        structure that would be lost in a strictly sequential rendering, but
+        you still want the output to feel like an architecture diagram rather
+        than a generic node-link graph.
+    to_file : str, optional
+        Path to save the rendered image. The image format is inferred from the
+        file extension.
+
+        The rendered ``PIL.Image`` is returned whether or not this value is
+        provided. Use this when you want to save the output and keep working
+        with the in-memory image in the same call.
+    color_map : mapping, optional
+        Mapping from layer class to broad style values such as ``fill`` and
+        ``outline``.
+
+        This is the quickest way to create a consistent color language by layer
+        type. It is best for coarse styling rules, while ``styles`` is better
+        for per-layer control.
+    background_fill : Any, default='white'
+        Background color for the final image.
+
+        This accepts any Pillow-compatible color value. Choose a background
+        that keeps layer boxes, connectors, and annotation text easy to read.
+    padding : int, default=20
+        Outer padding around the full diagram in pixels.
+
+        Increase this when labels, groups, or legends feel too close to the
+        canvas edge. Padding affects the whole composition rather than the gaps
+        between nodes inside the layout.
+    column_spacing : int, default=80
+        Horizontal spacing between layout ranks.
+
+        This is one of the main controls for how open the diagram feels from
+        left to right. Larger values improve readability in wide branching
+        graphs, while smaller values make the figure more compact.
+    row_spacing : int, default=40
+        Vertical spacing between nodes within the same rank.
+
+        Use this to manage crowded parallel branches. It works together with
+        node size, text labels, and connector routing.
+    component_spacing : int, default=80
+        Spacing between disconnected graph components.
+
+        This matters when the renderer splits a model into separate connected
+        subgraphs or when synthetic nodes create distinct visual blocks.
+    connector_fill : Any, default='gray'
+        Color used for connector paths between nodes.
+
+        Neutral connector colors tend to work well because the boxes themselves
+        already communicate most of the layer semantics.
+    connector_width : int, default=2
+        Line width used for connectors.
+
+        Increase this for exported figures, large canvases, or diagrams where
+        the connector paths need more visual weight.
+    connector_arrow : bool, default=False
+        If ``True``, draw directional arrowheads on connectors.
+
+        Arrowheads can be helpful for teaching material or graphs where the
+        direction of flow is not already obvious from the layout.
+    connector_padding : int, default=5
+        Padding reserved around nodes when routing connectors.
+
+        This helps prevent connectors from appearing glued to the box edges and
+        gives routed paths a cleaner look.
+    min_z : int, default=20
+        Minimum rendered depth in pixels for a layer box when volumetric
+        rendering is used.
+
+        This prevents channel-light layers from collapsing into thin slivers.
+        It matters most when ``draw_volume`` is enabled.
+    min_xy : int, default=20
+        Minimum rendered width and height in pixels for a layer box.
+
+        A reasonable minimum keeps small layers visible even when the model also
+        contains very large tensors.
+    max_z : int, default=400
+        Maximum rendered depth in pixels for a layer box.
+
+        Use this to keep channel-heavy layers from dominating the visual depth
+        of the diagram.
+    max_xy : int, default=2000
+        Maximum rendered width and height in pixels for a layer box.
+
+        This cap protects the layout from becoming impractically large when a
+        model contains very large spatial dimensions or long sequences.
+    scale_z : float, default=1.5
+        Multiplier applied to the depth dimension before clamping.
+
+        Increase this when channel depth should read more strongly in the
+        figure. Reduce it when depth cues feel exaggerated.
+    scale_xy : float, default=4.0
+        Multiplier applied to width and height dimensions before clamping.
+
+        This is a main control for the apparent size of rendered layer boxes.
+        Lower values keep dense graphs manageable, while higher values make
+        individual nodes easier to inspect.
+    one_dim_orientation : {'x', 'y', 'z'}, default='z'
+        Axis used when rendering one-dimensional layers.
+
+        This affects how dense or flattened outputs are represented visually in
+        mixed architectures that combine convolutional and vector-like stages.
+    sizing_mode : {'accurate', 'balanced', 'capped', 'logarithmic', 'relative'}, default='balanced'
+        Strategy used to convert tensor dimensions into rendered sizes.
+
+        ``balanced`` is the default because it usually produces readable
+        functional diagrams without letting a few extreme layers dominate the
+        canvas. The other modes trade realism against compactness in different
+        ways.
+    dimension_caps : mapping, optional
+        Custom caps used by sizing modes that support them. Supported keys are
+        ``channels``, ``sequence``, and ``general``.
+
+        This is useful when a small number of large layers would otherwise make
+        the rest of the graph difficult to compare.
+    relative_base_size : int, default=20
+        Base pixel unit used by ``relative`` sizing mode.
+
+        In relative mode, a dimension of one maps directly to this many pixels,
+        subject to minimum and maximum bounds.
+    text_callable : callable, optional
+        Callable receiving ``(layer_index, layer)`` and returning ``(text,
+        above)`` for per-layer labels.
+
+        This is the main hook for custom annotations such as layer names, block
+        roles, or tensor shapes. Built-in helpers are available in
+        ``visualkeras.options.LAYERED_TEXT_CALLABLES``.
+    text_vspacing : int, default=4
+        Vertical spacing between lines produced by ``text_callable``.
+
+        Increase this for multiline labels that feel cramped. Smaller values
+        help conserve vertical space in dense graphs.
+    font : PIL.ImageFont.ImageFont, optional
+        Font used for labels, annotations, and legends where applicable.
+
+        A custom font is useful when the figure needs to match an existing
+        visual style for documentation or publication.
+    font_color : Any, default='black'
+        Text color used for labels and related annotations.
+
+        This should contrast clearly with the background and any group overlays.
+    add_output_nodes : bool, default=False
+        If ``True``, add explicit output nodes even when the graph can end on a
+        real layer.
+
+        This can make complex multi-output diagrams easier to read because the
+        termination points become visually explicit.
+    layout_iterations : int, default=4
+        Number of refinement passes used by parts of the layout pipeline.
+
+        More iterations can improve ordering or collision handling in difficult
+        graphs, but they also increase render time.
+    virtual_node_size : int, default=12
+        Size used for virtual nodes inserted during long-edge normalization.
+
+        This matters only when virtual nodes are rendered or when their size
+        influences layout spacing.
+    render_virtual_nodes : bool, default=False
+        If ``True``, draw virtual routing nodes that are otherwise only used
+        internally by the layout algorithm.
+
+        This is mainly useful for debugging or for highly explicit topology
+        diagrams where routing helpers should remain visible.
+    draw_volume : bool, default=False
+        If ``True``, render layer boxes with 3D depth cues. If ``False``, use
+        flat 2D rectangles.
+
+        Flat mode is usually easier to read in complex functional graphs.
+        Volumetric mode can be effective for presentation graphics or models
+        where tensor depth is an important part of the explanation.
+    orientation_rotation : float, optional
+        Optional rotation applied to volumetric boxes.
+
+        This lets you change the apparent viewing angle of 3D nodes when the
+        default perspective does not suit the figure.
+    shade_step : int, default=10
+        Amount of shading variation used for 3D faces and related effects.
+
+        Larger values create stronger contrast between faces. Smaller values
+        produce a flatter and subtler look.
+    image_fit : {'fill', 'contain', 'cover', 'match_aspect'}, default='fill'
+        Default fit mode for images injected through ``styles``.
+
+        Choose a mode based on whether you prefer full coverage, preserved
+        aspect ratio, or exact fill behavior.
+    image_axis : {'x', 'y', 'z'}, default='z'
+        Default axis used when rendering per-layer images in volumetric mode.
+
+        This determines which face of a 3D node should receive an embedded
+        image unless a per-layer override is supplied through ``styles``.
+    layered_groups : sequence of dict, optional
+        Group definitions used to draw labeled background regions behind sets of
+        nodes.
+
+        Groups are useful for separating architectural stages or conceptual
+        blocks without changing the graph structure itself.
+    logo_groups : sequence of dict, optional
+        Logo placement definitions used to add icons or other overlays to
+        selected nodes.
+
+        This is mainly intended for presentation graphics and other highly
+        styled figures.
+    logos_legend : bool or dict, default=False
+        If truthy, render a legend describing entries supplied through
+        ``logo_groups``.
+
+        A simple boolean enables the default legend behavior. A mapping allows
+        more control over legend layout.
+    styles : mapping, optional
+        Fine-grained style overrides keyed by layer name or layer class.
+
+        Use this for per-layer images, local color overrides, box text styling,
+        volumetric settings, and other adjustments that are too specific for
+        ``color_map``.
+    simple_text_visualization : bool, default=False
+        If ``True``, render nodes primarily as text blocks instead of sized
+        boxes.
+
+        This mode is useful when a compact textual diagram communicates the
+        architecture better than geometric layer boxes.
+    simple_text_label_mode : {'below', 'inside'}, default='below'
+        Placement mode for labels in simple-text visualization.
+
+        ``below`` keeps text outside the box area, while ``inside`` produces a
+        tighter and more schematic layout.
+    collapse_enabled : bool, default=False
+        If ``True``, enable collapsing of repeated layers or repeated blocks
+        according to ``collapse_rules``.
+
+        Collapsing is useful for models with repeated motifs such as residual
+        stacks, repeated convolution blocks, or Transformer-style repetition.
+    collapse_rules : sequence of mapping, optional
+        Explicit rules describing which repeated patterns may be collapsed.
+
+        Each rule declares a ``kind``, a ``selector``, and a ``repeat_count``.
+        Optional label and annotation fields let you control how the collapsed
+        block is described in the rendered figure.
+    collapse_annotations : bool, default=True
+        If ``True``, draw annotations that describe collapsed regions.
+
+        Disable this when you want the cleaner layout benefits of collapsing
+        without additional explanatory text.
+    options : FunctionalOptions or mapping, optional
+        Configuration bundle applied after ``preset`` and before explicit
+        keyword arguments.
+
+        This is the preferred way to reuse a functional style across multiple
+        models or notebooks.
+    preset : str, optional
+        Name of a preset from ``visualkeras.FUNCTIONAL_PRESETS``. Functional
+        mode currently provides ``default``, ``compact``, and ``presentation``.
+
+        Presets are intended as convenient starting points. They can be refined
+        further with ``options`` and explicit overrides.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Rendered functional diagram.
+
+    Notes
+    -----
+    Configuration precedence is ``preset`` followed by ``options`` followed by
+    explicit keyword arguments.
+
+    Full documentation:
+    https://visualkeras.readthedocs.io/en/latest/api/functional.html
     """
     using_presets = options is not None or preset is not None
 
