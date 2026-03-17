@@ -280,7 +280,120 @@ def layered_view(model,
                  *,
                  options: Union[LayeredOptions, Mapping[str, Any], None] = None,
                  preset: Union[str, None] = None) -> Image:
-    """Render a linear Keras model as a layered architecture diagram.
+    """Render a Keras model as a layered architecture diagram.
+
+    This renderer is best suited to sequential or effectively linear models
+    where layer order and tensor shape progression are the main story.
+
+    Parameters
+    ----------
+    model : Any
+        Keras model instance to visualize.
+    to_file : str, optional
+        Path to save the rendered image. The image format is inferred from the
+        file extension. The image object is still returned.
+    min_z : int, default=20
+        Minimum rendered depth in pixels for a layer box.
+    min_xy : int, default=20
+        Minimum rendered width and height in pixels for a layer box.
+    max_z : int, default=400
+        Maximum rendered depth in pixels for a layer box.
+    max_xy : int, default=2000
+        Maximum rendered width and height in pixels for a layer box.
+    scale_z : float, default=1.5
+        Multiplier applied to the depth dimension before clamping.
+    scale_xy : float, default=4
+        Multiplier applied to the width and height dimensions before clamping.
+    type_ignore : list, optional
+        Sequence of layer classes to exclude from rendering.
+    index_ignore : list, optional
+        Sequence of layer indices to exclude from rendering.
+    color_map : dict, optional
+        Mapping from layer class to style values such as ``fill`` and
+        ``outline``. This provides coarse per-type color control.
+    one_dim_orientation : {'x', 'y', 'z'}, default='z'
+        Axis used when rendering one dimensional layers such as dense or
+        flattened outputs.
+    index_2D : list, optional
+        Layer indices that should be forced into flat 2D rendering even when
+        ``draw_volume`` is enabled.
+    background_fill : Any, default='white'
+        Background color for the final image.
+    draw_volume : bool, default=True
+        If ``True``, render boxes with 3D depth cues. If ``False``, render flat
+        2D rectangles.
+    draw_reversed : bool, default=False
+        Reverse the 3D viewing direction when ``draw_volume`` is enabled.
+    padding : int, default=10
+        Outer padding around the full diagram in pixels.
+    text_callable : callable, optional
+        Callable receiving ``(layer_index, layer)`` and returning
+        ``(text, above)`` to annotate a layer. Built-in helpers are available in
+        ``visualkeras.options.LAYERED_TEXT_CALLABLES``.
+    text_vspacing : int, default=4
+        Vertical spacing between lines produced by ``text_callable``.
+    spacing : int, default=10
+        Horizontal spacing between consecutive rendered layers.
+    draw_funnel : bool, default=True
+        If ``True``, draw tapered transitions between consecutive layers.
+    shade_step : int, default=10
+        Amount of shading variation used for 3D faces.
+    legend : bool, default=False
+        If ``True``, add a legend describing rendered layer types and colors.
+    legend_text_spacing_offset : int, default=15
+        Extra width reserved for legend labels.
+    font : PIL.ImageFont.ImageFont, optional
+        Font used for legend and annotation text. If omitted, the default PIL
+        font is used.
+    font_color : Any, default='black'
+        Text color used for legends and annotations.
+    show_dimension : bool, default=False
+        If ``True`` and ``legend`` is enabled, include output dimensions in the
+        legend entries.
+    sizing_mode : {'accurate', 'balanced', 'capped', 'logarithmic', 'relative'}, default='accurate'
+        Strategy used to convert tensor dimensions into rendered sizes.
+    dimension_caps : dict, optional
+        Custom caps used by ``capped`` mode. Supported keys are ``channels``,
+        ``sequence``, and ``general``.
+    relative_base_size : int, default=20
+        Base pixel unit used by ``relative`` sizing mode.
+    connector_fill : Any, default='gray'
+        Color used for connector and transition elements.
+    connector_width : int, default=1
+        Line width used for connector and transition elements.
+    image_fit : str, default='fill'
+        Default fit mode for images injected through ``styles``. Individual
+        style entries can override this.
+    image_axis : {'x', 'y', 'z'}, default='z'
+        Default axis used when rendering per-layer images in 3D mode.
+    layered_groups : sequence of dict, optional
+        Group definitions used to draw labeled background regions behind sets of
+        layers.
+    logo_groups : sequence of dict, optional
+        Logo placement definitions used to add icons or other overlays to
+        selected layers.
+    logos_legend : bool or dict, default=False
+        If truthy, render a legend describing entries supplied through
+        ``logo_groups``.
+    styles : mapping, optional
+        Fine-grained per-layer style overrides keyed by layer name or layer
+        class. See the layered API reference for supported style keys.
+    options : LayeredOptions or mapping, optional
+        Configuration bundle applied after ``preset`` and before explicit keyword
+        arguments.
+    preset : str, optional
+        Name of a preset from ``visualkeras.LAYERED_PRESETS``. Layered mode
+        currently provides ``default``, ``compact``, and ``presentation``.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Rendered layered diagram.
+
+    Notes
+    -----
+    Configuration precedence is ``preset`` followed by ``options`` followed by
+    explicit keyword arguments.
 
     Full documentation:
     https://visualkeras.readthedocs.io/en/latest/api/layered.html
