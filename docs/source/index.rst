@@ -79,24 +79,56 @@ Quick Links
 When to Use Which Visualization Style
 ======================================
 
-.. list-table::
-   :header-rows: 1
-   :widths: 20 40 40
+When to Use Which Visualization Style
+  =====================================
 
-   * - Style
-     - Best For
-     - Pros & Cons
+  .. list-table::
+     :header-rows: 1
+     :widths: 20 40 40
 
-   * - **Layered View**
-     - Convolutional Neural Networks (CNNs)
-     - ✅ Intuitive for image processing networks
-       ❌ Limited for complex architectures
+     * - Style
+       - Best For
+       - Pros & Cons
 
-   * - **Graph View**
-     - All model types (Sequential, Functional, etc.)
-     - ✅ Works with any model type
-       ✅ Shows connections clearly
-       ❌ Can be dense for large models
+     * - **Layered View**
+       - Convolutional neural networks and models where shape progression matters
+       - | Pros
+         | Intuitive for CNN style architectures
+         |
+         | Shows tensor size changes clearly
+         |
+         | Cons
+         | Limited for complex branching models
+
+     * - **Graph View**
+       - General model topology, branching models, and connection focused diagrams
+       - | Pros
+         | Works with many model types
+         |
+         | Shows connections clearly
+         |
+         | Cons
+         | Can become dense for large models
+
+     * - **Functional View**
+       - Functional models with multiple paths, merges, inputs, or outputs
+       - | Pros
+         | Better suited to complex functional structures
+         |
+         | Preserves more layer level structure than a pure graph view
+         |
+         | Cons
+         | Less direct than layered view for simple sequential models
+
+     * - **LeNet View**
+       - Feature map style diagrams and presentation figures for CNNs
+       - | Pros
+         | Useful for classic CNN style visualizations
+         |
+         | Good fit for publication and teaching material
+         |
+         | Cons
+         | Not ideal for highly irregular or non sequential architectures
 
 Table of Contents
 =================
