@@ -118,7 +118,40 @@ python -m pytest --cov=visualkeras --cov-report=term-missing --cov-report=xml --
 If TensorFlow is not available, some tests will not run. In that case, run the
 tests you can and explain the gap in your PR.
 
-For more test details, see [tests/README.md](https://github.com/paulgavrikov/visualkeras/blob/master/tests/README.md).
+For a detailed guide to the test suite, see
+[tests/README.md](https://github.com/paulgavrikov/visualkeras/blob/master/tests/README.md).
+That file explains what each test file covers, where new tests should go, and
+how to choose between unit tests, integration tests, and end to end tests.
+
+## Adding Tests
+
+Most code changes should include tests. The right place depends on the kind of
+change you are making.
+
+Use `tests/test_options.py` for changes to options objects, presets, or built
+in text callables.
+
+Use `tests/test_show.py` for changes to the high level `visualkeras.show(...)`
+API.
+
+Use the `*_helpers.py` files for focused unit tests of internal helpers.
+
+Use the `*_renderer.py` files for renderer level behavior that needs a real
+model and a real render.
+
+Use `tests/test_renderer_advanced_paths.py` for advanced flows that cut across
+more than one renderer.
+
+Use `tests/test_end_to_end_file_output.py` for file writing behavior.
+
+Keep tests small when possible. Build the smallest model that still reaches the
+behavior you need. Prefer stable assertions such as image size, labels,
+validated options, or file output over brittle checks.
+
+If you are not sure where a new test belongs, look for the closest existing
+test file and follow its pattern. The full test guide in
+[tests/README.md](https://github.com/paulgavrikov/visualkeras/blob/master/tests/README.md)
+goes into more detail.
 
 ## Linting and Formatting
 
