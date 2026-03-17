@@ -29,6 +29,143 @@ def graph_view(model, to_file: str = None,
                preset: Union[str, None] = None) -> Image:
     """Render a Keras model as a graph-style architecture diagram.
 
+    This renderer emphasizes connectivity rather than tensor volume. It is a
+    good fit for models with branching, merges, skip connections, or other
+    topologies where the main question is how layers connect rather than how
+    tensor shapes evolve from left to right.
+
+    Parameters
+    ----------
+    model : Any
+        Keras model instance to visualize.
+
+        Graph view works across sequential, functional, and many subclassed
+        models. It is usually the clearest choice when the architecture has
+        multiple paths or when you need a compact topology-first diagram.
+    to_file : str, optional
+        Path to save the rendered image. The image format is inferred from the
+        file extension.
+
+        The rendered ``PIL.Image`` is returned whether or not this value is
+        supplied. Use this when you want to save the figure and continue
+        working with the in-memory image in the same call.
+    color_map : dict, optional
+        Mapping from layer class to broad style values such as ``fill`` and
+        ``outline``.
+
+        This is the simplest way to assign consistent colors by layer type. It
+        works well for high-level styling rules, while ``styles`` is better
+        when you need per-layer overrides or image-based customization.
+    node_size : int, default=50
+        Default node diameter or box size in pixels.
+
+        Increase this for presentation-sized figures or when layer labels need
+        more room. Smaller values produce denser diagrams and are often useful
+        for large networks.
+    background_fill : Any, default='white'
+        Background color for the final image.
+
+        This accepts any Pillow-compatible color value. Choose a background
+        that keeps nodes, connectors, and annotation text easy to distinguish.
+    padding : int, default=10
+        Outer padding around the full diagram in pixels.
+
+        This affects the margin between the rendered graph and the image edges.
+        Increase it when group boxes, larger nodes, or custom overlays feel too
+        close to the boundary.
+    layer_spacing : int, default=250
+        Horizontal spacing between layer columns.
+
+        This is the main control for how spread out the graph feels from input
+        to output. Larger values improve readability in complex graphs, while
+        smaller values keep the figure compact.
+    node_spacing : int, default=10
+        Vertical spacing between nodes within the same column.
+
+        Use this to separate dense stacks of nodes or to compress layers when a
+        model has many nodes per rank. It works together with ``node_size`` to
+        define the overall vertical density of the diagram.
+    connector_fill : Any, default='gray'
+        Color used for connector lines between nodes.
+
+        Neutral connector colors are usually easier to read because the nodes
+        themselves already carry most of the semantic styling.
+    connector_width : int, default=1
+        Line width used for connectors.
+
+        Thicker connectors can improve readability in exported figures or when
+        the graph contains long cross-column edges.
+    ellipsize_after : int, default=10
+        Maximum number of neuron markers to draw before collapsing the remainder
+        into ellipsis markers.
+
+        This keeps large dense layers from dominating the diagram. Lower values
+        trade detail for compactness, while higher values preserve more of the
+        true node count at the cost of visual density.
+    inout_as_tensor : bool, default=True
+        If ``True``, represent each input or output tensor as a single node. If
+        ``False``, flatten tensor shapes into scalar-like node counts when
+        possible.
+
+        Tensor mode is usually better for topology diagrams. Expanded mode is
+        more literal, but it can grow quickly for layers with larger shapes.
+    show_neurons : bool, default=True
+        If ``True``, draw individual neuron markers for supported layers. If
+        ``False``, represent each layer as a single node or box.
+
+        Turning this off produces a more abstract graph and is often helpful
+        for large models or diagrams intended for documentation rather than
+        low-level inspection.
+    styles : mapping, optional
+        Fine-grained style overrides keyed by layer name or layer class.
+
+        Use this when ``color_map`` is too coarse. Graph styles can override
+        values such as ``fill``, ``outline``, ``node_size``, ``connector_fill``,
+        ``connector_width``, ``box_scale``, embedded images, and related node
+        presentation details.
+    image_fit : {'contain', 'cover', 'fill', 'match_aspect'}, default='contain'
+        Default fit mode for images attached through ``styles``.
+
+        This controls how per-layer images are resized inside graph nodes. Use
+        ``contain`` when preserving the full image is important and ``cover``
+        when full node coverage is more important than edge cropping.
+    circular_crop : bool, default=True
+        If ``True``, crop node images to a circle where supported.
+
+        Circular crops often produce cleaner node icons in graph view. Disable
+        this when you need the full rectangular image or when square logos read
+        better in your figure.
+    layered_groups : sequence of dict, optional
+        Group definitions used to draw labeled background regions behind sets of
+        nodes.
+
+        Groups are useful for highlighting architectural stages or conceptual
+        blocks such as encoder, bottleneck, and decoder sections. They provide
+        structure without altering the graph layout itself.
+    options : GraphOptions or mapping, optional
+        Configuration bundle applied after ``preset`` and before explicit
+        keyword arguments.
+
+        Use this when you want to reuse a graph style across multiple models or
+        keep application code more readable than a long keyword-argument call.
+    preset : str, optional
+        Name of a preset from ``visualkeras.GRAPH_PRESETS``. Graph mode
+        currently provides ``default``, ``compact``, and ``presentation``.
+
+        Presets are intended as starting points. They can be combined with
+        ``options`` and explicit overrides when you want a curated base style
+        without giving up control.
+
+    Returns
+    -------
+    PIL.Image.Image
+        Rendered graph diagram.
+
+    Notes
+    -----
+    Configuration precedence is ``preset`` followed by ``options`` followed by
+    explicit keyword arguments.
+
     Full documentation:
     https://visualkeras.readthedocs.io/en/latest/api/graph.html
     """

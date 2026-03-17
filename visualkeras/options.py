@@ -87,6 +87,7 @@ LAYERED_TEXT_CALLABLES: Dict[str, TextCallable] = {
     "shape": lambda i, layer: (_layer_shape(i, layer), False),
     "name_shape": lambda i, layer: (_layer_name_shape(i, layer), False),
 }
+"""Built-in layer annotation callables for layered and functional renderers."""
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +96,17 @@ LAYERED_TEXT_CALLABLES: Dict[str, TextCallable] = {
 
 @dataclass(frozen=True)
 class LayeredOptions:
+    """Typed configuration bundle for :func:`visualkeras.layered_view`.
+
+    This dataclass mirrors the keyword arguments accepted by ``layered_view`` so
+    a layered configuration can be defined once and reused across multiple
+    renders.
+
+    The fields correspond directly to the parameters documented on
+    :func:`visualkeras.layered_view`. Use this object when you want to keep
+    layered sizing, labeling, grouping, connector styling, and per-layer
+    overrides together as one reusable configuration.
+    """
     # Mirrors layered_view kwargs (excluding `model`)
     to_file: Optional[str] = None
     min_z: int = 20
@@ -135,11 +147,19 @@ class LayeredOptions:
     styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
+        """Return the options object as a plain keyword-argument mapping."""
         return dict(self.__dict__)
 
 
 @dataclass(frozen=True)
 class GraphOptions:
+    """Typed configuration bundle for :func:`visualkeras.graph_view`.
+
+    The fields correspond directly to the parameters documented on
+    :func:`visualkeras.graph_view`. Use this object when you want to preserve a
+    consistent graph layout, connector style, node presentation, and image or
+    grouping behavior across multiple renders.
+    """
     to_file: Optional[str] = None
     color_map: Optional[Mapping[type, Mapping[str, Any]]] = None
     node_size: int = 50
@@ -158,11 +178,20 @@ class GraphOptions:
     layered_groups: Optional[Sequence[Dict[str, Any]]] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
+        """Return the options object as a plain keyword-argument mapping."""
         return dict(self.__dict__)
 
 
 @dataclass(frozen=True)
 class FunctionalOptions:
+    """Typed configuration bundle for :func:`visualkeras.functional_view`.
+
+    The fields correspond directly to the parameters documented on
+    :func:`visualkeras.functional_view`. Use this object when you want to keep
+    functional layout controls, connector routing, sizing behavior, collapse
+    rules, annotations, and style overrides together as one reusable
+    configuration.
+    """
     to_file: Optional[str] = None
     color_map: Optional[Mapping[type, Mapping[str, Any]]] = None
     background_fill: Any = "white"
@@ -208,12 +237,19 @@ class FunctionalOptions:
     styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
+        """Return the options object as a plain keyword-argument mapping."""
         return dict(self.__dict__)
 
 
 @dataclass(frozen=True)
 class LenetOptions:
-    """Configuration for :func:`visualkeras.lenet_view`."""
+    """Typed configuration bundle for :func:`visualkeras.lenet_view`.
+
+    The fields correspond directly to the parameters documented on
+    :func:`visualkeras.lenet_view`. Use this object when you want to preserve a
+    consistent LeNet-style layout, connector behavior, patch styling, label
+    spacing, and per-layer overrides across multiple renders.
+    """
     to_file: Optional[str] = None
     min_xy: int = 20
     max_xy: int = 220
@@ -244,6 +280,7 @@ class LenetOptions:
     styles: Optional[StyleMap] = None
 
     def to_kwargs(self) -> Dict[str, Any]:
+        """Return the options object as a plain keyword-argument mapping."""
         return dict(self.__dict__)
 
 
