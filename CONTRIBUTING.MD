@@ -1,186 +1,216 @@
 # Contributing to visualkeras
-First off, thank you for your interest in contributing to visualkeras! ❤️
 
-All types of contributions are encouraged and valued. See the [Table of Contents](#table-of-contents) for different ways to help and details about how this project handles them. Please make sure to read the relevant section before making your contribution. It will make it a lot easier for the maintainer and smooth out the experience for all involved. The community looks forward to your contributions!
+Thank you for contributing to visualkeras.
 
-> And if you like the project, but just don't have time to contribute, that's fine. There are other easy ways to support the project and show your appreciation, which we would greatly appreciate:
-> - Star the project on GitHub
-> - [Cite the repository in your work](https://github.com/paulgavrikov/visualkeras/blob/master/CITATION.cff)
-> - Tweet about it
-> - Refer this project in your project's readme
-> - Share it with your friends
+This guide explains how to report issues, set up a local environment, and open
+pull requests. Keep changes focused. Clear reports and small PRs are much
+easier to review.
 
-## Table of Contents
+## Before You Start
 
-- [I Have a Question](#i-have-a-question)
-- [Reporting Bugs](#reporting-bugs)
-- [Suggesting Features and Improvements](#suggesting-features-and-improvements)
-- [I Want To Contribute](#i-want-to-contribute)
-- [Your First Code Contribution](#your-first-code-contribution)
-- [Improving The Documentation](#improving-the-documentation)
+Please read the main project docs first.
 
-## I Have a Question
+- [README](https://github.com/paulgavrikov/visualkeras/blob/master/README.md)
+- [Documentation site](https://visualkeras.readthedocs.io/)
+- [Open issues](https://github.com/paulgavrikov/visualkeras/issues)
 
-> If you want to ask a question, we assume that you have already read the [README](https://github.com/paulgavrikov/visualkeras/blob/master/README.md) and its FAQ section.
+For larger changes, open an issue first. That helps avoid duplicate work and
+makes sure the change fits the project.
 
-Before you ask a question, it is best to search for [existing issues](https://github.com/paulgavrikov/visualkeras/issues?q=is%3Aissue) that might help you. In case you have found a suitable issue and still need clarification, you can write your question and @Soontosh in the comments of that issue.
+## Questions
 
-If you then still feel the need to ask a question and need clarification, we recommend the following:
-- Open an [Issue](https://github.com/paulgavrikov/visualkeras/issues).
-- Provide as much context as you can about what you're running into.
-- Provide project and platform versions (Python, Keras, visualkeras, etc.), depending on what seems relevant.
+If you have a question, search the existing issues first. A similar question
+may already have an answer.
+
+If you still need help, open an issue and include enough context for someone
+else to follow the problem. Version details are often useful. Examples include
+Python, TensorFlow, Keras, and visualkeras.
 
 ## Reporting Bugs
 
-If you come across a bug while using visualkeras, please open a new issue. You can use our *bug report template* to help structure your issue. In your issue, include the following details:
-- A clear description of the bug.
-- Minimal code and steps to reproduce the bug
-- Expected behavior
-- If applicable, a screenshot or example of the bug.
-- Environment (OS, Python version, visualkeras version or commit hash, Keras version, etc.)
-- Any additional context that might help us understand the issue.
+Use the GitHub bug report template when possible.
 
+Please include these details
 
-## Suggesting Features and Improvements
+- What happened
+- What you expected to happen
+- A small example that reproduces the problem
+- Steps to reproduce it
+- Version details and platform details
+- Screenshots or output when they help explain the issue
 
-To suggest new features or suggest improvements to existing features, please open a new issue. You can use our *feature request template* to help structure your suggestion. In your issue, include the following details:
-- Whether or not your feature reqeust is related to a problem
-- A description of the solution you'd like to see and what you want to happen
-- A description of alternatives you've considered
-- Any additional context that might help us understand the feature or improvement
+Try to reduce the example as much as you can. Small reproductions are easier to
+debug.
 
-## I Want To Contribute
+## Suggesting Features
 
-If you want to contribute, please take a look at [existing issues](https://github.com/paulgavrikov/visualkeras/issues) and see if you can help with any of them, in which case you can comment on the issue to express your interest. If you have a new idea, please open an issue to discuss it first. This helps us avoid duplicate work and ensures that your contribution aligns with the project's goals.
+Use the GitHub feature request template when possible.
 
-We also have a list of improvements that we would like to see in the project, which you can find in the project [README](https://github.com/paulgavrikov/visualkeras/blob/master/README.md).
+Please include these details
 
+- The problem you want to solve
+- The change you want to see
+- Any alternatives you considered
+- Extra context that would help with review
 
-## Your First Code Contribution
+## Development Setup
 
-### Development setup
-
-Clone the repository and set up a virtual environment (recommended):
+Clone the repository and create a virtual environment.
 
 ```bash
 git clone https://github.com/paulgavrikov/visualkeras.git
 cd visualkeras
-python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-Install the package in editable mode and recommended dev tools:
+On Windows use
+
+```bash
+.venv\Scripts\activate
+```
+
+Install the package in editable mode and install the dev dependencies.
 
 ```bash
 pip install -e .
 pip install -r requirements-dev.txt
 ```
 
-Some tests and examples require TensorFlow/Keras. To run all the tests:
+Some tests need TensorFlow.
 
 ```bash
 pip install tensorflow==2.17.0
 ```
 
-For standalone Keras smoke checks:
+There is also a standalone Keras smoke check.
 
 ```bash
 pip install "keras>=3,<4" tensorflow==2.17.0
 ```
 
-Current compatibility guarantees are tracked in the Support Matrix section in `README.md`.
+Current CI coverage is based on these environments
 
-- Core package support: Python 3.9, 3.10, 3.11, 3.12.
-- Full renderer/integration support: Python 3.11 with TensorFlow 2.17 (`tf.keras`) on Linux.
-- Standalone `keras` path is best-effort.
+- Python 3.9 through 3.12 for unit tests
+- Python 3.11 with TensorFlow 2.17 for the full test suite
+- Python 3.11 with standalone Keras and TensorFlow backend for the smoke check
 
-### Running tests
+## Running Tests
 
-We use `pytest` for tests located under `tests/`.
-
-```bash
-python -m pytest -v
-```
-
-For fast local feedback (skip integration renderer tests):
+Run the fast test suite with
 
 ```bash
 python -m pytest -m "not integration" -v
 ```
 
-To generate coverage reports locally:
+Run the full test suite with
+
+```bash
+python -m pytest -v
+```
+
+Generate coverage locally with
 
 ```bash
 python -m pytest --cov=visualkeras --cov-report=term-missing --cov-report=xml --cov-report=html
 ```
 
-Notes:
-- Several tests construct small Keras models; TensorFlow/Keras must be installed for these to run.
-- If you cannot install TensorFlow locally, run only non-TF tests or skip them selectively.
+If TensorFlow is not available, some tests will not run. In that case, run the
+tests you can and explain the gap in your PR.
 
-For an overview of the test layout, fixtures, and expected assertions, see `tests/README.md`. We prefer that major new changes include at least a smoke test and, where feasible, assertions on stable properties (e.g., sizes, counts, or names).
+For more test details, see [tests/README.md](https://github.com/paulgavrikov/visualkeras/blob/master/tests/README.md).
 
-### Linting and formatting
+## Linting and Formatting
 
-Please follow PEP 8 and keep imports organized. We recommend the following tools (installed via `requirements-dev.txt`):
+Run these checks before opening a PR.
 
 ```bash
-# Code style & static checks
 ruff check .
-
-# Auto-format code
 black .
-
-# Sort imports
 isort .
 ```
 
-Optionally, you can install our recommended git hooks to run checks before commits:
+If you use pre commit hooks, install them with
 
 ```bash
 pre-commit install
 ```
 
-Before opening a PR, we recommend you:
-- Run `black .` (or ensure your editor auto-formats on save)
-- Run `ruff check .` and address warnings
-- Run `python -m pytest -v`
+## Building Documentation
 
-Don't get too stressed over linting issues, you should focus on the functionality of your code first. We can help with fixing linting issues throughout the PR review process.
+If your change affects docs, docstrings, or public APIs, build the docs locally.
 
-### Docstrings and documentation style
+```bash
+python -m sphinx -b html -W --keep-going -d docs/build/doctrees docs/source docs/build/html
+```
 
-Docstrings in this project use Google-style conventions (compatible with Sphinx via the Napoleon extension). Please use concise, descriptive docstrings with `Args:`, `Returns:`, and `Raises:` where appropriate.
+The `-W` flag turns warnings into errors. That is useful before opening a PR.
 
-References for contributors:
+## Code Style
 
-- PEP 8: https://peps.python.org/pep-0008/
-- Google Python Style Guide (Docstrings): https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings
-- Sphinx Napoleon (Google/NumPy docstrings): https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
+Follow PEP 8. Keep functions small when practical. Prefer clear names over
+clever code.
 
-### Submitting a pull request
+Please add or update tests for behavior changes when it makes sense. For visual
+changes, stable checks on image size, object counts, labels, or related output
+are often better than brittle full image assertions.
 
-After making your changes and running the tests, you can submit a pull request. Please ensure that your code has clear commits and adds/updates tests for new features or bug fixes.
+## Docstrings
 
-When submitting a pull request, please include:
+Docstrings in this project should be clear and concise. For public APIs, prefer
+NumPy style docstrings that work well with Sphinx and Napoleon.
 
-- A clear description of the changes you made
-- The issue number your pull request addresses, if applicable
-- Any relevant documentation updates
-- Screenshots or examples of the changes, if applicable
-- Any additional context that might help the maintainers review your changes
+A good docstring usually includes
 
-@Soontosh or @paulgavrikov will review your pull request, rerun the tests on their end, and provide feedback. Please be patient, as it may take some time to get to your contribution.
+- A short summary
+- Parameters when needed
+- Returns when needed
+- Raises when needed
+- Notes when behavior or precedence needs extra explanation
 
-## Improving The Documentation
+Keep docstrings practical. Explain what a setting does and when someone would
+use it.
 
-If you find any issues in the documentation or have suggestions for improvements, please open an issue or submit a pull request with your changes. Documentation contributions are always welcome!
+## Pull Requests
 
-We accept small fixes, such as typos, grammar corrections, and formatting improvements, as well as larger changes that improve the overall clarity and usability of the documentation.
+Open focused PRs. Small changes move faster.
 
-When submitting documentation changes, please ensure that:
-- The changes are clear and concise.
-- The formatting is consistent with the rest of the documentation.
-- Any code examples are correct and tested.
-- Any new sections or changes are well-organized and easy to follow.
+Before you open a PR, please make sure that you have done the following
 
-If you have any questions about the documentation or need help with a specific section, feel free to open an issue or reach out to @Soontosh.
+- Run the relevant tests
+- Built the docs if your change affects docs or public APIs
+- Updated docs or docstrings when needed
+- Checked whether the change could break existing behavior
+
+GitHub will apply the PR template automatically. Fill it out with enough detail
+for review.
+
+A good PR should include
+
+- A short summary of the change
+- The related issue, if there is one
+- Notes on testing
+- Notes on documentation updates
+- Screenshots or example output when helpful
+
+If you could not run a relevant check, say so clearly.
+
+## Documentation Contributions
+
+Documentation fixes are welcome. That includes small wording changes, example
+fixes, API reference updates, and larger tutorial improvements.
+
+Please make sure that
+
+- Code examples are correct
+- Example output still matches the code
+- Links still work
+- Formatting is consistent with nearby pages
+
+If you change public APIs, update both the docs and the docstrings when needed.
+
+## Reference Links
+
+- [PEP 8](https://peps.python.org/pep-0008/)
+- [Sphinx Napoleon](https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html)
+- [Project issues](https://github.com/paulgavrikov/visualkeras/issues)

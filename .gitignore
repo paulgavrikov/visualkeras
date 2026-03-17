@@ -6,6 +6,7 @@ __pycache__/
 # Test and coverage artifacts
 .pytest_cache/
 .coverage
+.coveragerc
 .coverage.*
 coverage.xml
 coverage.json
