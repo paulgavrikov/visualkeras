@@ -202,6 +202,10 @@ If you find this project helpful for your research, please cite it:
 - Contributing guide: `CONTRIBUTING.MD`
 - Architecture guide: `ARCHITECTURE.md`
 
+## Stay Updated
+
+Sign up for the visualkeras mailing list here: <https://forms.gle/7eBZ1jCJ7Xsm6RvA7>
+
 ## License
 
 Visualkeras is licensed under the MIT License. See `LICENSE`.
