@@ -289,101 +289,265 @@ def layered_view(model,
     ----------
     model : Any
         Keras model instance to visualize.
+
+        Layered view works best when the model can be understood as a left to
+        right sequence of transformations. It is usually the clearest choice
+        for CNN style architectures and other models where tensor size changes
+        are part of the explanation.
     to_file : str, optional
         Path to save the rendered image. The image format is inferred from the
-        file extension. The image object is still returned.
+        file extension.
+
+        The rendered ``PIL.Image`` is returned whether or not this value is
+        provided. Use this when you want the renderer to both write an image to
+        disk and keep the in-memory result for further processing.
     min_z : int, default=20
         Minimum rendered depth in pixels for a layer box.
+
+        This lower bound is applied after scaling. It prevents layers with very
+        small channel counts from collapsing into thin slivers that are hard to
+        see or compare.
     min_xy : int, default=20
         Minimum rendered width and height in pixels for a layer box.
+
+        This is especially useful when a model mixes small tensors with much
+        larger ones. A reasonable minimum keeps every layer visible without
+        letting a few large layers define the entire layout.
     max_z : int, default=400
         Maximum rendered depth in pixels for a layer box.
+
+        Use this to keep channel-heavy layers from dominating the visual depth
+        of the diagram. It is most useful for deep convolutional stacks where
+        late layers would otherwise become excessively thick.
     max_xy : int, default=2000
         Maximum rendered width and height in pixels for a layer box.
+
+        This cap protects the layout from becoming impractically large when the
+        model contains very large spatial dimensions or long sequences. It acts
+        as a safety rail after scaling has been applied.
     scale_z : float, default=1.5
         Multiplier applied to the depth dimension before clamping.
+
+        Increase this value when channel depth should read more strongly in the
+        diagram. Reduce it when depth cues feel exaggerated or when channel rich
+        layers overshadow the rest of the architecture.
     scale_xy : float, default=4
         Multiplier applied to the width and height dimensions before clamping.
+
+        This is one of the main controls for the overall apparent size of the
+        rendered layers. Lower values usually make crowded diagrams easier to
+        fit, while higher values make individual layers easier to inspect.
     type_ignore : list, optional
         Sequence of layer classes to exclude from rendering.
+
+        This is the simplest way to hide utility or low-information layers such
+        as dropout, padding, or normalization layers without modifying the
+        model itself. Every instance of a matching class is skipped.
     index_ignore : list, optional
         Sequence of layer indices to exclude from rendering.
+
+        Use this when you want precise control over individual layers rather
+        than entire layer types. Indices refer to positions in the model's
+        layer list before rendering-time filtering is applied.
     color_map : dict, optional
         Mapping from layer class to style values such as ``fill`` and
-        ``outline``. This provides coarse per-type color control.
+        ``outline``.
+
+        This provides broad styling by layer type and is the quickest way to
+        create a consistent color language across the diagram. It is best suited
+        to coarse styling rules, while ``styles`` is better for fine-grained
+        per-layer overrides.
     one_dim_orientation : {'x', 'y', 'z'}, default='z'
         Axis used when rendering one dimensional layers such as dense or
         flattened outputs.
+
+        Dense and flattened layers do not naturally have both width and height,
+        so this setting controls how they are represented visually. Changing it
+        can make mixed CNN and MLP models much easier to read.
     index_2D : list, optional
         Layer indices that should be forced into flat 2D rendering even when
         ``draw_volume`` is enabled.
+
+        This is useful when most of the model benefits from 3D boxes but a few
+        layers read better as flat blocks. Common cases include classifier heads
+        and summary style terminal layers.
     background_fill : Any, default='white'
         Background color for the final image.
+
+        This value accepts any Pillow-compatible color form, including named
+        colors and RGBA tuples. Darker backgrounds often pair well with bright
+        fills, while neutral backgrounds keep the focus on shape and layout.
     draw_volume : bool, default=True
         If ``True``, render boxes with 3D depth cues. If ``False``, render flat
         2D rectangles.
+
+        The volumetric mode is usually the signature layered-view look. Flat
+        mode is simpler and often preferable for documentation, compact figures,
+        or models where depth would add noise rather than clarity.
     draw_reversed : bool, default=False
         Reverse the 3D viewing direction when ``draw_volume`` is enabled.
+
+        This changes which faces of a 3D layer box are visible. It can be
+        helpful for decoder style networks or for diagrams where the default
+        perspective makes the flow feel visually backward.
     padding : int, default=10
         Outer padding around the full diagram in pixels.
+
+        Increase this when legends, labels, or grouped overlays are too close
+        to the image boundary. Padding affects the whole canvas rather than
+        spacing between individual layers.
     text_callable : callable, optional
         Callable receiving ``(layer_index, layer)`` and returning
         ``(text, above)`` to annotate a layer. Built-in helpers are available in
         ``visualkeras.options.LAYERED_TEXT_CALLABLES``.
+
+        This is the main hook for custom per-layer text. Use it when you want
+        labels such as layer names, tensor shapes, block roles, or any other
+        model-specific notes placed above or below each rendered box.
     text_vspacing : int, default=4
         Vertical spacing between lines produced by ``text_callable``.
+
+        Increase this for multiline labels that feel cramped. Smaller values
+        help conserve vertical space when you are already using generous
+        padding or wide layer spacing.
     spacing : int, default=10
         Horizontal spacing between consecutive rendered layers.
+
+        This is the main control for how tightly packed the diagram feels.
+        Increasing it can make grouped stages and labels easier to follow, while
+        smaller values produce more compact figures.
     draw_funnel : bool, default=True
         If ``True``, draw tapered transitions between consecutive layers.
+
+        Funnels emphasize size changes between adjacent layers. They can be
+        visually helpful in CNN diagrams, but turning them off produces a
+        cleaner and more schematic look.
     shade_step : int, default=10
         Amount of shading variation used for 3D faces.
+
+        Larger values create stronger contrast between faces and make the depth
+        effect more pronounced. Smaller values produce a flatter and more subtle
+        appearance.
     legend : bool, default=False
         If ``True``, add a legend describing rendered layer types and colors.
+
+        A legend is useful when the diagram uses custom colors or contains many
+        repeated layer classes. For small internal diagrams it may be unnecessary,
+        but for external readers it often improves readability.
     legend_text_spacing_offset : int, default=15
         Extra width reserved for legend labels.
+
+        Increase this when legend text is clipped or when long layer names need
+        more room. This setting affects legend layout only.
     font : PIL.ImageFont.ImageFont, optional
         Font used for legend and annotation text. If omitted, the default PIL
         font is used.
+
+        Use a custom font when you need the figure to match a publication or
+        presentation style. The font choice can have a noticeable effect on the
+        final layout, especially when legends or custom labels are enabled.
     font_color : Any, default='black'
         Text color used for legends and annotations.
+
+        This should contrast clearly with ``background_fill`` and any other
+        styling applied to the figure. In practice, it is often adjusted together
+        with ``font`` and ``legend`` settings.
     show_dimension : bool, default=False
         If ``True`` and ``legend`` is enabled, include output dimensions in the
         legend entries.
+
+        This adds shape information to the legend without requiring custom text
+        on every layer. It is useful when you want to preserve a clean diagram
+        while still exposing the underlying tensor sizes.
     sizing_mode : {'accurate', 'balanced', 'capped', 'logarithmic', 'relative'}, default='accurate'
         Strategy used to convert tensor dimensions into rendered sizes.
+
+        ``accurate`` stays closest to the underlying tensor dimensions after
+        scaling and clamping. ``balanced`` reduces extreme differences so the
+        whole figure remains readable. ``capped`` respects ``dimension_caps`` to
+        constrain large dimensions. ``logarithmic`` compresses very large ranges.
+        ``relative`` scales layers directly from their dimensions using
+        ``relative_base_size``.
     dimension_caps : dict, optional
         Custom caps used by ``capped`` mode. Supported keys are ``channels``,
         ``sequence``, and ``general``.
+
+        This is useful when a small number of very large layers distort the
+        overall layout. By capping specific dimension groups, you can keep the
+        diagram readable while still preserving meaningful differences.
     relative_base_size : int, default=20
         Base pixel unit used by ``relative`` sizing mode.
+
+        In ``relative`` mode, visual size is driven directly by the actual
+        tensor dimensions. This value defines the pixel size associated with a
+        dimension of one and therefore controls the overall scale of the figure.
     connector_fill : Any, default='gray'
         Color used for connector and transition elements.
+
+        This should usually complement rather than compete with the layer fills.
+        Neutral colors tend to work best when the boxes themselves already carry
+        most of the semantic styling.
     connector_width : int, default=1
         Line width used for connector and transition elements.
+
+        Increase this for presentation sized figures or when connectors are hard
+        to distinguish at your chosen output resolution.
     image_fit : str, default='fill'
         Default fit mode for images injected through ``styles``. Individual
         style entries can override this.
+
+        This controls how images are resized within the layer face they occupy.
+        Choose a mode based on whether you prefer full coverage, preserved aspect
+        ratio, or exact fill behavior.
     image_axis : {'x', 'y', 'z'}, default='z'
         Default axis used when rendering per-layer images in 3D mode.
+
+        This matters when images are applied to volumetric boxes. It determines
+        which face or orientation should be treated as the primary image plane
+        unless a per-layer override is supplied through ``styles``.
     layered_groups : sequence of dict, optional
         Group definitions used to draw labeled background regions behind sets of
         layers.
+
+        Groups are useful for separating architectural stages such as feature
+        extraction, bottlenecks, and classifier heads. They add visual structure
+        without changing the rendered layers themselves.
     logo_groups : sequence of dict, optional
         Logo placement definitions used to add icons or other overlays to
         selected layers.
+
+        This is mainly intended for annotated presentation graphics and other
+        highly styled diagrams. It is less common than ``layered_groups`` but can
+        be useful when you want compact visual markers on specific layers.
     logos_legend : bool or dict, default=False
         If truthy, render a legend describing entries supplied through
         ``logo_groups``.
+
+        A simple boolean enables the default legend behavior. A mapping allows
+        more control over how the legend is rendered when logo overlays are part
+        of the figure.
     styles : mapping, optional
         Fine-grained per-layer style overrides keyed by layer name or layer
-        class. See the layered API reference for supported style keys.
+        class.
+
+        This is the most flexible styling mechanism in layered mode. Use it for
+        per-layer images, detailed text and outline overrides, or any case where
+        ``color_map`` is too coarse. See the layered API reference for supported
+        style keys and examples.
     options : LayeredOptions or mapping, optional
         Configuration bundle applied after ``preset`` and before explicit keyword
         arguments.
+
+        This is the preferred way to reuse a consistent layered style across
+        multiple models. It also keeps larger examples and application code much
+        easier to read than passing many keyword arguments inline.
     preset : str, optional
         Name of a preset from ``visualkeras.LAYERED_PRESETS``. Layered mode
         currently provides ``default``, ``compact``, and ``presentation``.
+
+        Presets are useful starting points rather than strict modes. They can be
+        combined with ``options`` and explicit overrides when you want the
+        convenience of a predefined style without giving up control.
 
     Returns
     -------
