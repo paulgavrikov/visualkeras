@@ -79,48 +79,45 @@ Quick Links
 When to Use Which Visualization Style
 ======================================
 
-When to Use Which Visualization Style
-  =====================================
+.. list-table::
+   :header-rows: 1
+   :widths: 20 40 40
 
-  .. list-table::
-     :header-rows: 1
-     :widths: 20 40 40
+   * - Style
+     - Best For
+     - Pros & Cons
 
-     * - Style
-       - Best For
-       - Pros & Cons
+   * - **Layered View**
+     - Convolutional neural networks and models where shape progression matters
+     - | ✅ Intuitive for CNN style architectures
+       |
+       | ✅ Shows tensor size changes clearly
+       |
+       | ❌ Limited for complex branching models
 
-     * - **Layered View**
-       - Convolutional neural networks and models where shape progression matters
-       - | ✅ Intuitive for CNN style architectures
-         |
-         | ✅ Shows tensor size changes clearly
-         |
-         | ❌ Limited for complex branching models
+   * - **Graph View**
+     - General model topology, branching models, and connection focused diagrams
+     - | ✅ Works with many model types
+       |
+       | ✅ Shows connections clearly
+       |
+       | ❌ Can become dense for large models
 
-     * - **Graph View**
-       - General model topology, branching models, and connection focused diagrams
-       - | ✅ Works with many model types
-         |
-         | ✅ Shows connections clearly
-         |
-         | ❌ Can become dense for large models
+   * - **Functional View**
+     - Functional models with multiple paths, merges, inputs, or outputs
+     - | ✅ Better suited to complex functional structures
+       |
+       | ✅ Preserves more layer level structure than a pure graph view
+       |
+       | ❌ Less direct than layered view for simple sequential models
 
-     * - **Functional View**
-       - Functional models with multiple paths, merges, inputs, or outputs
-       - | ✅ Better suited to complex functional structures
-         |
-         | ✅ Preserves more layer level structure than a pure graph view
-         |
-         | ❌ Less direct than layered view for simple sequential models
-
-     * - **LeNet View**
-       - Feature map style diagrams and presentation figures for CNNs
-       - | ✅ Useful for classic CNN style visualizations
-         |
-         | ✅ Good fit for publication and teaching material
-         |
-         | ❌ Not ideal for highly irregular or non sequential architectures
+   * - **LeNet View**
+     - Feature map style diagrams and presentation figures for CNNs
+     - | ✅ Useful for classic CNN style visualizations
+       |
+       | ✅ Good fit for publication and teaching material
+       |
+       | ❌ Not ideal for highly irregular or non sequential architectures
 
 Table of Contents
 =================
