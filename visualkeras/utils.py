@@ -45,7 +45,13 @@ def resolve_style(
 
 
 class RectShape:
-    """Base rectangle-like drawing primitive used by multiple renderers."""
+    """Base rectangle-like drawing primitive used by multiple renderers.
+
+    This class stores shared geometry and color state for simple shapes drawn by
+    the graph, layered, and utility rendering code. It is primarily an internal
+    helper, but it appears in the API reference because the utility page exposes
+    the public drawing primitives directly.
+    """
     x1: int
     x2: int
     y1: int
@@ -81,7 +87,13 @@ class RectShape:
 
 
 class Box(RectShape):
-    """Rectangular layer primitive with optional 3D depth or rotation."""
+    """Rectangular layer primitive with optional 3D depth or rotation.
+
+    ``Box`` is the main volumetric drawing primitive used by layered-style
+    renderers. It can render flat rectangles, classic offset-depth boxes, or
+    rotated 3D boxes while also exposing projected face coordinates for image
+    and logo placement.
+    """
     de: int
     shade: int
     rotation: Optional[float] = None  # Rotation around Y axis in degrees
@@ -297,7 +309,11 @@ class Box(RectShape):
 
 
 class Circle(RectShape):
-    """Circular node primitive used by graph-style renderings."""
+    """Circular node primitive used by graph-style renderings.
+
+    This shape is typically used for graph nodes that should read as compact
+    points rather than volumetric boxes.
+    """
 
     def draw(self, draw: ImageDraw):
         pen, brush = self._get_pen_brush()
@@ -305,7 +321,11 @@ class Circle(RectShape):
 
 
 class Ellipses(RectShape):
-    """Ellipsis marker used when neuron counts are truncated visually."""
+    """Ellipsis marker used when neuron counts are truncated visually.
+
+    Graph view uses this helper when a layer is too large to render every
+    neuron marker individually.
+    """
 
     def draw(self, draw: ImageDraw):
         pen, brush = self._get_pen_brush()
@@ -317,7 +337,11 @@ class Ellipses(RectShape):
 
 
 class ColorWheel:
-    """Assign repeatable colors to layer classes from a finite palette."""
+    """Assign repeatable colors to layer classes from a finite palette.
+
+    This helper is useful when the caller wants deterministic but lightweight
+    default colors without maintaining a full explicit color map.
+    """
 
     def __init__(self, colors: list = None):
         self._cache = dict()
@@ -488,7 +512,11 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
     return layout
 
 class Ribbon:
-    """Connector primitive that draws a shaded ribbon between two points."""
+    """Connector primitive that draws a shaded ribbon between two points.
+
+    Ribbons are mainly used where a connector should read as a filled geometric
+    transition instead of a simple line.
+    """
 
     def __init__(self, x1, y1, x2, y2, de, width, color, shade_step):
         self.x1, self.y1 = x1, y1

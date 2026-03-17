@@ -4,6 +4,10 @@ Layer Utils
 
 Utility functions and classes for working with layers.
 
+**Note:** This section is mainly useful for advanced customization of
+visualkeras, debugging renderer behavior, or contributing to the visualkeras
+codebase. Most users can rely on the higher-level renderer APIs instead.
+
 API Reference
 =============
 

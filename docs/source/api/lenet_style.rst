@@ -27,6 +27,13 @@ API Reference
 
 .. autofunction:: visualkeras.lenet.lenet_view
 
+Configuration Options
+=====================
+
+Use :py:class:`visualkeras.options.LenetOptions` when you want to reuse a
+LeNet-style configuration across several figures. Curated presets are available
+through :py:data:`visualkeras.options.LENET_PRESETS`.
+
 Key Parameters
 ==============
 
@@ -138,4 +145,5 @@ See Also
 - :doc:`../examples/lenet_view` for detailed LeNet examples
 - :doc:`../tutorials/tutorial_01_basic_visualization` for tutorial
 - :doc:`advanced_styling_reference` for advanced styling
-- :doc:`options` for LenetOptions reference
+- :py:class:`visualkeras.options.LenetOptions` for the full options API
+- :doc:`options` for presets and shared options documentation

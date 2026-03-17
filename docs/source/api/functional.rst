@@ -26,6 +26,14 @@ API Reference
 
 .. autofunction:: visualkeras.functional.functional_view
 
+Configuration Options
+=====================
+
+Use :py:class:`visualkeras.options.FunctionalOptions` when you want to bundle
+functional layout, connector routing, collapse behavior, and related styling in
+one reusable object. Curated presets are available through
+:py:data:`visualkeras.options.FUNCTIONAL_PRESETS`.
+
 Key Parameters
 ==============
 
@@ -136,4 +144,5 @@ See Also
 
 - :doc:`../examples/functional_models` for functional model examples
 - :doc:`../tutorials/tutorial_01_basic_visualization` for tutorial
-- :doc:`options` for FunctionalOptions reference
+- :py:class:`visualkeras.options.FunctionalOptions` for the full options API
+- :doc:`options` for presets and shared options documentation
