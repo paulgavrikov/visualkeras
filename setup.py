@@ -1,7 +1,13 @@
 import setuptools
+from pathlib import Path
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+ROOT = Path(__file__).resolve().parent
+long_description = (ROOT / "README.md").read_text(encoding="utf-8")
+development_requires = [
+    line.strip()
+    for line in (ROOT / "requirements-dev.txt").read_text(encoding="utf-8").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+]
 
 setuptools.setup(
     name="visualkeras",
@@ -29,5 +35,6 @@ setuptools.setup(
         'numpy>=1.18.1',
         'aggdraw>=1.3.11'
     ],
+    extras_require={"dev": development_requires},
     python_requires='>=3.9',
 )
