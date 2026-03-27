@@ -22,6 +22,7 @@ GitHub: https://github.com/paulgavrikov/visualkeras
 PyPi: https://pypi.org/project/visualkeras/
 """
 
+from visualkeras._version import __version__
 from visualkeras.layered import *
 from visualkeras.graph import *
 from visualkeras.functional import *

@@ -1,5 +1,6 @@
 import setuptools
 from pathlib import Path
+from runpy import run_path
 
 ROOT = Path(__file__).resolve().parent
 long_description = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -11,7 +12,7 @@ development_requires = [
 
 setuptools.setup(
     name="visualkeras",
-    version="0.2.0",
+    version=run_path(str(ROOT / "visualkeras" / "_version.py"))["__version__"],
     author="Paul Gavrikov",
     author_email="paul.gavrikov@hs-offenburg.de",
     description="Architecture visualization of Keras models",
