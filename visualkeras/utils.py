@@ -34,7 +34,7 @@ def resolve_style(
     """
     final_style = defaults.copy()
     
-    for cls in type(target).__mro__:
+    for cls in reversed(type(target).__mro__):
         if cls in styles:
             final_style.update(styles[cls])
     

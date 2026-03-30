@@ -35,6 +35,37 @@ def test_color_and_math_helpers():
     assert list(utils.get_keys_by_value({"a": 1, "b": 2, "c": 1}, 1)) == ["a", "c"]
 
 
+def test_style_conflicts_follow_subclass_and_multiple_inheritance_precedence():
+    class Base:
+        pass
+
+    class First(Base):
+        pass
+
+    class Second(Base):
+        pass
+
+    class Child(First, Second):
+        pass
+
+    defaults = {"fill": "white", "outline": "black"}
+    styles = {
+        Base: {"fill": "red", "outline": "gray"},
+        First: {"fill": "blue"},
+        Second: {"fill": "green"},
+        Child: {"outline": "orange"},
+        "named": {"fill": "purple"},
+    }
+    assert utils.resolve_style(Child(), "unnamed", styles, defaults) == {
+        "fill": "blue", "outline": "orange"
+    }
+    assert utils.resolve_style(Child(), "named", styles, defaults) == {
+        "fill": "purple", "outline": "orange"
+    }
+    assert defaults == {"fill": "white", "outline": "black"}
+    assert styles[Base] == {"fill": "red", "outline": "gray"}
+
+
 def test_layout_helpers():
     a = Image.new("RGBA", (10, 10), "red")
     b = Image.new("RGBA", (10, 10), "blue")

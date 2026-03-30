@@ -38,6 +38,24 @@ def _make_icon(path: Path):
     Image.new("RGBA", (32, 20), (255, 90, 40, 255)).save(path)
 
 
+def test_layered_subclass_style_overrides_base_class():
+    class StyledDense(tf.keras.layers.Dense):
+        pass
+
+    model = tf.keras.Sequential([
+        tf.keras.layers.Input(shape=(8,), name="style_input"),
+        StyledDense(4, name="styled_dense"),
+    ])
+    image = visualkeras.layered_view(
+        model,
+        styles={tf.keras.layers.Dense: {"fill": "red"}, StyledDense: {"fill": "blue"}},
+        draw_volume=False,
+        legend_text_spacing_offset=0,
+    )
+    assert (0, 0, 255, 255) in image.getdata()
+    assert (255, 0, 0, 255) not in image.getdata()
+
+
 def test_graph_view_advanced_paths(tmp_path):
     model = _build_dense_model()
     icon_path = tmp_path / "icon.png"
