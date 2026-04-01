@@ -646,6 +646,7 @@ def resize_image_to_fit(image: Image.Image, target_width: int, target_height: in
     else: # "fill"
         pass
         
+    new_w, new_h = max(1, new_w), max(1, new_h)
     resized = image.resize((new_w, new_h), Image.LANCZOS)
     
     # Crop or Center if needed

@@ -1,9 +1,20 @@
 from types import SimpleNamespace
 
 import aggdraw
+import pytest
 from PIL import Image, ImageFont
 
 from visualkeras import utils
+
+
+@pytest.mark.parametrize("source_size", [(1000, 1), (1, 1000)])
+@pytest.mark.parametrize("target_size", [(1, 1), (2, 3)])
+def test_contain_extreme_aspect_ratios_remains_drawable(source_size, target_size):
+    source = Image.new("RGBA", source_size, "red")
+    image = utils.resize_image_to_fit(source, *target_size, "contain")
+    assert image.size == target_size
+    assert image.getbbox() is not None
+    assert source.size == source_size
 
 
 def test_resolve_style_class_and_name_overrides():
