@@ -314,5 +314,19 @@ def test_additional_shape_formatting_edge_cases():
             return "as-list-raises"
 
     assert options_mod._format_shape(AsListRaises()) == "as-list-raises"
-    # Rank-1-like tuple should produce '?' (no displayable dims).
-    assert options_mod._format_shape((None,)) == "?"
+    assert options_mod._format_shape((None,)) == "scalar"
+
+
+@pytest.mark.parametrize(
+    "shape, expected",
+    [
+        ((None, None, 32), "? x 32"),
+        ((None, 8, None), "8 x ?"),
+        ((None, None, None), "? x ?"),
+        ((None, 0, 32), "0 x 32"),
+        ((), "scalar"),
+        (None, "?"),
+    ],
+)
+def test_shape_labels_preserve_dynamic_axes_and_identify_scalars(shape, expected):
+    assert options_mod._format_shape(shape) == expected

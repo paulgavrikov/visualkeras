@@ -52,11 +52,9 @@ def _format_shape(shape: Any) -> str:
             pass
     if not isinstance(shape, (list, tuple)):
         return str(shape)
-    dims = [d for d in shape[1:] if d is not None]
+    dims = shape[1:]
     if not dims:
-        dims = [d for d in shape[1:]]
-    if not dims:
-        return "?"
+        return "scalar"
     return " x ".join(str(d) if d is not None else "?" for d in dims)
 
 

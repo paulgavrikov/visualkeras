@@ -68,6 +68,21 @@ def _assert_metrics_close(actual: dict, expected: dict):
         assert max(diffs) <= 30, f"Pixel {key} differs too much: {actual_pixel} vs {expected_pixel}"
 
 
+def test_layered_dynamic_shape_caption_preserves_sequence_axis():
+    model = tf.keras.Sequential([
+        tf.keras.layers.Input(shape=(None, 8), name="sequence_input"),
+        tf.keras.layers.Dense(32, name="sequence_dense"),
+    ])
+    image = visualkeras.layered_view(
+        model,
+        text_callable="shape",
+        draw_volume=False,
+        legend_text_spacing_offset=0,
+    )
+    assert visualkeras.LAYERED_TEXT_CALLABLES["shape"](0, model.layers[0]) == ("? x 32", False)
+    assert image.width > 0 and image.height > 0
+
+
 SCENARIOS = [
     (
         "layered_reference",
