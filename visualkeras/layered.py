@@ -5,6 +5,7 @@ from math import ceil
 from .utils import *
 from .layer_utils import *
 from .options import LayeredOptions, LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
+from .options import _track_explicit_arguments, _is_explicit
 import warnings
 
 try:
@@ -239,6 +240,7 @@ def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int,
         return draw.textsize(text, font=font)
 
 
+@_track_explicit_arguments
 def layered_view(model, 
                  to_file: str = None, 
                  min_z: int = 20, 
@@ -646,7 +648,7 @@ def layered_view(model,
                 "layered_view received many custom keyword arguments. "
                 "Consider using visualkeras.show(..., preset=...) for a simpler workflow.",
                 UserWarning,
-                stacklevel=2,
+                stacklevel=3,
             )
 
     if preset is not None or options is not None:
@@ -715,14 +717,18 @@ def layered_view(model,
             "relative_base_size": relative_base_size,
             "connector_fill": connector_fill,
             "connector_width": connector_width,
+            "image_fit": image_fit,
+            "image_axis": image_axis,
             "layered_groups": layered_groups,
+            "logo_groups": logo_groups,
+            "logos_legend": logos_legend,
             "styles": styles,
         }
 
         for key, value in explicit_values.items():
             if key not in defaults:
                 continue
-            if value != defaults[key]:
+            if _is_explicit(key):
                 resolved[key] = value
         
         to_file = resolved["to_file"]
@@ -759,6 +765,8 @@ def layered_view(model,
         image_fit = resolved["image_fit"]
         image_axis = resolved["image_axis"]
         layered_groups = resolved["layered_groups"]
+        logo_groups = resolved["logo_groups"]
+        logos_legend = resolved["logos_legend"]
         styles = resolved["styles"]
 
     if styles is not None and not isinstance(styles, dict):
@@ -812,7 +820,7 @@ def layered_view(model,
             "Custom text_callable detected. Built-in caption templates are available "
             "via visualkeras.show(..., text_callable='name').",
             UserWarning,
-            stacklevel=2,
+            stacklevel=3,
         )
 
     # Deprecation warning for legend_text_spacing_offset

@@ -14,6 +14,35 @@ from visualkeras.options import (
 import visualkeras.options as options_mod
 
 
+def test_explicit_argument_tracking_preserves_signature_and_nested_context():
+    from inspect import signature
+
+    @options_mod._track_explicit_arguments
+    def inner(value=None):
+        return options_mod._is_explicit("value")
+
+    @options_mod._track_explicit_arguments
+    def outer(value=None):
+        assert inner() is False
+        assert inner(None) is True
+        return options_mod._is_explicit("value")
+
+    assert str(signature(inner)) == "(value=None)"
+    assert outer() is False
+    assert outer(None) is True
+    assert options_mod._is_explicit("value") is False
+
+
+def test_explicit_argument_tracking_resets_after_errors():
+    @options_mod._track_explicit_arguments
+    def broken(value=None):
+        raise RuntimeError("intentional")
+
+    with pytest.raises(RuntimeError, match="intentional"):
+        broken(None)
+    assert options_mod._is_explicit("value") is False
+
+
 def test_layered_options_default_keys():
     opts = LayeredOptions()
     kwargs = opts.to_kwargs()

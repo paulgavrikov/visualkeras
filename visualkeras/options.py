@@ -11,11 +11,35 @@ presets are an opt-in convenience layer.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from contextvars import ContextVar
+from functools import wraps
+from inspect import signature
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 
 StyleMap = Mapping[Union[str, type], Mapping[str, Any]]
 TextCallable = Callable[[int, Any], Tuple[str, bool]]
+
+_EXPLICIT_ARGUMENTS = ContextVar("visualkeras_explicit_arguments", default=frozenset())
+
+
+def _track_explicit_arguments(renderer):
+    renderer_signature = signature(renderer)
+
+    @wraps(renderer)
+    def wrapped(*args, **kwargs):
+        arguments = renderer_signature.bind(*args, **kwargs).arguments
+        token = _EXPLICIT_ARGUMENTS.set(frozenset(arguments))
+        try:
+            return renderer(*args, **kwargs)
+        finally:
+            _EXPLICIT_ARGUMENTS.reset(token)
+
+    return wrapped
+
+
+def _is_explicit(name):
+    return name in _EXPLICIT_ARGUMENTS.get()
 
 
 # ---------------------------------------------------------------------------
