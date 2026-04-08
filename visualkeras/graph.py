@@ -6,6 +6,7 @@ import warnings
 from .utils import *
 from .layer_utils import *
 from .options import GraphOptions, GRAPH_PRESETS
+from .options import _track_explicit_arguments, _is_explicit
 
 class _DummyLayer:
 
@@ -15,6 +16,7 @@ class _DummyLayer:
         self.name = name
 
 
+@_track_explicit_arguments
 def graph_view(model, to_file: str = None,
                color_map: dict = None, node_size: int = 50,
                background_fill: Any = 'white', padding: int = 10,
@@ -221,7 +223,7 @@ def graph_view(model, to_file: str = None,
                 "graph_view received many custom keyword arguments. "
                 "Consider using visualkeras.show(..., mode='graph', preset=...) and the GraphOptions dataclass for a simpler workflow.",
                 UserWarning,
-                stacklevel=2,
+                stacklevel=3,
             )
 
     if preset is not None or options is not None:
@@ -274,7 +276,7 @@ def graph_view(model, to_file: str = None,
         for key, value in explicit_values.items():
             if key not in defaults:
                 continue
-            if value != defaults[key]:
+            if _is_explicit(key):
                 resolved[key] = value
 
         to_file = resolved["to_file"]

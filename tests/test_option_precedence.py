@@ -79,3 +79,38 @@ def test_layered_explicit_image_defaults_override_mapping(tmp_path):
     reference = visualkeras.layered_view(model, styles=styles, image_fit="fill", image_axis="z", legend_text_spacing_offset=0)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_graph_explicit_default_node_size_overrides_preset(via_show):
+    model = _build_model()
+    image = _render("graph", model, via_show, preset="compact", node_size=50)
+    reference = visualkeras.graph_view(model, node_size=50, layer_spacing=180)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_graph_explicit_true_resets_option_bundle(via_show):
+    model = _build_model()
+    image = _render("graph", model, via_show, options=visualkeras.GraphOptions(inout_as_tensor=False), inout_as_tensor=True)
+    reference = visualkeras.graph_view(model, inout_as_tensor=True)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_graph_explicit_none_resets_mapping_styles(via_show):
+    model = _build_model()
+    image = _render("graph", model, via_show, options={"styles": {"option_conv": {"fill": "red"}}}, styles=None)
+    reference = visualkeras.graph_view(model)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+def test_graph_positional_default_overrides_option_bundle():
+    model = _build_model()
+    image = visualkeras.graph_view(model, None, None, 50, options=visualkeras.GraphOptions(node_size=30))
+    reference = visualkeras.graph_view(model, node_size=50)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
