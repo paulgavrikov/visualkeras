@@ -29,6 +29,7 @@ from .layer_utils import (
     get_layers,
 )
 from .options import FunctionalOptions, FUNCTIONAL_PRESETS, LAYERED_TEXT_CALLABLES
+from .options import _track_explicit_arguments, _is_explicit
 from .utils import (
     Box, 
     ColorWheel, 
@@ -201,6 +202,7 @@ def _validate_and_normalize_collapse_rules(
     return normalized_rules
 
 
+@_track_explicit_arguments
 def functional_view(
     model,
     to_file: Optional[str] = None,
@@ -588,7 +590,7 @@ def functional_view(
                 "Consider using visualkeras.show(..., mode='functional', preset=...) "
                 "and the FunctionalOptions dataclass for a simpler workflow.",
                 UserWarning,
-                stacklevel=2,
+                stacklevel=3,
             )
 
     if preset is not None or options is not None:
@@ -675,7 +677,7 @@ def functional_view(
         for key, value in explicit_values.items():
             if key not in defaults:
                 continue
-            if value != defaults[key]:
+            if _is_explicit(key):
                 resolved[key] = value
 
         to_file = resolved["to_file"]
@@ -846,7 +848,7 @@ def functional_view(
                 warnings.warn(
                     f"collapse_rules[{rule_index}] did not match any collapsible linear chain.",
                     UserWarning,
-                    stacklevel=2,
+                    stacklevel=3,
                 )
 
     ranks = _assign_ranks(graph.nodes, graph.edges)

@@ -114,3 +114,34 @@ def test_graph_positional_default_overrides_option_bundle():
     reference = visualkeras.graph_view(model, node_size=50)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_functional_explicit_default_column_spacing_overrides_preset(via_show):
+    model = _build_model()
+    image = _render("functional", model, via_show, preset="compact", column_spacing=80)
+    reference = visualkeras.functional_view(model, column_spacing=80, row_spacing=30, connector_width=1, component_spacing=60)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_functional_explicit_false_resets_mapping_arrow(via_show):
+    model = _build_model()
+    image = _render("functional", model, via_show, options={"connector_arrow": True}, connector_arrow=False)
+    reference = visualkeras.functional_view(model, connector_arrow=False)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_functional_explicit_none_resets_option_caption(via_show):
+    model = _build_model()
+    image = _render(
+        "functional", model, via_show,
+        options=visualkeras.FunctionalOptions(text_callable=visualkeras.LAYERED_TEXT_CALLABLES["name"]),
+        text_callable=None,
+    )
+    reference = visualkeras.functional_view(model)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
