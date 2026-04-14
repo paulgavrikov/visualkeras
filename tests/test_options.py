@@ -43,6 +43,24 @@ def test_explicit_argument_tracking_resets_after_errors():
     assert options_mod._is_explicit("value") is False
 
 
+def test_explicit_argument_tracking_is_isolated_between_threads():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    barrier = Barrier(2)
+
+    @options_mod._track_explicit_arguments
+    def read(value=None):
+        barrier.wait(timeout=5)
+        return options_mod._is_explicit("value")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        omitted = pool.submit(read)
+        supplied = pool.submit(read, None)
+        assert omitted.result() is False
+        assert supplied.result() is True
+
+
 def test_layered_options_default_keys():
     opts = LayeredOptions()
     kwargs = opts.to_kwargs()

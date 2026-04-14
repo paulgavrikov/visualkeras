@@ -145,3 +145,45 @@ def test_functional_explicit_none_resets_option_caption(via_show):
     reference = visualkeras.functional_view(model)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_lenet_explicit_default_spacing_overrides_preset(via_show):
+    model = _build_model()
+    image = _render("lenet", model, via_show, preset="compact", layer_spacing=40)
+    reference = visualkeras.lenet_view(model, layer_spacing=40, map_spacing=3, max_xy=180, padding=15)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_lenet_explicit_none_resets_seed(via_show):
+    model = _build_model()
+    image = _render("lenet", model, via_show, options=visualkeras.LenetOptions(seed=7), seed=None)
+    reference = visualkeras.lenet_view(model, seed=None)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_lenet_explicit_true_resets_mapping_labels(via_show):
+    model = _build_model()
+    image = _render("lenet", model, via_show, options={"top_label": False}, top_label=True)
+    reference = visualkeras.lenet_view(model, top_label=True)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+def test_lenet_mapping_forwards_label_callables():
+    model = _build_model()
+    image = visualkeras.lenet_view(model, options={
+        "top_label_callable": lambda layer, shape: layer.name.upper(),
+        "bottom_label_callable": lambda layer, shape: "custom bottom",
+    })
+    reference = visualkeras.lenet_view(
+        model,
+        top_label_callable=lambda layer, shape: layer.name.upper(),
+        bottom_label_callable=lambda layer, shape: "custom bottom",
+    )
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()

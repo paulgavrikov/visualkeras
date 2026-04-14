@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .layer_utils import get_layers, extract_primary_shape
 from .options import LenetOptions, LENET_PRESETS
+from .options import _track_explicit_arguments, _is_explicit
 from .utils import get_rgba_tuple, fade_color, resolve_style
 
 
@@ -881,6 +882,7 @@ def _default_bottom_label(layer: Any, rshape: RenderShape) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
+@_track_explicit_arguments
 def lenet_view(
     model: Any,
     to_file: Optional[str] = None,
@@ -1169,6 +1171,8 @@ def lenet_view(
             "draw_patches": draw_patches,
             "font": font,
             "font_color": font_color,
+            "top_label_callable": top_label_callable,
+            "bottom_label_callable": bottom_label_callable,
             "top_label_padding": top_label_padding,
             "bottom_label_padding": bottom_label_padding,
             "top_label": top_label,
@@ -1178,7 +1182,7 @@ def lenet_view(
         for key, value in explicit_values.items():
             if key not in defaults:
                 continue
-            if value != defaults[key]:
+            if _is_explicit(key):
                 resolved[key] = value
 
         # write back
@@ -1205,6 +1209,8 @@ def lenet_view(
         draw_patches = resolved["draw_patches"]
         font = resolved["font"]
         font_color = resolved["font_color"]
+        top_label_callable = resolved["top_label_callable"]
+        bottom_label_callable = resolved["bottom_label_callable"]
         top_label_padding = resolved.get("top_label_padding", 6)
         bottom_label_padding = resolved.get("bottom_label_padding", 6)
         top_label = resolved["top_label"]
