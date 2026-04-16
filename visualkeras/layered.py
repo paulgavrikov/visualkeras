@@ -5,7 +5,7 @@ from math import ceil
 from .utils import *
 from .layer_utils import *
 from .options import LayeredOptions, LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
-from .options import _track_explicit_arguments, _is_explicit
+from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 import warnings
 
 try:
@@ -683,6 +683,7 @@ def layered_view(model,
                 raise TypeError(
                     "options must be a LayeredOptions instance or a mapping of keyword arguments."
                 )
+            _validate_option_keys(option_values, defaults, "layered")
             resolved.update(option_values)
 
         explicit_values = {

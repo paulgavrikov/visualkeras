@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from contextvars import ContextVar
 from functools import wraps
 from inspect import signature
+from difflib import get_close_matches
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 
@@ -40,6 +41,24 @@ def _track_explicit_arguments(renderer):
 
 def _is_explicit(name):
     return name in _EXPLICIT_ARGUMENTS.get()
+
+
+def _validate_option_keys(values, valid_keys, renderer_name):
+    unknown = sorted(set(values) - set(valid_keys), key=str)
+    if not unknown:
+        return
+    message = "Unknown {} option(s): {}.".format(
+        renderer_name, ", ".join(repr(key) for key in unknown)
+    )
+    suggestions = []
+    for key in unknown:
+        if isinstance(key, str):
+            matches = get_close_matches(key, valid_keys, n=1)
+            if matches:
+                suggestions.append("{!r} -> {!r}".format(key, matches[0]))
+    if suggestions:
+        message += " Did you mean {}?".format(", ".join(suggestions))
+    raise ValueError(message)
 
 
 # ---------------------------------------------------------------------------

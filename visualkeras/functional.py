@@ -29,7 +29,7 @@ from .layer_utils import (
     get_layers,
 )
 from .options import FunctionalOptions, FUNCTIONAL_PRESETS, LAYERED_TEXT_CALLABLES
-from .options import _track_explicit_arguments, _is_explicit
+from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 from .utils import (
     Box, 
     ColorWheel, 
@@ -626,6 +626,7 @@ def functional_view(
                 raise TypeError(
                     "options must be a FunctionalOptions instance or a mapping of keyword arguments."
                 )
+            _validate_option_keys(option_values, defaults, "functional")
             resolved.update(option_values)
 
         explicit_values = {

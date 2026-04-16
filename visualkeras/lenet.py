@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .layer_utils import get_layers, extract_primary_shape
 from .options import LenetOptions, LENET_PRESETS
-from .options import _track_explicit_arguments, _is_explicit
+from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 from .utils import get_rgba_tuple, fade_color, resolve_style
 
 
@@ -1145,6 +1145,7 @@ def lenet_view(
                 option_values = dict(options)
             else:
                 raise TypeError("options must be a LenetOptions instance or a mapping of keyword arguments.")
+            _validate_option_keys(option_values, defaults, "lenet")
             resolved.update(option_values)
 
         explicit_values: Dict[str, Any] = {

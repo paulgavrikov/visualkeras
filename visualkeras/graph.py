@@ -6,7 +6,7 @@ import warnings
 from .utils import *
 from .layer_utils import *
 from .options import GraphOptions, GRAPH_PRESETS
-from .options import _track_explicit_arguments, _is_explicit
+from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 
 class _DummyLayer:
 
@@ -252,6 +252,7 @@ def graph_view(model, to_file: str = None,
                 raise TypeError(
                     "options must be a GraphOptions instance or a mapping of keyword arguments."
                 )
+            _validate_option_keys(option_values, defaults, "graph")
             resolved.update(option_values)
 
         explicit_values = {
