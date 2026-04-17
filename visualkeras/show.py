@@ -91,7 +91,12 @@ def show(
     PIL.Image.Image
         Rendered visualization.
     """
-    mode_norm = (mode or "").lower().strip()
+    if not isinstance(mode, str):
+        raise TypeError(
+            "mode must be a string: layered, graph, functional, or lenet; "
+            f"got {type(mode).__name__}."
+        )
+    mode_norm = mode.lower().strip()
     canonical_mode = _canonical_mode(mode_norm)
     if canonical_mode is None:
         raise ValueError(
