@@ -40,6 +40,31 @@ def _build_reference_model():
     return model
 
 
+@pytest.mark.parametrize("via_show", [False, True])
+@pytest.mark.parametrize(
+    "shape, batch_size, expected_neurons",
+    [((3,), None, 3), ((3,), 4, 3), ((2, 2, 3), None, 12)],
+)
+def test_graph_input_neurons_support_modern_keras(shape, batch_size, expected_neurons, via_show):
+    inputs = tf.keras.layers.Input(shape=shape, batch_size=batch_size, name="neuron_input")
+    flattened = tf.keras.layers.Flatten(name="neuron_flatten")(inputs)
+    outputs = tf.keras.layers.Dense(2, name="neuron_output")(flattened)
+    model = tf.keras.Model(inputs, outputs, name="input_neuron_model")
+    settings = {
+        "inout_as_tensor": False,
+        "node_size": 12,
+        "node_spacing": 5,
+        "layer_spacing": 30,
+        "padding": 8,
+        "ellipsize_after": 0,
+        "styles": {"neuron_input": {"fill": "magenta", "outline": "magenta"}},
+    }
+    image = visualkeras.show(model, mode="graph", **settings) if via_show else visualkeras.graph_view(model, **settings)
+    column = [image.getpixel((14, y))[:3] == (255, 0, 255) for y in range(image.height)]
+    runs = sum(value and (index == 0 or not column[index - 1]) for index, value in enumerate(column))
+    assert runs == expected_neurons
+
+
 def _downsample_metrics(image: Image.Image) -> dict[str, float]:
     resized = image.resize((32, 32), Image.LANCZOS)
     arr = np.asarray(resized, dtype=np.float64)

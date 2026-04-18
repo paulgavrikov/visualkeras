@@ -1,7 +1,8 @@
 from typing import Any, Dict, Mapping, Optional, Union, List, Sequence, Tuple
 import aggdraw
 from PIL import Image, ImageDraw, ImageFont
-from math import ceil
+from math import ceil, prod as _shape_product
+from operator import index as _dimension_index
 import warnings
 from .utils import *
 from .layer_utils import *
@@ -14,6 +15,39 @@ class _DummyLayer:
         if units:
             self.units = units
         self.name = name
+
+
+def _input_layer_neuron_count(layer):
+    shape = getattr(layer, "input_shape", None)
+    if shape is None:
+        shape = getattr(layer, "batch_shape", None)
+    if shape is None:
+        shape = getattr(layer, "batch_input_shape", None)
+    if shape is None:
+        shape = getattr(getattr(layer, "output", None), "shape", None)
+
+    error = (
+        f"not supported input shape {shape!r}: neuron rendering requires known "
+        "positive non-batch dimensions. Use inout_as_tensor=True for symbolic shapes."
+    )
+    if hasattr(shape, "as_list"):
+        try:
+            shape = shape.as_list()
+        except (TypeError, ValueError):
+            raise RuntimeError(error) from None
+    if isinstance(shape, list) and shape and isinstance(shape[0], (list, tuple)):
+        if len(shape) != 1:
+            raise RuntimeError(error)
+        shape = shape[0]
+    if not isinstance(shape, (tuple, list)):
+        raise RuntimeError(error)
+    try:
+        dimensions = [_dimension_index(dimension) for dimension in shape[1:]]
+    except TypeError:
+        raise RuntimeError(error) from None
+    if any(dimension <= 0 for dimension in dimensions):
+        raise RuntimeError(error)
+    return _shape_product(dimensions)
 
 
 @_track_explicit_arguments
@@ -449,15 +483,7 @@ def graph_view(model, to_file: str = None,
                     units = layer.filters
                 elif is_internal_input(layer) and not inout_as_tensor:
                     is_box = False
-                    # Normalize input_shape to handle both tuple and list formats
-                    input_shape = layer.input_shape
-                    if isinstance(input_shape, tuple):
-                        shape = input_shape
-                    elif isinstance(input_shape, list) and len(input_shape) == 1:
-                        shape = input_shape[0]
-                    else:
-                        raise RuntimeError(f"not supported input shape {input_shape}")
-                    units = self_multiply(shape)
+                    units = _input_layer_neuron_count(layer)
 
             if local_ellipsize_after is None or local_ellipsize_after <= 0:
                 n = units
