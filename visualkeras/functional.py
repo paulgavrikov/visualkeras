@@ -1759,15 +1759,9 @@ def _resolve_external_label_x_collisions(
             for i in range(1, len(xs)):
                 xs[i] = max(xs[i], xs[i - 1] + widths[i - 1] + min_gap)
 
-            overflow = (xs[-1] + widths[-1]) - right_bound
-            if overflow > 0:
-                xs = [x - overflow for x in xs]
-
-            if xs[0] < left_bound:
-                x_cursor = left_bound
-                for i in range(len(xs)):
-                    xs[i] = x_cursor
-                    x_cursor += widths[i] + min_gap
+            xs[-1] = min(xs[-1], right_bound - widths[-1])
+            for i in range(len(xs) - 2, -1, -1):
+                xs[i] = min(xs[i], xs[i + 1] - widths[i] - min_gap)
 
         for i, idx in enumerate(ordered):
             labels[idx]["x"] = int(round(xs[i]))

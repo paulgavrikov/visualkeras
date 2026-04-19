@@ -460,6 +460,31 @@ def test_external_text_padding_and_collision_helpers():
     assert labels[1]["x"] >= labels[0]["x"]
 
 
+def test_external_labels_near_both_edges_stay_with_their_nodes():
+    labels = [
+        {"x_pref": 18, "x": 18, "y": 40, "w": 24, "h": 20},
+        {"x_pref": 220, "x": 220, "y": 40, "w": 20, "h": 20},
+        {"x_pref": 316, "x": 316, "y": 40, "w": 34, "h": 20},
+    ]
+    functional._resolve_external_label_x_collisions(labels, image_width=364, edge_padding=20)
+    assert labels[0]["x"] == 20
+    assert labels[1]["x"] == 220
+    assert labels[2]["x"] == 310
+    assert labels[-1]["x"] + labels[-1]["w"] <= 344
+
+
+def test_external_labels_resolve_overlap_without_packing_unrelated_labels():
+    labels = [
+        {"x_pref": 20, "x": 20, "y": 40, "w": 30, "h": 20},
+        {"x_pref": 40, "x": 40, "y": 40, "w": 30, "h": 20},
+        {"x_pref": 310, "x": 310, "y": 40, "w": 40, "h": 20},
+    ]
+    functional._resolve_external_label_x_collisions(labels, image_width=364, edge_padding=20)
+    assert labels[0]["x"] == 20
+    assert labels[1]["x"] >= labels[0]["x"] + labels[0]["w"] + 8
+    assert labels[2]["x"] == 304
+
+
 def test_assign_component_positions_layout():
     n1 = _node(1, x=0, y=0, w=20, h=10)
     n2 = _node(2, x=0, y=0, w=20, h=10)

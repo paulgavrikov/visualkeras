@@ -2,6 +2,7 @@ import pytest
 from PIL import Image
 
 import visualkeras
+import visualkeras.functional as functional
 from visualkeras.options import FunctionalOptions
 
 
@@ -51,3 +52,34 @@ def test_functional_show_mode_with_options():
     assert isinstance(image, Image.Image)
     assert image.width > 0
     assert image.height > 0
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_functional_captions_remain_under_their_own_nodes(monkeypatch, via_show):
+    from PIL import ImageDraw
+
+    model = _build_reference_model()
+    rectangles = {}
+    captions = {}
+    original_render = functional._render_graph
+    original_text = ImageDraw.ImageDraw.multiline_text
+
+    def record_render(graph, **kwargs):
+        for node in graph.nodes.values():
+            rectangles[node.name] = (node.x, node.x + node.width)
+        return original_render(graph, **kwargs)
+
+    def record_text(draw, xy, text, **kwargs):
+        name = text.split("\n")[0]
+        bbox = draw.multiline_textbbox(xy, text, font=kwargs.get("font"), spacing=kwargs.get("spacing", 4))
+        captions[name] = (bbox[0] + bbox[2]) / 2
+        return original_text(draw, xy, text, **kwargs)
+
+    monkeypatch.setattr(functional, "_render_graph", record_render)
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", record_text)
+    settings = {"simple_text_visualization": True, "simple_text_label_mode": "below"}
+    image = visualkeras.show(model, mode="functional", **settings) if via_show else visualkeras.functional_view(model, **settings)
+    for name in ["input", "add", "output"]:
+        left, right = rectangles[name]
+        assert left - 1 <= captions[name] <= right + 1
+    assert image.width > 0 and image.height > 0
