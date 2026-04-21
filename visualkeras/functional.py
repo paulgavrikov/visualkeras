@@ -38,7 +38,8 @@ from .utils import (
     resize_image_to_fit, 
     apply_affine_transform,
     draw_node_logo,
-    draw_logos_legend
+    draw_logos_legend,
+    resolve_style,
 )
 
 
@@ -991,15 +992,6 @@ def _build_graph(
         A ``FunctionalGraph`` containing nodes, edges, and inferred input/output ids.
     """
     
-    def resolve_style(layer, name) -> Dict[str, Any]:
-        final_style = global_defaults.copy()
-        for cls in type(layer).__mro__:
-            if cls in styles:
-                final_style.update(styles[cls])
-        if name in styles:
-            final_style.update(styles[name])
-        return final_style
-    
     layers = list(get_layers(model))
     order_map = {id(layer): index for index, layer in enumerate(layers)}
     nodes: Dict[int, FunctionalNode] = {}
@@ -1007,7 +999,7 @@ def _build_graph(
     for layer in layers:
         node_id = id(layer)
         name = getattr(layer, "name", None) or f"layer_{order_map[node_id]}"
-        node_style = resolve_style(layer, name)
+        node_style = resolve_style(layer, name, styles, global_defaults)
 
         if simple_text_visualization:
             node_style = dict(node_style)

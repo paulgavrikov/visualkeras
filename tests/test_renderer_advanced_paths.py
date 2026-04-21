@@ -56,6 +56,22 @@ def test_layered_subclass_style_overrides_base_class():
     assert (255, 0, 0, 255) not in image.getdata()
 
 
+@pytest.mark.parametrize("via_show", [False, True])
+def test_functional_subclass_style_overrides_base_class(via_show):
+    class StyledDense(tf.keras.layers.Dense):
+        pass
+
+    inputs = tf.keras.layers.Input(shape=(8,), name="style_input")
+    outputs = StyledDense(4, name="styled_dense")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    settings = {"styles": {
+        tf.keras.layers.Dense: {"fill": "red"}, StyledDense: {"fill": "blue"}
+    }, "draw_volume": False}
+    image = visualkeras.show(model, mode="functional", **settings) if via_show else visualkeras.functional_view(model, **settings)
+    assert (0, 0, 255, 255) in image.getdata()
+    assert (255, 0, 0, 255) not in image.getdata()
+
+
 def test_graph_view_advanced_paths(tmp_path):
     model = _build_dense_model()
     icon_path = tmp_path / "icon.png"
