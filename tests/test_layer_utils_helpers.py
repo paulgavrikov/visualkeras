@@ -199,6 +199,19 @@ def test_calculate_layer_dimensions_modes_and_fallbacks():
     assert fallback == (7, 9, 5)
 
 
+@pytest.mark.parametrize("shape, expected", [
+    ((None, 20, 30, 8), (15, 15, 6)),
+    ((None, 4, 5, 2, 3), (7, 7, 6)),
+])
+def test_capped_dimensions_include_spatial_channels(shape, expected):
+    actual = lu.calculate_layer_dimensions(
+        shape, scale_z=1, scale_xy=1, max_z=100, max_xy=200,
+        min_z=5, min_xy=7, sizing_mode="capped",
+        dimension_caps={"sequence": 15, "channels": 6},
+    )
+    assert actual == expected
+
+
 def test_find_input_and_hierarchy_without_precomputed_graph():
     model, a, b, c = _build_chain_model()
     assert [layer.name for layer in lu.find_input_layers(model)] == ["a"]

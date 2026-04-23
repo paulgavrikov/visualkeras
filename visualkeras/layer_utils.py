@@ -626,6 +626,11 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
             y = max(min(dims[1] * scale_xy, sequence_cap), min_xy)
             z = max(min(dims[2] * scale_z if len(dims)>2 else min_z, channel_cap), min_z)
             return (x, y, z)
+        else:
+            x = max(min(dims[0] * scale_xy, sequence_cap), min_xy)
+            y = max(min(dims[1] * scale_xy, sequence_cap), min_xy)
+            z = max(min(self_multiply(dims[2:]) * scale_z, channel_cap), min_z)
+            return (x, y, z)
 
     # Balanced mode
     elif sizing_mode == 'balanced':

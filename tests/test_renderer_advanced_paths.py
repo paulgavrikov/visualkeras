@@ -72,6 +72,19 @@ def test_functional_subclass_style_overrides_base_class(via_show):
     assert (255, 0, 0, 255) not in image.getdata()
 
 
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+def test_capped_spatial_model_renders(mode):
+    inputs = tf.keras.layers.Input(shape=(12, 12, 3), name="capped_input")
+    outputs = tf.keras.layers.Conv2D(8, 3, name="capped_conv")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.show(
+        model, mode=mode, sizing_mode="capped", draw_volume=False,
+        dimension_caps={"sequence": 24, "channels": 12},
+    )
+    assert image.width > 0 and image.height > 0
+    assert image.getbbox() is not None
+
+
 def test_graph_view_advanced_paths(tmp_path):
     model = _build_dense_model()
     icon_path = tmp_path / "icon.png"
