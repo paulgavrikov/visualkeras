@@ -46,6 +46,14 @@ def test_color_and_math_helpers():
     assert list(utils.get_keys_by_value({"a": 1, "b": 2, "c": 1}, 1)) == ["a", "c"]
 
 
+@pytest.mark.parametrize("shape, expected", [
+    ((None, None, 3, 4), 12), ((None, 2, None), 2),
+    ((None, None), 0), ((), 0), ((None, 0, None, 4), 0),
+])
+def test_shape_product_ignores_all_unknown_dimensions(shape, expected):
+    assert utils.self_multiply(shape) == expected
+
+
 def test_style_conflicts_follow_subclass_and_multiple_inheritance_precedence():
     class Base:
         pass

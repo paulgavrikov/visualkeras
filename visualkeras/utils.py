@@ -413,9 +413,7 @@ def self_multiply(tensor_tuple: tuple):
         Product of the non-``None`` entries, or ``0`` when no numeric entries
         are available.
     """
-    tensor_list = list(tensor_tuple)
-    if None in tensor_list:
-        tensor_list.remove(None)
+    tensor_list = [dimension for dimension in tensor_tuple if dimension is not None]
     if len(tensor_list) == 0:
         return 0
     s = tensor_list[0]
