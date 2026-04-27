@@ -90,6 +90,20 @@ def test_incoming_and_outgoing_layer_helpers():
     assert list(lu.get_outgoing_layers(a)) == [b, c]
 
 
+def test_outgoing_layers_support_mixed_keras_node_apis():
+    a, b, c = _Layer("a"), _Layer("b"), _Layer("c")
+    a._outbound_nodes = [SimpleNamespace(outbound_layer=b), SimpleNamespace(operation=c)]
+    assert list(lu.get_outgoing_layers(a)) == [b, c]
+
+
+def test_outgoing_layers_of_real_keras_input():
+    tf = pytest.importorskip("tensorflow")
+    inputs = tf.keras.Input((3,))
+    dense = tf.keras.layers.Dense(2)
+    model = tf.keras.Model(inputs, dense(inputs))
+    assert list(lu.get_outgoing_layers(model.layers[0])) == [dense]
+
+
 def test_adj_matrix_lookup_and_hierarchy_helpers():
     model, a, b, c = _build_chain_model()
 

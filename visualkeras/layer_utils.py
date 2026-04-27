@@ -112,8 +112,11 @@ def get_outgoing_layers(layer):
     Any
         Layer objects that consume the output of ``layer``.
     """
-    for i, node in enumerate(layer._outbound_nodes):
-        yield node.outbound_layer
+    for node in layer._outbound_nodes:
+        if hasattr(node, 'outbound_layer'):
+            yield node.outbound_layer
+        else:
+            yield node.operation
 
 
 def model_to_adj_matrix(model):
