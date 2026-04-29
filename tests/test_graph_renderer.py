@@ -79,6 +79,17 @@ def _downsample_metrics(image: Image.Image) -> dict[str, float]:
     }
 
 
+@pytest.mark.parametrize("mode", ["graph", "functional"])
+def test_reused_layer_renders_only_current_model_connections(mode):
+    first = tf.keras.Input((3,), name="foreign_input")
+    shared = tf.keras.layers.Dense(2, name="reused_dense")
+    tf.keras.Model(first, shared(first))
+    inputs = tf.keras.Input((3,), name="current_input")
+    model = tf.keras.Model(inputs, shared(inputs))
+    image = visualkeras.show(model, mode=mode, draw_volume=False) if mode == "functional" else visualkeras.show(model, mode=mode, show_neurons=False)
+    assert image.width > 0 and image.height > 0
+
+
 def _assert_metrics_close(actual: dict, expected: dict):
     assert actual["checksum"] == pytest.approx(expected["checksum"], rel=1e-4, abs=25000.0)
     assert actual["mean"] == pytest.approx(expected["mean"], rel=1e-4, abs=6.0)

@@ -65,7 +65,7 @@ def get_layers(model):
     raise RuntimeError('Model does not expose _layers or _self_tracked_trackables')
 
 
-def get_incoming_layers(layer):
+def get_incoming_layers(layer, model=None):
     """Yield the layers that feed directly into ``layer``.
 
     This helper abstracts over the legacy and modern Keras node APIs so the
@@ -81,7 +81,11 @@ def get_incoming_layers(layer):
     Any
         Layer objects that connect directly into ``layer``.
     """
-    for i, node in enumerate(layer._inbound_nodes):
+    graph_nodes = getattr(model, '_nodes_by_depth', None)
+    node_ids = {id(node) for level in graph_nodes.values() for node in level} if graph_nodes is not None else None
+    for node in layer._inbound_nodes:
+        if node_ids is not None and id(node) not in node_ids:
+            continue
         if hasattr(node, 'inbound_layers'):
             # Old Node class (TF 2.15 & Keras 2.15 and under)
             if isinstance(node.inbound_layers, Iterable):
@@ -146,18 +150,15 @@ def model_to_adj_matrix(model):
     layers = get_layers(model)
 
     adj_matrix = np.zeros((len(layers), len(layers)))
-    id_to_num_mapping = dict()
+    id_to_num_mapping = {id(layer): index for index, layer in enumerate(layers)}
 
     for layer in layers:
         layer_id = id(layer)
-        if layer_id not in id_to_num_mapping:
-            id_to_num_mapping[layer_id] = len(id_to_num_mapping.keys())
-
-        for inbound_layer in get_incoming_layers(layer):
+        for inbound_layer in get_incoming_layers(layer, model=model):
             inbound_layer_id = id(inbound_layer)
 
             if inbound_layer_id not in id_to_num_mapping:
-                id_to_num_mapping[inbound_layer_id] = len(id_to_num_mapping.keys())
+                continue
 
             src = id_to_num_mapping[inbound_layer_id]
             tgt = id_to_num_mapping[layer_id]
@@ -303,7 +304,10 @@ def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
                 finished = False
                 for end_layer_id in get_keys_by_value(id_to_num_mapping, end_layer_idx):
                     end_layer = find_layer_by_id(model, end_layer_id)
-                    incoming_to_end_layer = set(get_incoming_layers(end_layer))
+                    incoming_to_end_layer = {
+                        parent for parent in get_incoming_layers(end_layer, model=model)
+                        if id(parent) in id_to_num_mapping
+                    }
                     intersection = set(incoming_to_end_layer).intersection(prev_layers)
                     if len(intersection) == len(incoming_to_end_layer):
                         if end_layer not in layer:

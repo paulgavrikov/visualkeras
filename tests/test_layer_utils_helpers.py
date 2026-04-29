@@ -127,6 +127,42 @@ def test_adj_matrix_lookup_and_hierarchy_helpers():
     assert [layer.name for layer in hierarchy[2]] == ["c"]
 
 
+def test_adjacency_excludes_layers_outside_model():
+    model, a, b, c = _build_chain_model()
+    foreign = _Layer("foreign")
+    b._inbound_nodes.insert(0, _OldInboundNode([foreign]))
+    mapping, adjacency = lu.model_to_adj_matrix(model)
+    assert list(mapping) == [id(a), id(b), id(c)]
+    assert adjacency.shape == (3, 3)
+    assert adjacency.sum() == 2
+
+
+def test_reused_layer_connectivity_is_scoped_to_model():
+    tf = pytest.importorskip("tensorflow")
+    first = tf.keras.Input((3,), name="first_input")
+    second = tf.keras.Input((3,), name="second_input")
+    shared = tf.keras.layers.Dense(2, name="shared")
+    tf.keras.Model(first, shared(first))
+    model = tf.keras.Model(second, shared(second))
+    mapping, adjacency = lu.model_to_adj_matrix(model)
+    assert len(mapping) == 2
+    assert adjacency[mapping[id(model.layers[0])], mapping[id(shared)]] == 1
+    assert list(lu.get_incoming_layers(shared, model=model)) == [model.layers[0]]
+
+
+def test_scoping_excludes_old_edges_between_present_layers():
+    tf = pytest.importorskip("tensorflow")
+    inputs = tf.keras.Input((3,), name="scope_input")
+    a = tf.keras.layers.Dense(3, name="scope_a")
+    b = tf.keras.layers.Dense(3, name="scope_b")
+    tf.keras.Model(inputs, a(b(inputs)))
+    model = tf.keras.Model(inputs, b(a(inputs)))
+    mapping, adjacency = lu.model_to_adj_matrix(model)
+    assert adjacency.sum() == 2
+    assert adjacency[mapping[id(b)], mapping[id(a)]] == 0
+    assert adjacency[mapping[id(a)], mapping[id(b)]] == 1
+
+
 def test_find_output_layers_old_and_new_api_paths():
     model, _, _, c = _build_chain_model()
     assert list(lu.find_output_layers(model)) == [c]

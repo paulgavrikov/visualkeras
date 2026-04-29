@@ -1114,7 +1114,7 @@ def _build_graph(
             image=node_image
         )
 
-    edges = _collect_edges(nodes)
+    edges = _collect_edges(nodes, model=model)
 
     if add_output_nodes:
         nodes, edges = _attach_output_nodes(model, nodes, edges, virtual_node_size)
@@ -1123,11 +1123,12 @@ def _build_graph(
     return FunctionalGraph(nodes=nodes, edges=edges, inputs=inputs, outputs=outputs)
 
 
-def _collect_edges(nodes: Dict[int, FunctionalNode]) -> List[FunctionalEdge]:
+def _collect_edges(nodes: Dict[int, FunctionalNode], model=None) -> List[FunctionalEdge]:
     edges: List[FunctionalEdge] = []
     seen = set()
     for node in nodes.values():
-        for inbound in get_incoming_layers(node.layer):
+        incoming = get_incoming_layers(node.layer, model=model) if hasattr(model, '_nodes_by_depth') else get_incoming_layers(node.layer)
+        for inbound in incoming:
             inbound_id = id(inbound)
             if inbound_id not in nodes:
                 continue
