@@ -163,6 +163,32 @@ def test_scoping_excludes_old_edges_between_present_layers():
     assert adjacency[mapping[id(a)], mapping[id(b)]] == 1
 
 
+def test_hierarchy_keeps_every_dependency_in_an_earlier_level():
+    a, b, c, d, merge = [_Layer(name) for name in ["a", "b", "c", "d", "merge"]]
+    model = _Model([a, b, c, d, merge])
+    b._inbound_nodes = [_OldInboundNode([a])]
+    c._inbound_nodes = [_OldInboundNode([a])]
+    d._inbound_nodes = [_OldInboundNode([b])]
+    merge._inbound_nodes = [_OldInboundNode([c, d])]
+    hierarchy = lu.model_to_hierarchy_lists(model)
+    assert [[layer.name for layer in level] for level in hierarchy] == [
+        ["a"], ["b", "c"], ["d"], ["merge"]
+    ]
+
+
+def test_hierarchy_preserves_model_order_for_disconnected_inputs():
+    layers = [_Layer(name) for name in ["first", "second", "third"]]
+    assert lu.model_to_hierarchy_lists(_Model(layers)) == [layers]
+
+
+def test_hierarchy_rejects_cycles_instead_of_returning_partial_graph():
+    a, b, c = [_Layer(name) for name in ["a", "b", "c"]]
+    b._inbound_nodes = [_OldInboundNode([a, c])]
+    c._inbound_nodes = [_OldInboundNode([b])]
+    with pytest.raises(ValueError, match="[Cc]ycle"):
+        lu.model_to_hierarchy_lists(_Model([a, b, c]))
+
+
 def test_find_output_layers_old_and_new_api_paths():
     model, _, _, c = _build_chain_model()
     assert list(lu.find_output_layers(model)) == [c]

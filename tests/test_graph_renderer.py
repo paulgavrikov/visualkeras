@@ -90,6 +90,29 @@ def test_reused_layer_renders_only_current_model_connections(mode):
     assert image.width > 0 and image.height > 0
 
 
+def test_skip_merge_connectors_always_point_to_a_later_column(monkeypatch):
+    import visualkeras.graph as graph
+
+    inputs = tf.keras.Input((3,), name="skip_input")
+    first = tf.keras.layers.Dense(3, name="long_first")(inputs)
+    short = tf.keras.layers.Dense(3, name="short_branch")(inputs)
+    second = tf.keras.layers.Dense(3, name="long_second")(first)
+    outputs = tf.keras.layers.Add(name="skip_merge")([short, second])
+    model = tf.keras.Model(inputs, outputs)
+    connections = []
+    original = graph._draw_connector
+
+    def record(draw, start, end, *args, **kwargs):
+        connections.append((start.x2, end.x1))
+        return original(draw, start, end, *args, **kwargs)
+
+    monkeypatch.setattr(graph, "_draw_connector", record)
+    image = visualkeras.graph_view(model, show_neurons=False, layer_spacing=50)
+    assert len(connections) == 6
+    assert all(start < end for start, end in connections)
+    assert image.width > 0
+
+
 def _assert_metrics_close(actual: dict, expected: dict):
     assert actual["checksum"] == pytest.approx(expected["checksum"], rel=1e-4, abs=25000.0)
     assert actual["mean"] == pytest.approx(expected["mean"], rel=1e-4, abs=6.0)

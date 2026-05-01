@@ -291,31 +291,26 @@ def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
     """
     if adj_matrix is None:
         id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
-    hierarchy = [set(find_input_layers(model, id_to_num_mapping, adj_matrix))]
-    prev_layers = set(hierarchy[0])
-    finished = False
+    layers_by_index = {id_to_num_mapping[id(layer)]: layer for layer in get_layers(model)}
+    connected = adj_matrix > 0
+    indegrees = np.count_nonzero(connected, axis=0)
+    ready = list(np.flatnonzero(indegrees == 0))
+    hierarchy = []
+    visited = 0
 
-    while not finished:
-        layer = list()
-        finished = True
-        for start_layer in hierarchy[-1]:
-            start_layer_idx = id_to_num_mapping[id(start_layer)]
-            for end_layer_idx in np.where(adj_matrix[start_layer_idx] > 0)[0]:
-                finished = False
-                for end_layer_id in get_keys_by_value(id_to_num_mapping, end_layer_idx):
-                    end_layer = find_layer_by_id(model, end_layer_id)
-                    incoming_to_end_layer = {
-                        parent for parent in get_incoming_layers(end_layer, model=model)
-                        if id(parent) in id_to_num_mapping
-                    }
-                    intersection = set(incoming_to_end_layer).intersection(prev_layers)
-                    if len(intersection) == len(incoming_to_end_layer):
-                        if end_layer not in layer:
-                            layer.append(end_layer)
-                            prev_layers.add(end_layer)
-        if not finished:
-            hierarchy.append(layer)
+    while ready:
+        hierarchy.append([layers_by_index[index] for index in ready])
+        visited += len(ready)
+        next_level = []
+        for source in ready:
+            for target in np.flatnonzero(connected[source]):
+                indegrees[target] -= 1
+                if indegrees[target] == 0:
+                    next_level.append(target)
+        ready = sorted(next_level)
 
+    if visited != len(indegrees):
+        raise ValueError("Cycle detected in layer graph; cannot build a complete hierarchy")
     return hierarchy
 
 
