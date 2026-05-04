@@ -443,67 +443,46 @@ def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
     RuntimeError
         If the shape uses an unsupported container format.
     """
-    # Handle None or empty cases
     layer_info = f" (layer: {layer_name})" if layer_name else ""
-    
-    # Handle None case - warn and use default
+    if hasattr(layer_output_shape, "as_list"):
+        try:
+            layer_output_shape = tuple(layer_output_shape.as_list())
+        except (TypeError, ValueError):
+            warnings.warn(
+                f"Layer output shape has unknown rank{layer_info}. Using default shape (None, 1) for visualization.",
+                UserWarning, stacklevel=3,
+            )
+            return (None, 1)
     if layer_output_shape is None:
         warnings.warn(
             f"Layer output shape is None{layer_info}. This may indicate an unbuilt model "
             f"or invalid layer configuration. Using default shape (None, 1) for visualization.",
-            UserWarning,
-            stacklevel=3
+            UserWarning, stacklevel=3,
         )
         return (None, 1)
-    
-    # Handle tuple case
-    if isinstance(layer_output_shape, tuple):
-        # Check if this is a multi-output scenario (tuple of tuples)
-        if len(layer_output_shape) > 0 and isinstance(layer_output_shape[0], (tuple, list)):
-            # Multi-output case
-            warnings.warn(
-                f"Multi-output layer detected{layer_info}. "
-                f"Using primary output shape {layer_output_shape[0]} for visualization. "
-                f"Secondary outputs {layer_output_shape[1:]} will be ignored.",
-                UserWarning,
-                stacklevel=3
-            )
-            return layer_output_shape[0]
-        else:
-            # Single output tuple
-            return layer_output_shape
-    
-    # Handle list case
-    elif isinstance(layer_output_shape, list):
-        if len(layer_output_shape) == 1:
-            # Single output
-            return layer_output_shape[0]
-        elif len(layer_output_shape) > 1:
-            # Multi-output list
-            warnings.warn(
-                f"Multi-output layer detected{layer_info}. "
-                f"Using primary output shape {layer_output_shape[0]} for visualization. "
-                f"Secondary outputs {layer_output_shape[1:]} will be ignored.",
-                UserWarning,
-                stacklevel=3
-            )
-            return layer_output_shape[0]
-        else:
-            # Empty list
-            warnings.warn(
-                f"Layer output shape is an empty list{layer_info}. This indicates an invalid "
-                f"layer configuration. Using default shape (None, 1) for visualization.",
-                UserWarning,
-                stacklevel=3
-            )
-            return (None, 1)
-    
-    # Unsupported format
-    else:
-        raise RuntimeError(
-            f"Unsupported tensor shape format: {type(layer_output_shape).__name__} = {layer_output_shape}{layer_info}. "
-            f"Expected tuple or list, but got {type(layer_output_shape).__name__}."
+    if isinstance(layer_output_shape, list) and not layer_output_shape:
+        warnings.warn(
+            f"Layer output shape is an empty list{layer_info}. This indicates an invalid "
+            f"layer configuration. Using default shape (None, 1) for visualization.",
+            UserWarning, stacklevel=3,
         )
+        return (None, 1)
+    if isinstance(layer_output_shape, (tuple, list)):
+        if layer_output_shape and (isinstance(layer_output_shape[0], (tuple, list)) or hasattr(layer_output_shape[0], "as_list")):
+            if len(layer_output_shape) > 1:
+                warnings.warn(
+                    f"Multi-output layer detected{layer_info}. "
+                    f"Using primary output shape {layer_output_shape[0]} for visualization. "
+                    f"Secondary outputs {layer_output_shape[1:]} will be ignored.",
+                    UserWarning, stacklevel=3,
+                )
+            return extract_primary_shape(layer_output_shape[0], layer_name)
+        return tuple(layer_output_shape)
+    raise RuntimeError(
+        f"Unsupported tensor shape format: {type(layer_output_shape).__name__} = {layer_output_shape}{layer_info}. "
+        f"Expected tuple or list, but got {type(layer_output_shape).__name__}."
+    )
+
 
 def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, min_xy,
                                one_dim_orientation='y', sizing_mode='accurate',

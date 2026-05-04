@@ -239,6 +239,27 @@ def test_extract_primary_shape_cases():
         lu.extract_primary_shape(123, "bad")
 
 
+@pytest.mark.parametrize("shape, expected", [
+    ([None, 8], (None, 8)), ([4, 8], (4, 8)),
+    ([None], (None,)), ([5], (5,)), ([[None, 8]], (None, 8)),
+    (((None, 8),), (None, 8)),
+])
+def test_primary_shape_normalizes_single_shapes_without_multioutput_warning(shape, expected):
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert lu.extract_primary_shape(shape) == expected
+    assert not caught
+
+
+def test_primary_shape_accepts_tensor_shape_and_unknown_rank():
+    tf = pytest.importorskip("tensorflow")
+    assert lu.extract_primary_shape(tf.TensorShape([None, 8])) == (None, 8)
+    with pytest.warns(UserWarning, match="unknown rank"):
+        assert lu.extract_primary_shape(tf.TensorShape(None)) == (None, 1)
+
+
 def test_calculate_layer_dimensions_modes_and_fallbacks():
     common = dict(scale_z=1, scale_xy=1, max_z=100, max_xy=200, min_z=5, min_xy=7)
 
