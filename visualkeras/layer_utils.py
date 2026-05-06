@@ -1,6 +1,6 @@
 import numpy as np
 from .utils import get_keys_by_value
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 import warnings
 
 try:
@@ -417,6 +417,15 @@ def is_internal_input(layer):
         pass
 
     return False
+
+def _shape_from_tensor_output(output):
+    if isinstance(output, Mapping):
+        output = list(output.values())
+    if isinstance(output, (tuple, list)):
+        shapes = [_shape_from_tensor_output(tensor) for tensor in output]
+        return shapes if shapes and all(shape is not None for shape in shapes) else None
+    return getattr(output, "shape", None)
+
 
 def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
     """Return the primary output shape for visualization.

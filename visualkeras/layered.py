@@ -4,6 +4,7 @@ from PIL import ImageFont
 from math import ceil
 from .utils import *
 from .layer_utils import *
+from .layer_utils import _shape_from_tensor_output
 from .options import LayeredOptions, LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
 from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 import warnings
@@ -38,7 +39,7 @@ def _resolve_layer_output_shape(layer) -> Any:
         return _shape_to_tuple(shape)
 
     output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
+    tensor_shape = _shape_from_tensor_output(output)
     if tensor_shape is not None:
         return _shape_to_tuple(tensor_shape)
 

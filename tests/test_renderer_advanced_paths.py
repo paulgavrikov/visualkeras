@@ -85,6 +85,22 @@ def test_capped_spatial_model_renders(mode):
     assert image.getbbox() is not None
 
 
+@pytest.mark.parametrize("mode", ["layered", "functional", "lenet"])
+def test_modern_multioutput_layer_uses_primary_tensor_shape(mode):
+    import importlib
+    from visualkeras.layer_utils import extract_primary_shape
+
+    inputs = tf.keras.Input((8,), name="split_input")
+    split = tf.keras.layers.Lambda(lambda tensor: (tensor[:, :6], tensor[:, :2]), name="split")
+    outputs = split(inputs)
+    model = tf.keras.Model(inputs, outputs[0])
+    module = importlib.import_module("visualkeras." + mode)
+    primary = extract_primary_shape(module._resolve_layer_output_shape(split))
+    assert primary == (None, 6)
+    image = visualkeras.show(model, mode=mode)
+    assert image.width > 0 and image.height > 0
+
+
 def test_graph_view_advanced_paths(tmp_path):
     model = _build_dense_model()
     icon_path = tmp_path / "icon.png"

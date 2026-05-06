@@ -22,6 +22,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .layer_utils import (
+    _shape_from_tensor_output,
     calculate_layer_dimensions,
     extract_primary_shape,
     find_output_layers,
@@ -3156,14 +3157,11 @@ def _resolve_layer_output_shape(layer: Any) -> Optional[Any]:
         return _shape_to_tuple(shape)
 
     output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
+    tensor_shape = _shape_from_tensor_output(output)
     if tensor_shape is not None:
         return _shape_to_tuple(tensor_shape)
 
     input_shape = getattr(layer, "input_shape", None)
-    if input_shape is not None:
-        return _shape_to_tuple(input_shape)
-
     compute_output_shape = getattr(layer, "compute_output_shape", None)
     if callable(compute_output_shape):
         if input_shape is not None:
@@ -3172,7 +3170,7 @@ def _resolve_layer_output_shape(layer: Any) -> Optional[Any]:
             except Exception:  # noqa: BLE001
                 pass
 
-    return None
+    return _shape_to_tuple(input_shape)
 
 
 def _shape_to_tuple(shape: Any) -> Any:

@@ -23,6 +23,7 @@ import aggdraw
 from PIL import Image, ImageDraw, ImageFont
 
 from .layer_utils import get_layers, extract_primary_shape
+from .layer_utils import _shape_from_tensor_output
 from .options import LenetOptions, LENET_PRESETS
 from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 from .utils import get_rgba_tuple, fade_color, resolve_style
@@ -53,7 +54,7 @@ def _resolve_layer_output_shape(layer: Any) -> Any:
         return _shape_to_tuple(shape)
 
     output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
+    tensor_shape = _shape_from_tensor_output(output)
     if tensor_shape is not None:
         return _shape_to_tuple(tensor_shape)
 
