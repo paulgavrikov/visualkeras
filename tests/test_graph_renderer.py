@@ -65,6 +65,25 @@ def test_graph_input_neurons_support_modern_keras(shape, batch_size, expected_ne
     assert runs == expected_neurons
 
 
+@pytest.mark.parametrize("via_show", [False, True])
+def test_fixed_batch_outputs_count_neurons_per_example(via_show):
+    inputs = tf.keras.Input((3,), batch_size=4, name="batch_input")
+    early = tf.keras.layers.Dense(3, name="early")(inputs)
+    late = tf.keras.layers.Dense(2, name="late")(early)
+    model = tf.keras.Model(inputs, [early, late])
+    settings = {
+        "inout_as_tensor": False, "ellipsize_after": 0, "node_size": 12,
+        "node_spacing": 5, "layer_spacing": 30, "padding": 8,
+        "styles": {"early": {"fill": "red", "outline": "red"},
+                   "late": {"fill": "blue", "outline": "blue"}},
+    }
+    image = visualkeras.show(model, mode="graph", **settings) if via_show else visualkeras.graph_view(model, **settings)
+    x = image.width - 8 - 6
+    for color, count in [((255, 0, 0), 3), ((0, 0, 255), 2)]:
+        column = [image.getpixel((x, y))[:3] == color for y in range(image.height)]
+        assert sum(value and (i == 0 or not column[i - 1]) for i, value in enumerate(column)) == count
+
+
 def _downsample_metrics(image: Image.Image) -> dict[str, float]:
     resized = image.resize((32, 32), Image.LANCZOS)
     arr = np.asarray(resized, dtype=np.float64)

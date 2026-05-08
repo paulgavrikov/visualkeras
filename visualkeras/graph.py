@@ -25,9 +25,12 @@ def _input_layer_neuron_count(layer):
         shape = getattr(layer, "batch_input_shape", None)
     if shape is None:
         shape = getattr(getattr(layer, "output", None), "shape", None)
+    return _tensor_neuron_count(shape, "input")
 
+
+def _tensor_neuron_count(shape, kind):
     error = (
-        f"not supported input shape {shape!r}: neuron rendering requires known "
+        f"not supported {kind} shape {shape!r}: neuron rendering requires known "
         "positive non-batch dimensions. Use inout_as_tensor=True for symbolic shapes."
     )
     if hasattr(shape, "as_list"):
@@ -414,7 +417,7 @@ def graph_view(model, to_file: str = None,
         model_layers.append([
             _DummyLayer(
                 output_names[i],
-                None if inout_as_tensor else self_multiply(output_shapes[i])
+                None if inout_as_tensor else _tensor_neuron_count(output_shapes[i], "output")
             )
             for i in range(len(model.outputs))
         ])

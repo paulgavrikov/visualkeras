@@ -45,6 +45,16 @@ def test_input_neuron_count_handles_tensor_shape_objects():
         graph._input_layer_neuron_count(SimpleNamespace(batch_shape=UnknownRank()))
 
 
+@pytest.mark.parametrize("shape, expected", [((4, 2, 3), 6), ((4,), 1), ((None,), 1)])
+def test_output_neuron_count_excludes_batch_and_preserves_scalars(shape, expected):
+    assert graph._tensor_neuron_count(shape, "output") == expected
+
+
+def test_output_neuron_count_rejects_unknown_nonbatch_axes():
+    with pytest.raises(RuntimeError, match="not supported output shape.*inout_as_tensor=True"):
+        graph._tensor_neuron_count((4, None, 3), "output")
+
+
 def test_dummy_layer_sets_name_and_optional_units():
     basic = graph._DummyLayer("out")
     assert basic.name == "out"
