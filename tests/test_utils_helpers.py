@@ -116,6 +116,22 @@ def test_layout_helpers():
     assert vertical_wrapped.height >= 20
 
 
+@pytest.mark.parametrize("horizontal", [True, False])
+@pytest.mark.parametrize("limit", [10, 23])
+def test_layout_keeps_outer_padding_when_wrapping(horizontal, limit):
+    source = Image.new("RGBA", (10, 10), "red")
+    images = [source] if limit == 10 else [source, source]
+    image = utils.linear_layout(
+        images, max_width=limit, max_height=limit,
+        horizontal=horizontal, padding=2,
+    )
+    target_size = (14, 14) if limit == 10 else ((14, 24) if horizontal else (24, 14))
+    assert image.size == target_size
+    assert image.getpixel((0, 0)) == (255, 255, 255, 255)
+    assert image.getpixel((2, 2)) == (255, 0, 0, 255)
+    assert sum(pixel == (255, 0, 0, 255) for pixel in image.getdata()) == len(images) * 100
+
+
 def _make_box(x1, y1, x2, y2, de=0, shade=10, rotation=None):
     box = utils.Box()
     box.x1 = x1

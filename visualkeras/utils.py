@@ -481,7 +481,7 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
 
     for img in images:
         if horizontal:
-            if max_width != -1 and x + img.width > max_width:
+            if max_width != -1 and x > padding and x + img.width + padding > max_width:
                 # make a new row
                 x = padding
                 y = height - padding + spacing
@@ -492,7 +492,7 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
 
             x += img.width + spacing
         else:
-            if max_height != -1 and y + img.height > max_height:
+            if max_height != -1 and y > padding and y + img.height + padding > max_height:
                 # make a new column
                 x = width - padding + spacing
                 y = padding
