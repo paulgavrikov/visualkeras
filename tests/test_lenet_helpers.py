@@ -123,6 +123,24 @@ def test_load_face_image_from_object_and_path(tmp_path):
     assert _load_face_image("does-not-exist.png") is None
 
 
+@pytest.mark.parametrize("pathlike", [False, True])
+def test_face_image_cache_refreshes_changed_files_and_keeps_copies(tmp_path, pathlike):
+    path = tmp_path / "changing.png"
+    Image.new("RGBA", (4, 4), "red").save(path)
+    spec = path if pathlike else str(path)
+    first = _load_face_image(spec)
+    assert first is not None
+    first.putpixel((0, 0), (0, 255, 0, 255))
+    second = _load_face_image(spec)
+    assert second.getpixel((0, 0)) == (255, 0, 0, 255)
+    Image.new("RGBA", (6, 6), "blue").save(path)
+    third = _load_face_image(spec)
+    assert third.size == (6, 6)
+    assert third.getpixel((0, 0)) == (0, 0, 255, 255)
+    path.unlink()
+    assert _load_face_image(spec) is None
+
+
 def test_parse_face_image_style():
     style = {
         "face_image": {"path": "/tmp/logo.png", "fit": "contain", "alpha": 180, "inset": 2},

@@ -175,7 +175,7 @@ def _stable_seed(base_seed: Optional[int], *parts: Any) -> int:
 # Face image helpers (front-face textures)
 # ---------------------------------------------------------------------------
 
-_FACE_IMAGE_CACHE: Dict[str, Image.Image] = {}
+_FACE_IMAGE_CACHE: Dict[str, Tuple[Tuple[int, int, int], Image.Image]] = {}
 
 
 def _load_face_image(spec: Any) -> Optional[Image.Image]:
@@ -190,16 +190,20 @@ def _load_face_image(spec: Any) -> Optional[Image.Image]:
             return spec.convert("RGBA")
         except Exception:  # noqa: BLE001
             return None
-    if isinstance(spec, str):
-        path = os.path.expanduser(spec)
-        # Cache the decoded image; callers get a copy to avoid mutation issues.
-        if path in _FACE_IMAGE_CACHE:
-            return _FACE_IMAGE_CACHE[path].copy()
+    if isinstance(spec, (str, os.PathLike)):
+        path = os.path.abspath(os.path.expanduser(os.fsdecode(spec)))
         try:
-            img = Image.open(path).convert("RGBA")
+            stat = os.stat(path)
+            signature = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+            cached = _FACE_IMAGE_CACHE.get(path)
+            if cached is not None and cached[0] == signature:
+                return cached[1].copy()
+            with Image.open(path) as source:
+                img = source.convert("RGBA")
         except Exception:  # noqa: BLE001
+            _FACE_IMAGE_CACHE.pop(path, None)
             return None
-        _FACE_IMAGE_CACHE[path] = img
+        _FACE_IMAGE_CACHE[path] = (signature, img)
         return img.copy()
     return None
 
