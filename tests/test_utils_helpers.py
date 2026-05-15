@@ -234,6 +234,20 @@ def test_resize_and_affine_helpers():
     assert target.getpixel((20, 20))[0] > 200
 
 
+@pytest.mark.parametrize("source_mode, target_mode, background, expected_pixel", [
+    ("RGB", "RGBA", (0, 0, 0, 0), (255, 0, 0, 255)),
+    ("RGBA", "RGBA", (0, 0, 0, 0), (255, 0, 0, 128)),
+    ("RGBA", "RGBA", (255, 255, 255, 255), (255, 127, 127, 255)),
+    ("RGBA", "RGB", (255, 255, 255), (255, 127, 127)),
+])
+def test_affine_projection_composites_source_alpha_once(source_mode, target_mode, background, expected_pixel):
+    source = Image.new(source_mode, (4, 4), (255, 0, 0) if source_mode == "RGB" else (255, 0, 0, 128))
+    target = Image.new(target_mode, (8, 8), background)
+    utils.apply_affine_transform(target, source, [(2, 2), (6, 2), (6, 6), (2, 6)], "fill")
+    assert target.getpixel((3, 3)) == expected_pixel
+    assert target.getpixel((0, 0)) == background
+
+
 def test_draw_node_logo_and_legend(tmp_path):
     class FaceBox:
         @staticmethod

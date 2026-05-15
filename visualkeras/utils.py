@@ -726,7 +726,7 @@ def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, qua
     side_h = np.hypot(quad[3][0]-quad[0][0], quad[3][1]-quad[0][1])
     
     # Resize source image to match the approximate dimensions of the target face
-    resized_source = resize_image_to_fit(source_img, int(side_w), int(side_h), fit_mode)
+    resized_source = resize_image_to_fit(source_img.convert("RGBA"), int(side_w), int(side_h), fit_mode)
     sw, sh = resized_source.size
     
     coeffs = _calculate_affine_coeffs(quad, (sw, sh))
@@ -744,7 +744,10 @@ def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, qua
     transformed = resized_source.transform((w, h), Image.AFFINE, new_coeffs, resample=Image.BILINEAR)
     
     # Paste onto target_img at (min_x, min_y)
-    target_img.paste(transformed, (int(min_x), int(min_y)), transformed)
+    if target_img.mode == "RGBA":
+        target_img.alpha_composite(transformed, (int(min_x), int(min_y)))
+    else:
+        target_img.paste(transformed, (int(min_x), int(min_y)), transformed)
 
 
 def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dict[str, Any], draw_volume: bool, draw_reversed: bool = False):

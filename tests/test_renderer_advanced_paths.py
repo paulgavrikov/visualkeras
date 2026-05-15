@@ -101,6 +101,20 @@ def test_modern_multioutput_layer_uses_primary_tensor_shape(mode):
     assert image.width > 0 and image.height > 0
 
 
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+def test_transparent_logos_preserve_opaque_canvas_alpha(tmp_path, mode):
+    icon = tmp_path / "transparent_logo.png"
+    Image.new("RGBA", (8, 8), (255, 0, 0, 128)).save(icon)
+    inputs = tf.keras.Input((8,), name="logo_input")
+    outputs = tf.keras.layers.Dense(8, name="logo_dense")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.show(
+        model, mode=mode, draw_volume=False, background_fill="white",
+        logo_groups=[{"file": str(icon), "layers": ["logo_dense"], "size": 0.8}],
+    )
+    assert image.getextrema()[3] == (255, 255)
+
+
 def test_graph_view_advanced_paths(tmp_path):
     model = _build_dense_model()
     icon_path = tmp_path / "icon.png"
