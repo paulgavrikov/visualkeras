@@ -109,6 +109,18 @@ def test_reused_layer_renders_only_current_model_connections(mode):
     assert image.width > 0 and image.height > 0
 
 
+@pytest.mark.parametrize("mode", ["graph", "functional"])
+@pytest.mark.filterwarnings("error:Functional graph contains cycles")
+def test_sequential_reused_layers_do_not_create_false_cycles(mode):
+    old_input = tf.keras.Input((3,), name="old_chain")
+    a = tf.keras.layers.Dense(3, name="chain_a")
+    b = tf.keras.layers.Dense(3, name="chain_b")
+    tf.keras.Model(old_input, a(b(old_input)))
+    model = tf.keras.Sequential([tf.keras.Input((3,), name="active_chain"), a, b])
+    image = visualkeras.show(model, mode=mode)
+    assert image.width > 0 and image.height > 0
+
+
 def test_skip_merge_connectors_always_point_to_a_later_column(monkeypatch):
     import visualkeras.graph as graph
 

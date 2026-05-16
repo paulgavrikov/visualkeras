@@ -565,7 +565,7 @@ def test_collect_edges_and_attach_outputs(monkeypatch):
     n2 = _node(id(lb), name="b", layer=lb)
     nodes = {n1.node_id: n1, n2.node_id: n2}
 
-    def fake_incoming(layer):
+    def fake_incoming(layer, model=None):
         if layer is lb:
             return [la, la]  # duplicate on purpose
         return []
@@ -1040,7 +1040,7 @@ def test_build_graph_image_axis_and_scale_branches(monkeypatch, tmp_path):
     model = SimpleNamespace()
 
     monkeypatch.setattr(functional, "get_layers", lambda m: [l0, l1, l2])
-    monkeypatch.setattr(functional, "get_incoming_layers", lambda layer: [] if layer is l0 else [l0])
+    monkeypatch.setattr(functional, "get_incoming_layers", lambda layer, model=None: [] if layer is l0 else [l0])
     monkeypatch.setattr(functional, "find_output_layers", lambda m: [])
     monkeypatch.setattr(functional, "calculate_layer_dimensions", lambda *args, **kwargs: (9, 30, 45))
 

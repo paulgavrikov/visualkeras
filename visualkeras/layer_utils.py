@@ -82,6 +82,8 @@ def get_incoming_layers(layer, model=None):
         Layer objects that connect directly into ``layer``.
     """
     graph_nodes = getattr(model, '_nodes_by_depth', None)
+    if graph_nodes is None:
+        graph_nodes = getattr(getattr(model, '_functional', None), '_nodes_by_depth', None)
     node_ids = {id(node) for level in graph_nodes.values() for node in level} if graph_nodes is not None else None
     for node in layer._inbound_nodes:
         if node_ids is not None and id(node) not in node_ids:

@@ -1128,7 +1128,7 @@ def _collect_edges(nodes: Dict[int, FunctionalNode], model=None) -> List[Functio
     edges: List[FunctionalEdge] = []
     seen = set()
     for node in nodes.values():
-        incoming = get_incoming_layers(node.layer, model=model) if hasattr(model, '_nodes_by_depth') else get_incoming_layers(node.layer)
+        incoming = get_incoming_layers(node.layer, model=model)
         for inbound in incoming:
             inbound_id = id(inbound)
             if inbound_id not in nodes:

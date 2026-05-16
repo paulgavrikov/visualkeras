@@ -163,6 +163,20 @@ def test_scoping_excludes_old_edges_between_present_layers():
     assert adjacency[mapping[id(a)], mapping[id(b)]] == 1
 
 
+def test_sequential_wrapper_uses_its_active_internal_graph():
+    tf = pytest.importorskip("tensorflow")
+    old_input = tf.keras.Input((3,), name="old_input")
+    a = tf.keras.layers.Dense(3, name="reused_a")
+    b = tf.keras.layers.Dense(3, name="reused_b")
+    tf.keras.Model(old_input, a(b(old_input)))
+    model = tf.keras.Sequential([tf.keras.Input((3,), name="new_input"), a, b])
+    mapping, adjacency = lu.model_to_adj_matrix(model)
+    assert adjacency.sum() == 2
+    assert adjacency[mapping[id(b)], mapping[id(a)]] == 0
+    assert list(lu.get_incoming_layers(a, model=model)) == [lu.get_layers(model)[0]]
+    assert [layer for level in lu.model_to_hierarchy_lists(model) for layer in level] == lu.get_layers(model)
+
+
 def test_hierarchy_keeps_every_dependency_in_an_earlier_level():
     a, b, c, d, merge = [_Layer(name) for name in ["a", "b", "c", "d", "merge"]]
     model = _Model([a, b, c, d, merge])
