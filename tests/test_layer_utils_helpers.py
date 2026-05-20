@@ -65,6 +65,33 @@ def test_spacing_dummy_layer_smoke():
     assert layer.spacing == 77
 
 
+def test_spacing_layer_preserves_values_dtype_and_mask():
+    tf = pytest.importorskip("tensorflow")
+    layer = lu.SpacingDummyLayer(spacing=23, name="gap")
+    values = tf.constant([[1.25, 2.5]], dtype=tf.float64)
+    result = layer(values)
+    np.testing.assert_array_equal(result.numpy(), values.numpy())
+    assert result.dtype == values.dtype
+    embedded = tf.keras.layers.Embedding(5, 2, mask_zero=True)(tf.constant([[1, 0]]))
+    masked = layer(embedded)
+    np.testing.assert_array_equal(masked._keras_mask.numpy(), [[True, False]])
+
+
+def test_spacing_layer_survives_model_save_and_load(tmp_path):
+    tf = pytest.importorskip("tensorflow")
+    inputs = tf.keras.Input((3,), name="spacing_input")
+    gap = lu.SpacingDummyLayer(spacing=37, name="saved_gap", trainable=False)
+    model = tf.keras.Model(inputs, gap(inputs))
+    path = tmp_path / "spacing.keras"
+    model.save(path)
+    restored = tf.keras.models.load_model(path, custom_objects={"SpacingDummyLayer": lu.SpacingDummyLayer})
+    restored_gap = restored.get_layer("saved_gap")
+    assert restored_gap.spacing == 37
+    assert restored_gap.trainable is False
+    values = tf.constant([[1.0, 2.0, 3.0]])
+    np.testing.assert_array_equal(restored(values).numpy(), values.numpy())
+
+
 def test_get_layers_variants_and_error():
     m1 = SimpleNamespace(_layers=[1, 2])
     assert lu.get_layers(m1) == [1, 2]

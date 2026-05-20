@@ -31,9 +31,17 @@ class SpacingDummyLayer(Layer):
         is not used during model training or inference.
     """
 
-    def __init__(self, spacing: int = 50):
-        super().__init__()
+    def __init__(self, spacing: int = 50, **kwargs):
+        kwargs.setdefault("autocast", False)
+        super().__init__(**kwargs)
         self.spacing = spacing
+        self.supports_masking = True
+
+    def call(self, inputs):
+        return inputs
+
+    def get_config(self):
+        return {**super().get_config(), "spacing": self.spacing}
 
 
 def get_layers(model):

@@ -38,6 +38,16 @@ def _make_icon(path: Path):
     Image.new("RGBA", (32, 20), (255, 90, 40, 255)).save(path)
 
 
+def test_spacing_layer_can_be_used_in_a_real_model():
+    inputs = tf.keras.Input((8,), name="spacing_input")
+    hidden = tf.keras.layers.Dense(8, name="before_gap")(inputs)
+    spaced = visualkeras.SpacingDummyLayer(spacing=32)(hidden)
+    outputs = tf.keras.layers.Dense(3, name="after_gap")(spaced)
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.layered_view(model, draw_volume=False, legend_text_spacing_offset=0)
+    assert image.width > 0 and image.height > 0
+
+
 def test_layered_subclass_style_overrides_base_class():
     class StyledDense(tf.keras.layers.Dense):
         pass
