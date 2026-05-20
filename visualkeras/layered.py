@@ -884,7 +884,7 @@ def layered_view(model,
             continue
 
         # Do not render the SpacingDummyLayer, just increase the pointer
-        if type(layer) == SpacingDummyLayer:
+        if isinstance(layer, SpacingDummyLayer):
             current_z += layer.spacing
             continue
         
@@ -1087,7 +1087,7 @@ def layered_view(model,
 
         box_idx = -1
         for index, layer in enumerate(model.layers):
-            if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
+            if type(layer) in type_ignore or isinstance(layer, SpacingDummyLayer) or index in index_ignore:
                 continue
             box_idx += 1
 
@@ -1400,7 +1400,7 @@ def layered_view(model,
         draw_text = ImageDraw.Draw(img)
         i = -1
         for index, layer in enumerate(model.layers):
-            if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
+            if type(layer) in type_ignore or isinstance(layer, SpacingDummyLayer) or index in index_ignore:
                 continue
             i += 1
             

@@ -48,6 +48,25 @@ def test_spacing_layer_can_be_used_in_a_real_model():
     assert image.width > 0 and image.height > 0
 
 
+@pytest.mark.parametrize("reversed_view", [False, True])
+def test_spacing_subclasses_keep_gap_and_stay_out_of_legend(reversed_view):
+    class CustomGap(visualkeras.SpacingDummyLayer):
+        pass
+
+    def build(gap_type):
+        inputs = tf.keras.Input((8,), name="gap_input")
+        before = tf.keras.layers.Dense(8, name="gap_before")(inputs)
+        gap = gap_type(spacing=45, name="gap")(before)
+        outputs = tf.keras.layers.Dense(3, name="gap_after")(gap)
+        return tf.keras.Model(inputs, outputs)
+
+    settings = {"draw_reversed": reversed_view, "legend": True, "text_callable": "name", "legend_text_spacing_offset": 0}
+    reference = visualkeras.show(build(visualkeras.SpacingDummyLayer), mode="layered", **settings)
+    image = visualkeras.show(build(CustomGap), mode="layered", **settings)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
 def test_layered_subclass_style_overrides_base_class():
     class StyledDense(tf.keras.layers.Dense):
         pass
