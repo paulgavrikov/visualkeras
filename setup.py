@@ -13,8 +13,11 @@ development_requires = [
 setuptools.setup(
     name="visualkeras",
     version=run_path(str(ROOT / "visualkeras" / "_version.py"))["__version__"],
-    author="Paul Gavrikov",
-    author_email="paul.gavrikov@hs-offenburg.de",
+    author="Paul Gavrikov, Santosh Patapati",
+    author_email=(
+        "Paul Gavrikov <paul.gavrikov@hs-offenburg.de>, "
+        "Santosh Patapati <santosh.patapati@stonybrook.edu>"
+    ),
     description="Architecture visualization of Keras models",
     long_description=long_description,
     long_description_content_type="text/markdown",
