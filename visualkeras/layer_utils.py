@@ -66,11 +66,11 @@ def get_layers(model):
     RuntimeError
         If the model does not expose a supported internal layer container.
     """
-    if hasattr(model, '_layers'):
-        return model._layers
-    if hasattr(model, '_self_tracked_trackables'):
-        return model._self_tracked_trackables
-    raise RuntimeError('Model does not expose _layers or _self_tracked_trackables')
+    for attribute in ('_layers', '_self_tracked_trackables', 'layers'):
+        layers = getattr(model, attribute, None)
+        if layers is not None:
+            return layers
+    raise RuntimeError('Model does not expose a supported layer container')
 
 
 def get_incoming_layers(layer, model=None):

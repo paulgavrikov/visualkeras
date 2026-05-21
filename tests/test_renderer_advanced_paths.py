@@ -54,10 +54,10 @@ def test_spacing_subclasses_keep_gap_and_stay_out_of_legend(reversed_view):
         pass
 
     def build(gap_type):
-        inputs = tf.keras.Input((8,), name="gap_input")
-        before = tf.keras.layers.Dense(8, name="gap_before")(inputs)
+        inputs = tf.keras.Input((8,), name="input")
+        before = tf.keras.layers.Dense(8, name="pre")(inputs)
         gap = gap_type(spacing=45, name="gap")(before)
-        outputs = tf.keras.layers.Dense(3, name="gap_after")(gap)
+        outputs = tf.keras.layers.Dense(3, name="post")(gap)
         return tf.keras.Model(inputs, outputs)
 
     settings = {"draw_reversed": reversed_view, "legend": True, "text_callable": "name", "legend_text_spacing_offset": 0}
@@ -65,6 +65,26 @@ def test_spacing_subclasses_keep_gap_and_stay_out_of_legend(reversed_view):
     image = visualkeras.show(build(CustomGap), mode="layered", **settings)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["graph", "functional", "lenet"])
+def test_public_model_adapter_renders_without_private_layer_containers(mode):
+    class PublicModelAdapter:
+        def __init__(self, model):
+            self.layers = model.layers
+            self.outputs = model.outputs
+            self.output_names = model.output_names
+            self.output_shape = model.output_shape
+            self._model = model
+
+        def get_layer(self, name):
+            return self._model.get_layer(name=name)
+
+    inputs = tf.keras.Input((8,), name="adapter_input")
+    outputs = tf.keras.layers.Dense(3, name="adapter_output")(inputs)
+    model = PublicModelAdapter(tf.keras.Model(inputs, outputs))
+    image = visualkeras.show(model, mode=mode)
+    assert image.width > 0 and image.height > 0
 
 
 def test_layered_subclass_style_overrides_base_class():

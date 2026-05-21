@@ -103,6 +103,19 @@ def test_get_layers_variants_and_error():
         lu.get_layers(SimpleNamespace())
 
 
+@pytest.mark.parametrize("attributes", [
+    {"layers": ["first", "second"]},
+    {"_layers": None, "layers": ["first", "second"]},
+    {"_layers": None, "_self_tracked_trackables": ["first", "second"]},
+])
+def test_get_layers_falls_back_from_missing_private_containers(attributes):
+    assert lu.get_layers(SimpleNamespace(**attributes)) == ["first", "second"]
+
+
+def test_get_layers_preserves_an_explicit_empty_container():
+    assert lu.get_layers(SimpleNamespace(_layers=[], layers=["other"])) == []
+
+
 def test_incoming_and_outgoing_layer_helpers():
     a = _Layer("a")
     b = _Layer("b")
