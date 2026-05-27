@@ -363,6 +363,15 @@ def test_capped_dimensions_include_spatial_channels(shape, expected):
     assert actual == expected
 
 
+@pytest.mark.parametrize("integer_type", [np.int32, np.int64])
+@pytest.mark.parametrize("mode", ["accurate", "capped", "balanced", "logarithmic", "relative"])
+def test_numpy_integer_shapes_match_python_integer_shapes(integer_type, mode):
+    common = dict(scale_z=1, scale_xy=1, max_z=500, max_xy=500, min_z=2, min_xy=2, sizing_mode=mode)
+    expected = lu.calculate_layer_dimensions((None, 12, 8, 3), **common)
+    shape = (None, integer_type(12), integer_type(8), integer_type(3))
+    assert lu.calculate_layer_dimensions(shape, **common) == expected
+
+
 def test_find_input_and_hierarchy_without_precomputed_graph():
     model, a, b, c = _build_chain_model()
     assert [layer.name for layer in lu.find_input_layers(model)] == ["a"]

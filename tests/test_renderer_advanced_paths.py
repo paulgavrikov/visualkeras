@@ -87,6 +87,37 @@ def test_public_model_adapter_renders_without_private_layer_containers(mode):
     assert image.width > 0 and image.height > 0
 
 
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+def test_numpy_shape_metadata_preserves_rendered_dimensions(mode):
+    import numpy as np
+
+    class ShapeMetadata(tf.keras.layers.Layer):
+        def __init__(self, numpy_dimensions, **kwargs):
+            super().__init__(**kwargs)
+            self.numpy_dimensions = numpy_dimensions
+
+        def call(self, inputs):
+            return inputs
+
+        @property
+        def output_shape(self):
+            integer = np.int64 if self.numpy_dimensions else int
+            return (None, integer(6), integer(8), integer(12))
+
+    def build(numpy_dimensions):
+        inputs = tf.keras.Input((6, 8, 12), name="numeric_input")
+        outputs = ShapeMetadata(numpy_dimensions, name="numeric_output")(inputs)
+        return tf.keras.Model(inputs, outputs)
+
+    options = {"draw_volume": False, "min_xy": 2, "min_z": 2, "scale_xy": 1, "scale_z": 1}
+    if mode == "layered":
+        options["legend_text_spacing_offset"] = 0
+    reference = visualkeras.show(build(False), mode=mode, options=options)
+    image = visualkeras.show(build(True), mode=mode, options=options)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
 def test_layered_subclass_style_overrides_base_class():
     class StyledDense(tf.keras.layers.Dense):
         pass

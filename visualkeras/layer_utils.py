@@ -1,6 +1,7 @@
 import numpy as np
 from .utils import get_keys_by_value
 from collections.abc import Iterable, Mapping
+from numbers import Integral as _Integral
 import warnings
 
 try:
@@ -556,7 +557,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
     from .utils import self_multiply
 
     # Extract numeric dims (skip batch dim)
-    dims = [d for d in shape[1:] if isinstance(d, int) and d is not None]
+    dims = [int(d) for d in shape[1:] if isinstance(d, _Integral)]
 
     # Default fallback
     if not dims:
