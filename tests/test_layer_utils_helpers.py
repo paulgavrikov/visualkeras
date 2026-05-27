@@ -372,6 +372,14 @@ def test_numpy_integer_shapes_match_python_integer_shapes(integer_type, mode):
     assert lu.calculate_layer_dimensions(shape, **common) == expected
 
 
+@pytest.mark.parametrize("mode", ["accurate", "capped", "balanced", "logarithmic", "relative"])
+def test_symbolic_axes_keep_their_positions_when_sizing(mode):
+    common = dict(scale_z=1, scale_xy=1, max_z=500, max_xy=500, min_z=2, min_xy=2, sizing_mode=mode)
+    shape = (None, None, 12, 3)
+    expected = lu.calculate_layer_dimensions((None, 1, 12, 3), **common)
+    assert lu.calculate_layer_dimensions(shape, **common) == expected
+
+
 def test_find_input_and_hierarchy_without_precomputed_graph():
     model, a, b, c = _build_chain_model()
     assert [layer.name for layer in lu.find_input_layers(model)] == ["a"]

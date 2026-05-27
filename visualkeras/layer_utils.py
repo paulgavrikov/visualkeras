@@ -556,8 +556,8 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
     import math
     from .utils import self_multiply
 
-    # Extract numeric dims (skip batch dim)
-    dims = [int(d) for d in shape[1:] if isinstance(d, _Integral)]
+    # Keep symbolic axes in place with one-unit placeholders (skip batch dim).
+    dims = [1 if d is None else int(d) for d in shape[1:] if d is None or isinstance(d, _Integral)]
 
     # Default fallback
     if not dims:

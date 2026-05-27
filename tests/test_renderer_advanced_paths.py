@@ -118,6 +118,18 @@ def test_numpy_shape_metadata_preserves_rendered_dimensions(mode):
     assert image.tobytes() == reference.tobytes()
 
 
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+def test_dynamic_spatial_axis_does_not_shift_known_height(mode):
+    inputs = tf.keras.Input((None, 12, 3), name="dynamic_input")
+    outputs = tf.keras.layers.Conv2D(8, 1, name="dynamic_conv")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    options = {"padding": 0, "draw_volume": False, "min_xy": 2, "min_z": 2, "scale_xy": 1, "scale_z": 1}
+    if mode == "layered":
+        options["legend_text_spacing_offset"] = 0
+    image = visualkeras.show(model, mode=mode, options=options)
+    assert image.height == 12
+
+
 def test_layered_subclass_style_overrides_base_class():
     class StyledDense(tf.keras.layers.Dense):
         pass
