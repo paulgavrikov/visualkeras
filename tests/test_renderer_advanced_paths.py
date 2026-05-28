@@ -130,6 +130,25 @@ def test_dynamic_spatial_axis_does_not_shift_known_height(mode):
     assert image.height == 12
 
 
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+@pytest.mark.parametrize("sizing_mode", ["balanced", "logarithmic"])
+def test_high_rank_tensor_uses_all_channel_axes(mode, sizing_mode):
+    from visualkeras.layer_utils import calculate_layer_dimensions
+
+    inputs = tf.keras.Input((4, 5, 2, 40), name="volume_input")
+    outputs = tf.keras.layers.Activation("linear", name="volume_output")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    dimensions = calculate_layer_dimensions(
+        (None, 4, 5, 2, 40), 1, 1, 500, 500, 2, 2, sizing_mode=sizing_mode,
+    )
+    assert dimensions[2] == (48 if sizing_mode == "balanced" else 38)
+    options = {"draw_volume": False, "min_xy": 2, "min_z": 2, "scale_xy": 1, "scale_z": 1, "sizing_mode": sizing_mode}
+    if mode == "layered":
+        options["legend_text_spacing_offset"] = 0
+    image = visualkeras.show(model, mode=mode, options=options)
+    assert image.width > 0 and image.height > 0
+
+
 def test_layered_subclass_style_overrides_base_class():
     class StyledDense(tf.keras.layers.Dense):
         pass

@@ -380,6 +380,13 @@ def test_symbolic_axes_keep_their_positions_when_sizing(mode):
     assert lu.calculate_layer_dimensions(shape, **common) == expected
 
 
+@pytest.mark.parametrize("mode", ["accurate", "capped", "balanced", "logarithmic", "relative"])
+def test_high_rank_channel_axes_match_their_flattened_product(mode):
+    common = dict(scale_z=1, scale_xy=1, max_z=500, max_xy=500, min_z=2, min_xy=2, sizing_mode=mode)
+    flattened = lu.calculate_layer_dimensions((None, 4, 5, 80), **common)
+    assert lu.calculate_layer_dimensions((None, 4, 5, 2, 40), **common) == flattened
+
+
 def test_find_input_and_hierarchy_without_precomputed_graph():
     model, a, b, c = _build_chain_model()
     assert [layer.name for layer in lu.find_input_layers(model)] == ["a"]

@@ -645,7 +645,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
         else:
             x = smart_scale(dims[0], scale_xy, min_xy, sequence_cap)
             y = smart_scale(dims[1], scale_xy, min_xy, sequence_cap)
-            z = smart_scale(dims[2] if len(dims)>2 else 1, scale_z, min_z, channel_cap)
+            z = smart_scale(self_multiply(dims[2:]) if len(dims)>2 else 1, scale_z, min_z, channel_cap)
             return (int(x), int(y), int(z))
     
     # Logarithmic mode
@@ -660,7 +660,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
         else:
             x = log_scale(dims[0], scale_xy, min_xy, sequence_cap)
             y = log_scale(dims[1], scale_xy, min_xy, sequence_cap)
-            z = log_scale(dims[2] if len(dims)>2 else 1, scale_z, min_z, channel_cap)
+            z = log_scale(self_multiply(dims[2:]) if len(dims)>2 else 1, scale_z, min_z, channel_cap)
             return (int(x), int(y), int(z))
 
     # Relative mode - True proportional scaling where each layer's size is directly proportional to its dimension
