@@ -178,6 +178,22 @@ def test_fit_image_to_rect_modes():
     assert fill.size == (20, 20)
 
 
+@pytest.mark.parametrize("fit", ["fill", "cover", "contain", "match_aspect"])
+@pytest.mark.parametrize("source_mode", ["RGB", "RGBA"])
+def test_face_image_fitting_preserves_source_alpha(fit, source_mode):
+    source = Image.new(source_mode, (4, 2), (255, 0, 0) if source_mode == "RGB" else (255, 0, 0, 128))
+    fitted = _fit_image_to_rect(source, 8, 8, fit=fit, background=(0, 0, 0, 0))
+    assert fitted.mode == "RGBA"
+    assert fitted.getpixel((4, 4)) == ((255, 0, 0, 255) if source_mode == "RGB" else (255, 0, 0, 128))
+
+
+def test_contained_face_image_blends_over_opaque_background():
+    source = Image.new("RGBA", (4, 2), (255, 0, 0, 128))
+    fitted = _fit_image_to_rect(source, 8, 8, fit="contain", background=(255, 255, 255, 255))
+    assert fitted.getpixel((4, 4)) == (255, 127, 127, 255)
+    assert fitted.getpixel((0, 0)) == (255, 255, 255, 255)
+
+
 def test_apply_face_images_with_cache_and_fallback(tmp_path, monkeypatch):
     base = Image.new("RGBA", (80, 60), (255, 255, 255, 255))
     face_path = tmp_path / "face.png"

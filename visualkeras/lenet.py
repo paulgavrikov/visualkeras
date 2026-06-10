@@ -313,6 +313,7 @@ def _fit_image_to_rect(
     if iw <= 0 or ih <= 0:
         return Image.new("RGBA", (w, h), background)
 
+    img = img.convert("RGBA")
     if fit == "fill":
         return img.resize((w, h), resample=resample)
 
@@ -322,8 +323,9 @@ def _fit_image_to_rect(
         nh = max(1, int(round(ih * scale)))
         im2 = img.resize((nw, nh), resample=resample)
         canvas = Image.new("RGBA", (w, h), background)
-        canvas.paste(im2, ((w - nw) // 2, (h - nh) // 2), im2)
-        return canvas
+        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        overlay.paste(im2, ((w - nw) // 2, (h - nh) // 2))
+        return Image.alpha_composite(canvas, overlay)
 
     # cover (default)
     scale = max(float(w) / float(iw), float(h) / float(ih))

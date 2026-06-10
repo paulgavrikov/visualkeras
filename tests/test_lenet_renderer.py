@@ -58,6 +58,19 @@ def test_lenet_1d_convolution_and_pooling_use_spatial_maps(data_format):
     assert image.width > 0 and image.height > 0
 
 
+def test_lenet_contained_face_image_blends_once(tmp_path):
+    icon = tmp_path / "face.png"
+    Image.new("RGBA", (8, 4), (255, 0, 0, 128)).save(icon)
+    inputs = tf.keras.Input((8, 8, 1), name="face_input")
+    outputs = tf.keras.layers.Conv2D(1, 1, name="face_conv")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.lenet_view(
+        model, background_fill="white", draw_connections=False, draw_patches=False,
+        styles={"face_conv": {"face_image": str(icon), "face_image_fit": "contain", "fill": "white"}},
+    )
+    assert (255, 127, 127, 255) in image.getdata()
+
+
 def test_lenet_show_mode_with_options():
     model = _build_reference_model()
     options = LenetOptions(
