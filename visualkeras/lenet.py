@@ -615,8 +615,11 @@ def _canonicalize_shape(layer: Any, shape: Any) -> RenderShape:
     if rank == 2:
         # Treat as vector for most cases, but Conv1D/Pooling1D looks nicer as 1×L×C.
         layer_name = type(layer).__name__.lower()
-        if "conv1d" in layer_name or "pool1d" in layer_name:
-            w_dim, c_dim = (num(dims[0]), num(dims[1]))
+        if "conv1d" in layer_name or "pool1d" in layer_name or "pooling1d" in layer_name:
+            if data_format == "channels_first":
+                c_dim, w_dim = (num(dims[0]), num(dims[1]))
+            else:
+                w_dim, c_dim = (num(dims[0]), num(dims[1]))
             return RenderShape("spatial", 1, w_dim, c_dim, 1, w_dim, c_dim)
 
         units = 1

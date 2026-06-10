@@ -40,6 +40,24 @@ def test_lenet_view_smoke():
     assert image.height > 0
 
 
+@pytest.mark.parametrize("data_format", ["channels_first", "channels_last"])
+def test_lenet_1d_convolution_and_pooling_use_spatial_maps(data_format):
+    import visualkeras.lenet as lenet
+
+    shape = (3, 12) if data_format == "channels_first" else (12, 3)
+    inputs = tf.keras.Input(shape, name="signal")
+    convolution = tf.keras.layers.Conv1D(5, 3, data_format=data_format, name="conv_1d")
+    pool = tf.keras.layers.MaxPooling1D(2, data_format=data_format, name="pool_1d")
+    outputs = pool(convolution(inputs))
+    model = tf.keras.Model(inputs, outputs)
+    conv_shape = lenet._canonicalize_shape(convolution, convolution.output.shape)
+    pool_shape = lenet._canonicalize_shape(pool, pool.output.shape)
+    assert (conv_shape.w, conv_shape.c) == (10, 5)
+    assert (pool_shape.kind, pool_shape.w, pool_shape.c) == ("spatial", 5, 5)
+    image = visualkeras.lenet_view(model, seed=7)
+    assert image.width > 0 and image.height > 0
+
+
 def test_lenet_show_mode_with_options():
     model = _build_reference_model()
     options = LenetOptions(

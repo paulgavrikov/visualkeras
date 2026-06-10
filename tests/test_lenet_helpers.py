@@ -249,6 +249,18 @@ def test_canonicalize_shape_branches():
     assert rs_none.kind == "vector"
 
 
+@pytest.mark.parametrize("layer_name", ["Conv1D", "MaxPooling1D", "AveragePooling1D"])
+@pytest.mark.parametrize("data_format", ["channels_first", "channels_last"])
+def test_1d_spatial_layers_preserve_channel_order(layer_name, data_format):
+    layer_type = type(layer_name, (), {})
+    layer = layer_type()
+    layer.data_format = data_format
+    shape = (None, 3, 12) if data_format == "channels_first" else (None, 12, 3)
+    rendered = _canonicalize_shape(layer, shape)
+    assert rendered.kind == "spatial"
+    assert (rendered.h, rendered.w, rendered.c) == (1, 12, 3)
+
+
 def test_stack_connection_and_text_helpers():
     stack = FeatureMapStack(
         20,
