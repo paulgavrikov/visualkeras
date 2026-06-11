@@ -1301,7 +1301,7 @@ def layered_view(model,
                     w = x2 - x1
                     h = y2 - y1
                     resized = resize_image_to_fit(image, int(w), int(h), fit)
-                    img.paste(resized, (int(x1), int(y1)), resized)
+                    img.alpha_composite(resized, (int(x1), int(y1)))
                     
                 elif axis == 'y': # Top
                     # Reversed Top Face: TL(x1-de, y1-de), TR(x2-de, y1-de), BR(x2, y1), BL(x1, y1)
@@ -1359,7 +1359,7 @@ def layered_view(model,
                     w = x2 - x1
                     h = y2 - y1
                     resized = resize_image_to_fit(image, int(w), int(h), fit)
-                    img.paste(resized, (int(x1), int(y1)), resized)
+                    img.alpha_composite(resized, (int(x1), int(y1)))
                     
                 elif axis == 'y': # Top
                     # Normal Top Face: TL(x1, y1), TR(x2, y1), BR(x2+de, y1-de), BL(x1+de, y1-de)

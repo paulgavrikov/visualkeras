@@ -226,6 +226,56 @@ def test_transparent_logos_preserve_opaque_canvas_alpha(tmp_path, mode):
     assert image.getextrema()[3] == (255, 255)
 
 
+@pytest.mark.parametrize("circular_crop", [False, True])
+@pytest.mark.parametrize("transparent_background", [False, True])
+def test_graph_embedded_image_preserves_alpha_and_color(tmp_path, circular_crop, transparent_background):
+    icon = tmp_path / "node_image.png"
+    Image.new("RGBA", (8, 8), (255, 0, 0, 128)).save(icon)
+    inputs = tf.keras.Input((3,), name="image_input")
+    outputs = tf.keras.layers.Dense(2, name="image_dense")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    options = {
+        "node_size": 32, "background_fill": (0, 0, 0, 0) if transparent_background else "white",
+        "circular_crop": circular_crop,
+        "styles": {tf.keras.layers.Dense: {"image": str(icon), "image_fit": "fill"}},
+    }
+    image = visualkeras.show(model, mode="graph", options=options)
+    expected_pixel = (255, 0, 0, 128) if transparent_background else (255, 127, 127, 255)
+    assert expected_pixel in image.getdata()
+    if not transparent_background:
+        assert image.getextrema()[3] == (255, 255)
+
+
+@pytest.mark.parametrize("reversed_view", [False, True])
+def test_layered_front_image_preserves_opaque_canvas(tmp_path, reversed_view):
+    icon = tmp_path / "front_image.png"
+    Image.new("RGBA", (8, 8), (255, 0, 0, 128)).save(icon)
+    inputs = tf.keras.Input((8,), name="front_input")
+    outputs = tf.keras.layers.Dense(8, name="front_dense")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.show(model, mode="layered", options={
+        "draw_reversed": reversed_view, "background_fill": "white", "legend_text_spacing_offset": 0,
+        "styles": {"front_dense": {"image": str(icon), "image_axis": "z", "fill": "white"}},
+    })
+    assert (255, 127, 127, 255) in image.getdata()
+    assert image.getextrema()[3] == (255, 255)
+
+
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+def test_transparent_legend_icons_preserve_opaque_canvas(tmp_path, mode):
+    icon = tmp_path / "legend_icon.png"
+    Image.new("RGBA", (8, 8), (255, 0, 0, 128)).save(icon)
+    inputs = tf.keras.Input((8,), name="legend_input")
+    outputs = tf.keras.layers.Dense(8, name="legend_dense")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    options = {"draw_volume": False, "background_fill": "white", "logos_legend": True,
+               "logo_groups": [{"name": "Icon", "file": str(icon), "layers": ["legend_dense"]}]}
+    if mode == "layered":
+        options["legend_text_spacing_offset"] = 0
+    image = visualkeras.show(model, mode=mode, options=options)
+    assert image.getextrema()[3] == (255, 255)
+
+
 def test_graph_view_advanced_paths(tmp_path):
     model = _build_dense_model()
     icon_path = tmp_path / "icon.png"

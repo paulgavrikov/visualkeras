@@ -1,6 +1,7 @@
 from typing import Any, Dict, Mapping, Optional, Union, List, Sequence, Tuple
 import aggdraw
 from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageChops as _ImageChops
 from math import ceil, prod as _shape_product
 from operator import index as _dimension_index
 import warnings
@@ -660,14 +661,9 @@ def graph_view(model, to_file: str = None,
                     mask = mask.resize((int(w), int(h)), Image.LANCZOS)
                     
                     # Apply mask to the resized image
-                    if resized.mode == 'RGBA':
-                        cropped = Image.new("RGBA", (int(w), int(h)), (0, 0, 0, 0))
-                        cropped.paste(resized, (0, 0), mask=mask)
-                        resized = cropped
-                    else:
-                        resized.putalpha(mask)
+                    resized.putalpha(_ImageChops.multiply(resized.getchannel("A"), mask))
 
-                img.paste(resized, (int(node.x1), int(node.y1)), resized)
+                img.alpha_composite(resized, (int(node.x1), int(node.y1)))
                 draw = aggdraw.Draw(img)
                 
                 # Draw the node outline on top (transparent fill)

@@ -940,7 +940,7 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
         # Paste logo
         # Center vertically
         logo_y = (patch_h - icon_size) // 2
-        patch.paste(logo_img, (0, logo_y), logo_img)
+        patch.alpha_composite(logo_img, (0, logo_y))
         
         # Draw text
         text_x = icon_size + spacing
