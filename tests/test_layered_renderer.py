@@ -204,3 +204,12 @@ def test_layered_renderer_variants(metric_key, renderer):
 
     actual = _downsample_metrics(image)
     _assert_metrics_close(actual, expected)
+
+
+def test_layered_structured_output_caption_matches_primary_shape():
+    inputs = tf.keras.Input((8,), name="split_input")
+    split = tf.keras.layers.Lambda(lambda x: (x[:, :6], x[:, 6:]), name="split")
+    model = tf.keras.Model(inputs, split(inputs))
+    assert visualkeras.LAYERED_TEXT_CALLABLES["name_shape"](1, split) == ("split\n6", False)
+    image = visualkeras.layered_view(model, text_callable="name_shape", draw_volume=False)
+    assert image.width > 0 and image.height > 0

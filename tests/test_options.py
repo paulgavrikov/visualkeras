@@ -377,3 +377,15 @@ def test_additional_shape_formatting_edge_cases():
 )
 def test_shape_labels_preserve_dynamic_axes_and_identify_scalars(shape, expected):
     assert options_mod._format_shape(shape) == expected
+
+
+@pytest.mark.parametrize("container", [list, tuple, dict])
+def test_shape_caption_discovers_structured_tensor_outputs(container):
+    from types import SimpleNamespace
+    from visualkeras.options import LAYERED_TEXT_CALLABLES
+
+    outputs = [SimpleNamespace(shape=(None, 6)), SimpleNamespace(shape=(None, 2))]
+    output = {"first": outputs[0], "second": outputs[1]} if container is dict else container(outputs)
+    layer = SimpleNamespace(output=output, name="split")
+    assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == ("6", False)
+    assert LAYERED_TEXT_CALLABLES["name_shape"](0, layer) == ("split\n6", False)

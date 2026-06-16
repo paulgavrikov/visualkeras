@@ -69,17 +69,9 @@ def _safe_shape(layer: Any) -> Any:
     shape = getattr(layer, "output_shape", None)
     if shape is not None:
         return shape
-    output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
-    if tensor_shape is not None:
-        try:
-            return tuple(tensor_shape.as_list())  # TF TensorShape
-        except Exception:  # noqa: BLE001
-            try:
-                return tuple(tensor_shape)
-            except Exception:  # noqa: BLE001
-                return tensor_shape
-    return None
+    from .layer_utils import _shape_from_tensor_output
+
+    return _shape_from_tensor_output(getattr(layer, "output", None))
 
 
 def _format_shape(shape: Any) -> str:
