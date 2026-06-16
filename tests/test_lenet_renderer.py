@@ -87,3 +87,15 @@ def test_lenet_show_mode_with_options():
     assert isinstance(image, Image.Image)
     assert image.width > 0
     assert image.height > 0
+
+
+def test_lenet_fixed_batch_scalar_has_one_output_unit():
+    import visualkeras.lenet as lenet
+
+    inputs = tf.keras.Input((3,), batch_size=4, name="scalar_input")
+    scalar = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=1), name="scalar")
+    model = tf.keras.Model(inputs, scalar(inputs))
+    shape = lenet._canonicalize_shape(scalar, scalar.output.shape)
+    assert shape.c == 1
+    image = visualkeras.lenet_view(model, seed=7)
+    assert image.width > 0 and image.height > 0

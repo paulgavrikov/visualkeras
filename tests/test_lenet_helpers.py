@@ -452,3 +452,9 @@ def test_lenet_view_face_image_style_and_text_font_fallback(tmp_path, monkeypatc
         styles={"dense_1": {"face_image": str(icon), "face_image_fit": "match_aspect"}},
     )
     assert isinstance(img, Image.Image)
+
+
+@pytest.mark.parametrize("shape", [(), (None,), (4,)])
+def test_scalar_shape_has_one_unit_regardless_of_batch_size(shape):
+    result = _canonicalize_shape(SimpleNamespace(), shape)
+    assert (result.kind, result.c, result.c_dim) == ("vector", 1, 1)

@@ -594,7 +594,7 @@ def _canonicalize_shape(layer: Any, shape: Any) -> RenderShape:
         return RenderShape("vector", 1, 1, 1, 1, 1, 1)
 
     # Drop batch dim if present.
-    dims = list(shape[1:]) if len(shape) > 1 else list(shape)
+    dims = list(shape[1:])
     rank = len(dims)
 
     data_format = getattr(layer, "data_format", None)
