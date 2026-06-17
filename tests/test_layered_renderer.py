@@ -211,5 +211,5 @@ def test_layered_structured_output_caption_matches_primary_shape():
     split = tf.keras.layers.Lambda(lambda x: (x[:, :6], x[:, 6:]), name="split")
     model = tf.keras.Model(inputs, split(inputs))
     assert visualkeras.LAYERED_TEXT_CALLABLES["name_shape"](1, split) == ("split\n6", False)
-    image = visualkeras.layered_view(model, text_callable="name_shape", draw_volume=False)
+    image = visualkeras.layered_view(model, text_callable="name_shape", draw_volume=False, spacing=40)
     assert image.width > 0 and image.height > 0

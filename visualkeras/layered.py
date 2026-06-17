@@ -56,7 +56,7 @@ def _resolve_layer_output_shape(layer) -> Any:
 
 
 def _shape_to_tuple(shape: Any) -> Any:
-    if shape is None:
+    if shape is None or (hasattr(shape, "rank") and shape.rank is None):
         return None
     if isinstance(shape, tuple):
         return shape

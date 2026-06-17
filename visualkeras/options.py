@@ -75,7 +75,7 @@ def _safe_shape(layer: Any) -> Any:
 
 
 def _format_shape(shape: Any) -> str:
-    if shape is None:
+    if shape is None or (hasattr(shape, "rank") and shape.rank is None):
         return "?"
     # Multi-output shapes: pick first (best effort).
     if isinstance(shape, (list, tuple)) and shape and isinstance(shape[0], (list, tuple)):

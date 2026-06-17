@@ -23,3 +23,30 @@ def test_output_shape_discovery_accepts_tensor_structures(module, container):
 def test_computed_output_shape_precedes_input_shape(module):
     layer = SimpleNamespace(input_shape=(None, 8), compute_output_shape=lambda shape: (shape[0], 2))
     assert module._resolve_layer_output_shape(layer) == (None, 2)
+
+
+@pytest.mark.parametrize("module", [layered, functional, lenet])
+def test_unknown_rank_shape_resolves_without_iteration(module):
+    tf = pytest.importorskip("tensorflow")
+    assert module._shape_to_tuple(tf.TensorShape(None)) is None
+
+
+def test_unknown_rank_caption_is_an_unknown_shape():
+    tf = pytest.importorskip("tensorflow")
+    from visualkeras.options import LAYERED_TEXT_CALLABLES
+
+    layer = SimpleNamespace(output_shape=tf.TensorShape(None))
+    assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == ("?", False)
+
+
+@pytest.mark.parametrize("mode", ["layered", "functional", "lenet"])
+def test_unknown_rank_layer_metadata_renders_fallback(mode):
+    tf = pytest.importorskip("tensorflow")
+    import visualkeras
+
+    inputs = tf.keras.Input((3,), name="unknown_input")
+    dense = tf.keras.layers.Dense(2, name="unknown_rank")
+    model = tf.keras.Model(inputs, dense(inputs))
+    dense.output_shape = tf.TensorShape(None)
+    image = visualkeras.show(model, mode=mode)
+    assert image.width > 0 and image.height > 0
