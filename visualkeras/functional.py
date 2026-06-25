@@ -2082,9 +2082,9 @@ def _draw_box_text_in_rect(
             if f2 is None:
                 break
             wrapped2, tw2, th2, ok2 = measure_fit(f2)
+            font = f2
+            wrapped, tw, th, ok = wrapped2, tw2, th2, ok2
             if ok2:
-                font = f2
-                wrapped, tw, th, ok = wrapped2, tw2, th2, ok2
                 break
 
     txt_img = _render_text_image_bbox(wrapped, font, color, spacing, margin=2)

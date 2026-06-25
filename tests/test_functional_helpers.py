@@ -1335,3 +1335,24 @@ def test_get_logo_nodes_empty_and_name_type_maps():
     assert functional._get_logo_nodes(graph_obj, {"layers": []}) == []
     names = functional._get_logo_nodes(graph_obj, {"layers": ["a", "missing", A, int]})
     assert na in names
+
+
+@pytest.mark.parametrize("font_size", [18, 26])
+def test_box_text_keeps_smallest_font_when_no_size_fits(font_size):
+    image = Image.new("RGBA", (64, 32), "white")
+    expected = Image.new("RGBA", image.size, "white")
+    style = {
+        "box_text_font": "DejaVuSans.ttf", "box_text_font_size": font_size,
+        "box_text_min_font_size": 8, "box_text_padding": 1,
+        "box_text_wrap": "none", "box_text_rotation": 0,
+    }
+    functional._draw_box_text_in_rect(
+        image, (16, 6, 48, 26), "UNBREAKABLE_LONG_LABEL", style=style,
+        fallback_font=None, fallback_color="black", fallback_spacing=2,
+    )
+    functional._draw_box_text_in_rect(
+        expected, (16, 6, 48, 26), "UNBREAKABLE_LONG_LABEL",
+        style={**style, "box_text_font_size": 8, "box_text_autoshrink": False},
+        fallback_font=None, fallback_color="black", fallback_spacing=2,
+    )
+    assert image.tobytes() == expected.tobytes()
