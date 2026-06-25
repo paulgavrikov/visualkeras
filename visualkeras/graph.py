@@ -809,7 +809,7 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
             return ImageFont.truetype(font_src, font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, ImageFont.ImageFont):
+    elif isinstance(font_src, (ImageFont.ImageFont, ImageFont.FreeTypeFont)):
         return font_src
     else:
         return ImageFont.load_default()

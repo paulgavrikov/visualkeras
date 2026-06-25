@@ -208,6 +208,10 @@ def _draw_layered_group_captions(img, boxes, groups, draw_reversed):
         center_x = (min_x + max_x) / 2
         text_x = center_x - text_w / 2
         text_y = max_y + gap
+        if hasattr(font, "getbbox"):
+            left, top, _, _ = font.getbbox(caption)
+            text_x -= left
+            text_y -= top
         
         draw.text((text_x, text_y), caption, fill=color, font=font)
 
@@ -227,7 +231,7 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
             return ImageFont.truetype(font_src, font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, ImageFont.ImageFont):
+    elif isinstance(font_src, (ImageFont.ImageFont, ImageFont.FreeTypeFont)):
         return font_src
     else:
         return ImageFont.load_default()

@@ -417,3 +417,52 @@ def test_functional_view_advanced_paths(tmp_path):
     assert isinstance(img, Image.Image)
     assert img.width > 0 and img.height > 0
     assert out_path.exists() and out_path.stat().st_size > 0
+
+
+@pytest.mark.parametrize("mode", ["layered", "graph", "functional"])
+def test_group_caption_accepts_freetype_font_objects(mode):
+    from PIL import ImageFont
+
+    inputs = tf.keras.Input((4,), name="font_input")
+    outputs = tf.keras.layers.Dense(3, name="font_output")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    group = {"name": "Block", "layers": ["font_output"], "padding": 4, "font_size": 24}
+    options = {"padding": 60, "layered_groups": [{**group, "font": "DejaVuSans.ttf"}]}
+    if mode == "layered":
+        options["legend_text_spacing_offset"] = 0
+    reference = visualkeras.show(model, mode=mode, options=options)
+    options["layered_groups"] = [{**group, "font": font}]
+    image = visualkeras.show(model, mode=mode, options=options)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["layered", "graph", "functional"])
+def test_group_font_resolver_preserves_freetype_object(mode):
+    from importlib import import_module
+    from PIL import ImageFont
+
+    font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    module = import_module("visualkeras." + mode)
+    assert module._get_font({"font": font}) is font
+
+
+@pytest.mark.parametrize("draw_reversed", [False, True])
+@pytest.mark.parametrize("font_size", [24, 36])
+def test_layered_group_caption_preserves_full_glyph_height(draw_reversed, font_size):
+    from PIL import ImageFont
+
+    inputs = tf.keras.Input((4,), name="caption_input")
+    outputs = tf.keras.layers.Dense(3, name="caption_output")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    font = ImageFont.truetype("DejaVuSans.ttf", font_size)
+    image = visualkeras.layered_view(
+        model, draw_reversed=draw_reversed, legend_text_spacing_offset=0,
+        layered_groups=[{"name": "Blockgy", "layers": ["caption_output"],
+                         "font": font, "font_color": "magenta"}],
+    )
+    rows = [index // image.width for index, (r, g, b, a) in enumerate(image.getdata())
+            if r == 255 and b == 255 and g < 255]
+    bounds = font.getbbox("Blockgy")
+    assert max(rows) - min(rows) + 1 == bounds[3] - bounds[1]
