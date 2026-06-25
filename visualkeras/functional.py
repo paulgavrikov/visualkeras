@@ -2048,7 +2048,8 @@ def _draw_box_text_in_rect(
     # For 90/270, swap fit constraints pre-rotation
     pre_w, pre_h = (avail_h, avail_w) if rot in (90, 270) else (avail_w, avail_h)
 
-    spacing = int(style.get("box_text_line_spacing", fallback_spacing) or fallback_spacing)
+    spacing = style.get("box_text_line_spacing", fallback_spacing)
+    spacing = int(fallback_spacing if spacing is None else spacing)
     color = style.get("box_text_color", fallback_color)
 
     wrap_mode = str(style.get("box_text_wrap", "words") or "words").lower()

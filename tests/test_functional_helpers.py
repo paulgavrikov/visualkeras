@@ -1356,3 +1356,21 @@ def test_box_text_keeps_smallest_font_when_no_size_fits(font_size):
         fallback_font=None, fallback_color="black", fallback_spacing=2,
     )
     assert image.tobytes() == expected.tobytes()
+
+
+def test_box_text_zero_line_spacing_overrides_global_spacing(monkeypatch):
+    image = Image.new("RGBA", (80, 64), "white")
+    seen = []
+    render_text = functional._render_text_image_bbox
+
+    def record_text(text, font, color, spacing, **kwargs):
+        seen.append(spacing)
+        return render_text(text, font, color, spacing, **kwargs)
+
+    monkeypatch.setattr(functional, "_render_text_image_bbox", record_text)
+    functional._draw_box_text_in_rect(
+        image, (0, 0, 80, 64), "First\nSecond",
+        style={"box_text_line_spacing": 0, "box_text_rotation": 0, "box_text_wrap": "none"},
+        fallback_font=None, fallback_color="black", fallback_spacing=9,
+    )
+    assert seen == [0]
