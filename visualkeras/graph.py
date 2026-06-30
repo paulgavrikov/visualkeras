@@ -410,14 +410,15 @@ def graph_view(model, to_file: str = None,
         should_add_dummy_outputs = not all(layer in last_level_layers for layer in layers_producing_outputs)
     
     if should_add_dummy_outputs:
-        # Normalize output_shape to always be a list of tuples
-        if isinstance(model.output_shape, tuple):
-            # Single output model: output_shape is a tuple, convert to list of tuples
-            output_shapes = [model.output_shape]
-        else:
-            # Multi-output model: output_shape is already a list of tuples
-            output_shapes = model.output_shape
-        
+        output_shapes = model.output_shape
+        structured = (
+            isinstance(output_shapes, (list, tuple)) and output_shapes
+            and (isinstance(output_shapes[0], (list, tuple))
+                 or hasattr(output_shapes[0], "as_list"))
+        )
+        if not structured:
+            output_shapes = [output_shapes]
+
         model_layers.append([
             _DummyLayer(
                 output_names[i],

@@ -215,3 +215,26 @@ def test_graph_keeps_early_outputs_from_a_structured_layer():
     for color, count in [((255, 0, 0), 3), ((0, 0, 255), 2)]:
         column = [image.getpixel((x, y))[:3] == color for y in range(image.height)]
         assert sum(value and (i == 0 or not column[i - 1]) for i, value in enumerate(column)) == count
+
+
+@pytest.mark.parametrize("shape_container", [tuple, list])
+def test_graph_accepts_structured_output_shape_metadata(shape_container):
+    class ShapeAdapter:
+        def __init__(self, model):
+            self.layers = model.layers
+            self.outputs = model.outputs
+            self.output_names = model.output_names
+            self.output_shape = shape_container(model.output_shape)
+            self._model = model
+
+        def get_layer(self, name):
+            return self._model.get_layer(name=name)
+
+    inputs = tf.keras.Input((3,), name="shape_input")
+    early = tf.keras.layers.Dense(3, name="shape_early")(inputs)
+    late = tf.keras.layers.Dense(2, name="shape_late")(early)
+    model = tf.keras.Model(inputs, [early, late])
+    reference = visualkeras.graph_view(model, inout_as_tensor=False)
+    image = visualkeras.graph_view(ShapeAdapter(model), inout_as_tensor=False)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
