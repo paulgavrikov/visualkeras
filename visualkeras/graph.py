@@ -396,13 +396,16 @@ def graph_view(model, to_file: str = None,
         # Check if all output-producing layers are in the last hierarchy level
         last_level_layers = model_layers[-1] if model_layers else []
         layers_producing_outputs = []
-        
         for output_tensor in model.outputs:
+            history = getattr(output_tensor, "_keras_history", None)
+            if history is not None:
+                layers_producing_outputs.append(history[0])
+                continue
             for layer in model.layers:
-                if hasattr(layer, 'output') and layer.output is output_tensor:
+                if getattr(layer, "output", None) is output_tensor:
                     layers_producing_outputs.append(layer)
                     break
-        
+
         # Only add dummy outputs if some output-producing layers are NOT in the last level
         should_add_dummy_outputs = not all(layer in last_level_layers for layer in layers_producing_outputs)
     

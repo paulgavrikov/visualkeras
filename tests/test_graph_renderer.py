@@ -196,3 +196,22 @@ def test_graph_renderer_variants(metric_key, renderer):
 
     actual = _downsample_metrics(image)
     _assert_metrics_close(actual, expected)
+
+
+def test_graph_keeps_early_outputs_from_a_structured_layer():
+    inputs = tf.keras.Input((8,), name="split_input")
+    early, branch = tf.keras.layers.Lambda(
+        lambda x: (x[:, :3], x[:, 3:]), name="split",
+    )(inputs)
+    late = tf.keras.layers.Dense(2, name="late")(branch)
+    model = tf.keras.Model(inputs, [early, late])
+    image = visualkeras.graph_view(
+        model, inout_as_tensor=False, ellipsize_after=0, node_size=12,
+        node_spacing=5, layer_spacing=30, padding=8,
+        styles={"split": {"fill": "red", "outline": "red"},
+                "late": {"fill": "blue", "outline": "blue"}},
+    )
+    x = image.width - 8 - 6
+    for color, count in [((255, 0, 0), 3), ((0, 0, 255), 2)]:
+        column = [image.getpixel((x, y))[:3] == color for y in range(image.height)]
+        assert sum(value and (i == 0 or not column[i - 1]) for i, value in enumerate(column)) == count
