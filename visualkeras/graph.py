@@ -12,10 +12,11 @@ from .options import _track_explicit_arguments, _is_explicit, _validate_option_k
 
 class _DummyLayer:
 
-    def __init__(self, name, units=None):
+    def __init__(self, name, units=None, output_shape=None):
         if units:
             self.units = units
         self.name = name
+        self.output_shape = output_shape
 
 
 def _input_layer_neuron_count(layer):
@@ -421,8 +422,7 @@ def graph_view(model, to_file: str = None,
 
         model_layers.append([
             _DummyLayer(
-                output_names[i],
-                None if inout_as_tensor else _tensor_neuron_count(output_shapes[i], "output")
+                output_names[i], output_shape=output_shapes[i],
             )
             for i in range(len(model.outputs))
         ])
@@ -489,6 +489,9 @@ def graph_view(model, to_file: str = None,
                 elif hasattr(layer, 'filters'):
                     is_box = False
                     units = layer.filters
+                elif isinstance(layer, _DummyLayer) and not inout_as_tensor:
+                    is_box = False
+                    units = _tensor_neuron_count(layer.output_shape, "output")
                 elif is_internal_input(layer) and not inout_as_tensor:
                     is_box = False
                     units = _input_layer_neuron_count(layer)

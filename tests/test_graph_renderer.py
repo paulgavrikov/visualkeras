@@ -238,3 +238,30 @@ def test_graph_accepts_structured_output_shape_metadata(shape_container):
     image = visualkeras.graph_view(ShapeAdapter(model), inout_as_tensor=False)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("per_layer", [False, True])
+def test_graph_symbolic_outputs_can_be_boxes(per_layer):
+    inputs = tf.keras.Input((None, 3), name="sequence_input")
+    early = tf.keras.layers.Activation("linear", name="sequence")(inputs)
+    pooled = tf.keras.layers.GlobalAveragePooling1D(name="pool")(early)
+    late = tf.keras.layers.Dense(2, name="summary")(pooled)
+    model = tf.keras.Model(inputs, [early, late])
+    styles = {name: {"show_neurons": False} for name in ["sequence_input", "sequence"]} if per_layer else {}
+    image = visualkeras.graph_view(
+        model, inout_as_tensor=False, show_neurons=per_layer, styles=styles,
+        node_size=20, layer_spacing=40,
+    )
+    assert image.width > 0 and image.height > 0
+
+
+def test_graph_explicit_symbolic_output_neurons_still_require_dimensions():
+    inputs = tf.keras.Input((None, 3), name="sequence_input")
+    early = tf.keras.layers.Activation("linear", name="sequence")(inputs)
+    late = tf.keras.layers.Dense(2, name="summary")(tf.keras.layers.GlobalAveragePooling1D()(early))
+    model = tf.keras.Model(inputs, [early, late])
+    with pytest.raises(RuntimeError, match="not supported output shape"):
+        visualkeras.graph_view(
+            model, inout_as_tensor=False, show_neurons=False,
+            styles={"sequence": {"show_neurons": True}},
+        )
