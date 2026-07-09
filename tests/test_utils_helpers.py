@@ -318,3 +318,16 @@ def test_empty_linear_layout_is_a_savable_padded_canvas(tmp_path, horizontal, pa
         saved_size = reopened.size
     del reopened
     assert saved_size == image.size
+
+
+@pytest.mark.parametrize("quad", [
+    [(1, 1), (6, 6), (11, 11), (6, 6)],
+    [(1, 1), (11, 11), (11, 11), (1, 1)],
+])
+def test_degenerate_affine_face_does_not_paint_a_rectangle(quad):
+    image = Image.new("RGBA", (16, 16), "white")
+    source = Image.new("RGBA", (8, 8), "red")
+    before = image.tobytes()
+    utils.apply_affine_transform(image, source, quad, "fill")
+    assert image.tobytes() == before
+    assert source.getpixel((0, 0)) == (255, 0, 0, 255)

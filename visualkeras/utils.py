@@ -722,8 +722,12 @@ def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, qua
     if w <= 0 or h <= 0: return
 
     # Let's use the side lengths.
-    side_w = np.hypot(quad[1][0]-quad[0][0], quad[1][1]-quad[0][1])
-    side_h = np.hypot(quad[3][0]-quad[0][0], quad[3][1]-quad[0][1])
+    edge_w = np.subtract(quad[1], quad[0])
+    edge_h = np.subtract(quad[3], quad[0])
+    if np.isclose(edge_w[0] * edge_h[1] - edge_w[1] * edge_h[0], 0):
+        return
+    side_w = np.hypot(*edge_w)
+    side_h = np.hypot(*edge_h)
     
     # Resize source image to match the approximate dimensions of the target face
     resized_source = resize_image_to_fit(source_img.convert("RGBA"), int(side_w), int(side_h), fit_mode)
