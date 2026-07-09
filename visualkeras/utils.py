@@ -474,8 +474,8 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
         Composite image containing the arranged inputs.
     """
     coords = list()
-    width = 0
-    height = 0
+    width = max(1, 2 * padding)
+    height = max(1, 2 * padding)
 
     x, y = padding, padding
 

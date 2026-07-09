@@ -304,3 +304,17 @@ def test_draw_node_logo_and_legend(tmp_path):
         font_color="black",
     )
     assert no_legend == base
+
+
+@pytest.mark.parametrize("horizontal", [False, True])
+@pytest.mark.parametrize("padding", [0, 3])
+def test_empty_linear_layout_is_a_savable_padded_canvas(tmp_path, horizontal, padding):
+    image = utils.linear_layout([], horizontal=horizontal, padding=padding, background_fill="navy")
+    path = tmp_path / "empty.png"
+    image.save(path)
+    assert image.size == (max(1, 2 * padding), max(1, 2 * padding))
+    assert image.getpixel((0, 0)) == (0, 0, 128, 255)
+    with Image.open(path) as reopened:
+        saved_size = reopened.size
+    del reopened
+    assert saved_size == image.size
