@@ -357,9 +357,9 @@ class ColorWheel:
 
 def fade_color(color: tuple, fade_amount: int) -> tuple:
     """Return ``color`` darkened by ``fade_amount`` while preserving alpha."""
-    r = max(0, color[0] - fade_amount)
-    g = max(0, color[1] - fade_amount)
-    b = max(0, color[2] - fade_amount)
+    r = min(255, max(0, color[0] - fade_amount))
+    g = min(255, max(0, color[1] - fade_amount))
+    b = min(255, max(0, color[2] - fade_amount))
     return r, g, b, color[3]
 
 

@@ -331,3 +331,26 @@ def test_degenerate_affine_face_does_not_paint_a_rectangle(quad):
     utils.apply_affine_transform(image, source, quad, "fill")
     assert image.tobytes() == before
     assert source.getpixel((0, 0)) == (255, 0, 0, 255)
+
+
+@pytest.mark.parametrize("amount, expected", [
+    (-30, (255, 255, 40, 128)), (300, (0, 0, 0, 128)), (0, (250, 240, 10, 128)),
+])
+def test_fade_color_saturates_both_ends_and_preserves_alpha(amount, expected):
+    assert utils.fade_color((250, 240, 10, 128), amount) == expected
+
+
+def test_brightened_box_faces_saturate_instead_of_wrapping_channels():
+    import aggdraw
+
+    image = Image.new("RGBA", (40, 40), "white")
+    box = utils.Box()
+    box.x1, box.y1, box.x2, box.y2, box.de = 10, 15, 30, 35, 5
+    box.fill = (250, 240, 10, 255)
+    box.outline = "black"
+    box.shade = -30
+    draw = aggdraw.Draw(image)
+    box.draw(draw)
+    draw.flush()
+    assert (255, 255, 40, 255) in image.getdata()
+    assert (255, 255, 70, 255) in image.getdata()
