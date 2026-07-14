@@ -1386,3 +1386,27 @@ def test_box_wrapping_preserves_explicit_paragraphs(mode, text, max_lines, expec
     draw = ImageDraw.Draw(Image.new("RGBA", (200, 80), "white"))
     font = ImageFont.load_default()
     assert functional._wrap_text_to_width(draw, text, font, 200, mode, max_lines) == expected
+
+
+@pytest.mark.parametrize("in_memory", [False, True])
+@pytest.mark.parametrize("as_fallback", [False, True])
+def test_box_autoshrink_accepts_font_objects(in_memory, as_fallback):
+    font = ImageFont.load_default(size=26) if in_memory else ImageFont.truetype("DejaVuSans.ttf", 26)
+    image = Image.new("RGBA", (360, 80), "white")
+    reference = Image.new("RGBA", image.size, "white")
+    style = {"box_text_rotation": 0, "box_text_padding": 0, "box_text_wrap": "none",
+             "box_text_min_font_size": 8}
+    if not as_fallback:
+        style["box_text_font"] = font
+    functional._draw_box_text_in_rect(
+        image, (170, 24, 190, 56), "THIS_UNBREAKABLE_LABEL_NEEDS_MINIMUM",
+        style=style, fallback_font=font if as_fallback else None,
+        fallback_color="black", fallback_spacing=2,
+    )
+    functional._draw_box_text_in_rect(
+        reference, (170, 24, 190, 56), "THIS_UNBREAKABLE_LABEL_NEEDS_MINIMUM",
+        style={**style, "box_text_font": font.font_variant(size=8), "box_text_autoshrink": False},
+        fallback_font=None, fallback_color="black", fallback_spacing=2,
+    )
+    assert image.tobytes() == reference.tobytes()
+    assert font.size == 26

@@ -101,3 +101,24 @@ def test_functional_box_labels_preserve_requested_line_breaks():
     reference = visualkeras.functional_view(model, **settings)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+def test_functional_supplied_box_font_autoshrinks_like_font_path():
+    from PIL import ImageFont
+
+    inputs = tf.keras.Input((4,), name="font_input")
+    outputs = tf.keras.layers.Dense(3, name="font_output")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    font = ImageFont.truetype("DejaVuSans.ttf", 26)
+    style = {"box_size": (100, 50), "box_text": "Classify", "box_text_rotation": 0,
+             "box_text_wrap": "none", "box_text_font_size": 26, "box_text_font": font}
+    image = visualkeras.functional_view(
+        model, simple_text_visualization=True, simple_text_label_mode="inside",
+        styles={"font_output": style},
+    )
+    reference = visualkeras.functional_view(
+        model, simple_text_visualization=True, simple_text_label_mode="inside",
+        styles={"font_output": {**style, "box_text_font": "DejaVuSans.ttf"}},
+    )
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()

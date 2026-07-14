@@ -2077,11 +2077,18 @@ def _draw_box_text_in_rect(
         return wrapped, tw, th, (tw <= pre_w and th <= pre_h)
 
     wrapped, tw, th, ok = measure_fit(font)
-    if autoshrink and not ok and font_path:
-        cur = size0
+    font_variant = getattr(font, "font_variant", None)
+    if autoshrink and not ok and (font_path or callable(font_variant)):
+        cur = size0 if font_path else getattr(font, "size", size0)
         while cur > min_size:
             cur -= 1
-            f2 = _try_load_font(font_path, cur)
+            if font_path:
+                f2 = _try_load_font(font_path, cur)
+            else:
+                try:
+                    f2 = font_variant(size=cur)
+                except Exception:
+                    break
             if f2 is None:
                 break
             wrapped2, tw2, th2, ok2 = measure_fit(f2)
