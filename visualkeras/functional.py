@@ -1974,21 +1974,23 @@ def _wrap_text_to_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.Im
         return text
     if mode not in {"words", "chars"}:
         mode = "words"
-    tokens = text.split() if mode == "words" else list(text)
     lines = []
-    cur = ""
-    for tok in tokens:
-        cand = tok if not cur else (cur + (" " if mode == "words" else "") + tok)
-        l, t, r, b = _multiline_bbox(draw, cand, font, 0)
-        if (r - l) <= max_width or not cur:
-            cur = cand
-        else:
-            lines.append(cur)
-            cur = tok
-            if max_lines is not None and len(lines) >= max_lines:
-                break
-    if cur and (max_lines is None or len(lines) < max_lines):
+    for paragraph in text.split("\n"):
+        tokens = paragraph.split() if mode == "words" else list(paragraph)
+        cur = ""
+        for tok in tokens:
+            cand = tok if not cur else (cur + (" " if mode == "words" else "") + tok)
+            l, t, r, b = _multiline_bbox(draw, cand, font, 0)
+            if (r - l) <= max_width or not cur:
+                cur = cand
+            else:
+                lines.append(cur)
+                cur = tok
+                if max_lines is not None and len(lines) >= max_lines:
+                    return "\n".join(lines[:max_lines])
         lines.append(cur)
+        if max_lines is not None and len(lines) >= max_lines:
+            break
     if max_lines is not None:
         lines = lines[:max_lines]
     return "\n".join(lines)

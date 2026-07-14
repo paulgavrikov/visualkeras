@@ -1374,3 +1374,15 @@ def test_box_text_zero_line_spacing_overrides_global_spacing(monkeypatch):
         fallback_font=None, fallback_color="black", fallback_spacing=9,
     )
     assert seen == [0]
+
+
+@pytest.mark.parametrize("mode", ["words", "chars", "unknown"])
+@pytest.mark.parametrize("text, max_lines, expected", [
+    ("First\nSecond", None, "First\nSecond"),
+    ("First\n\nSecond", None, "First\n\nSecond"),
+    ("First\n\nSecond", 2, "First\n"),
+])
+def test_box_wrapping_preserves_explicit_paragraphs(mode, text, max_lines, expected):
+    draw = ImageDraw.Draw(Image.new("RGBA", (200, 80), "white"))
+    font = ImageFont.load_default()
+    assert functional._wrap_text_to_width(draw, text, font, 200, mode, max_lines) == expected

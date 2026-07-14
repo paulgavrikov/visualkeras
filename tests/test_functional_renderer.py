@@ -83,3 +83,21 @@ def test_functional_captions_remain_under_their_own_nodes(monkeypatch, via_show)
         left, right = rectangles[name]
         assert left - 1 <= captions[name] <= right + 1
     assert image.width > 0 and image.height > 0
+
+
+def test_functional_box_labels_preserve_requested_line_breaks():
+    inputs = tf.keras.Input((4,), name="line_input")
+    outputs = tf.keras.layers.Dense(3, name="line_output")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    settings = {
+        "simple_text_visualization": True, "simple_text_label_mode": "inside",
+        "styles": {"line_output": {
+            "box_size": (140, 80), "box_text": "First\nSecond",
+            "box_text_rotation": 0, "box_text_padding": 0, "box_text_autoshrink": False,
+        }},
+    }
+    image = visualkeras.functional_view(model, **settings)
+    settings["styles"]["line_output"]["box_text_wrap"] = "none"
+    reference = visualkeras.functional_view(model, **settings)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
