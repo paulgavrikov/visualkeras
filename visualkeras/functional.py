@@ -2922,6 +2922,11 @@ def _draw_group_captions(
         text_x = center_x - text_w / 2
         text_y = box_max_y + gap
         
+        if hasattr(font, "getbbox"):
+            left, top, _, _ = font.getbbox(caption)
+            text_x -= left
+            text_y -= top
+
         draw.text((text_x, text_y), caption, fill=color, font=font)
 
 

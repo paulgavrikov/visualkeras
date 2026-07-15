@@ -91,7 +91,7 @@ def test_functional_box_labels_preserve_requested_line_breaks():
     model = tf.keras.Model(inputs, outputs)
     settings = {
         "simple_text_visualization": True, "simple_text_label_mode": "inside",
-        "styles": {"line_output": {
+        "styles": {"line_input": {"box_size": (80, 80)}, "line_output": {
             "box_size": (140, 80), "box_text": "First\nSecond",
             "box_text_rotation": 0, "box_text_padding": 0, "box_text_autoshrink": False,
         }},
@@ -114,11 +114,12 @@ def test_functional_supplied_box_font_autoshrinks_like_font_path():
              "box_text_wrap": "none", "box_text_font_size": 26, "box_text_font": font}
     image = visualkeras.functional_view(
         model, simple_text_visualization=True, simple_text_label_mode="inside",
-        styles={"font_output": style},
+        styles={"font_input": {"box_size": (80, 80)}, "font_output": style},
     )
     reference = visualkeras.functional_view(
         model, simple_text_visualization=True, simple_text_label_mode="inside",
-        styles={"font_output": {**style, "box_text_font": "DejaVuSans.ttf"}},
+        styles={"font_input": {"box_size": (80, 80)},
+                "font_output": {**style, "box_text_font": "DejaVuSans.ttf"}},
     )
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()

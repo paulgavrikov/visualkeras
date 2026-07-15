@@ -800,6 +800,11 @@ def _draw_graph_group_captions(img, id_to_node_list_map, groups, model):
         text_x = center_x - text_w / 2
         text_y = max_y + gap
         
+        if hasattr(font, "getbbox"):
+            left, top, _, _ = font.getbbox(caption)
+            text_x -= left
+            text_y -= top
+
         draw.text((text_x, text_y), caption, fill=color, font=font)
 
 def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:

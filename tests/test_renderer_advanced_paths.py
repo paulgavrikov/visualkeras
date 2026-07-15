@@ -466,3 +466,23 @@ def test_layered_group_caption_preserves_full_glyph_height(draw_reversed, font_s
             if r == 255 and b == 255 and g < 255]
     bounds = font.getbbox("Blockgy")
     assert max(rows) - min(rows) + 1 == bounds[3] - bounds[1]
+
+
+@pytest.mark.parametrize("mode", ["graph", "functional"])
+@pytest.mark.parametrize("font_size", [24, 36])
+def test_group_captions_preserve_full_glyph_height_without_outer_padding(mode, font_size):
+    from PIL import ImageFont
+
+    inputs = tf.keras.Input((4,), name="caption_input")
+    outputs = tf.keras.layers.Dense(3, name="caption_output")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    font = ImageFont.truetype("DejaVuSans.ttf", font_size)
+    image = visualkeras.show(
+        model, mode=mode, padding=0,
+        layered_groups=[{"name": "Blockgy", "layers": ["caption_output"],
+                         "font": font, "font_color": "magenta"}],
+    )
+    rows = [i // image.width for i, (r, g, b, a) in enumerate(image.getdata())
+            if r == 255 and b == 255 and g < 255]
+    bounds = font.getbbox("Blockgy")
+    assert max(rows) - min(rows) + 1 == bounds[3] - bounds[1]
