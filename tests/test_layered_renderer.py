@@ -213,3 +213,23 @@ def test_layered_structured_output_caption_matches_primary_shape():
     assert visualkeras.LAYERED_TEXT_CALLABLES["name_shape"](1, split) == ("split\n6", False)
     image = visualkeras.layered_view(model, text_callable="name_shape", draw_volume=False, spacing=40)
     assert image.width > 0 and image.height > 0
+
+
+def test_layered_tensor_shape_caption_matches_primary_geometry():
+    class LegacySplit(tf.keras.layers.Layer):
+        def call(self, inputs):
+            return inputs[:, :6], inputs[:, 6:]
+
+        @property
+        def output_shape(self):
+            return [tf.TensorShape((None, 6)), tf.TensorShape((None, 2))]
+
+    inputs = tf.keras.Input((8,), name="in")
+    split = LegacySplit(name="split")
+    model = tf.keras.Model(inputs, split(inputs))
+    image = visualkeras.layered_view(
+        model, text_callable="name_shape", draw_volume=False, spacing=40,
+        legend_text_spacing_offset=0,
+    )
+    assert visualkeras.LAYERED_TEXT_CALLABLES["shape"](1, split) == ("6", False)
+    assert image.width > 0 and image.height > 0

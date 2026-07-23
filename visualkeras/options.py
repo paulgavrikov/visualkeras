@@ -78,13 +78,18 @@ def _format_shape(shape: Any) -> str:
     if shape is None or (hasattr(shape, "rank") and shape.rank is None):
         return "?"
     # Multi-output shapes: pick first (best effort).
-    if isinstance(shape, (list, tuple)) and shape and isinstance(shape[0], (list, tuple)):
-        shape = shape[0]
+    if isinstance(shape, (list, tuple)) and shape and (
+        isinstance(shape[0], (list, tuple)) or hasattr(shape[0], "as_list")
+    ):
+        return _format_shape(shape[0])
     if hasattr(shape, "as_list"):
         try:
             shape = tuple(shape.as_list())
         except Exception:  # noqa: BLE001
-            pass
+            try:
+                shape = tuple(shape)
+            except Exception:  # noqa: BLE001
+                return str(shape)
     if not isinstance(shape, (list, tuple)):
         return str(shape)
     dims = shape[1:]

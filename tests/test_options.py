@@ -389,3 +389,30 @@ def test_shape_caption_discovers_structured_tensor_outputs(container):
     layer = SimpleNamespace(output=output, name="split")
     assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == ("6", False)
     assert LAYERED_TEXT_CALLABLES["name_shape"](0, layer) == ("split\n6", False)
+
+
+@pytest.mark.parametrize("container", [list, tuple])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("unknown", [False, True])
+def test_shape_caption_selects_primary_tensor_shape(container, nested, unknown):
+    tf = pytest.importorskip("tensorflow")
+    from types import SimpleNamespace
+
+    shapes = [tf.TensorShape(None if unknown else (None, 6)), tf.TensorShape((None, 2))]
+    layer = SimpleNamespace(output_shape=container([shapes] if nested else shapes))
+    expected = "?" if unknown else "6"
+    assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == (expected, False)
+
+
+def test_shape_caption_can_iterate_when_as_list_is_unavailable():
+    from types import SimpleNamespace
+
+    class LegacyShape:
+        def as_list(self):
+            raise RuntimeError("as_list unavailable")
+
+        def __iter__(self):
+            return iter((None, 6))
+
+    layer = SimpleNamespace(output=SimpleNamespace(shape=LegacyShape()))
+    assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == ("6", False)
