@@ -440,8 +440,8 @@ def vertical_image_concat(im1: Image, im2: Image, background_fill: Any = 'white'
         Vertically concatenated image.
     """
     dst = Image.new('RGBA', (max(im1.width, im2.width), im1.height + im2.height), background_fill)
-    dst.paste(im1, (0, 0))
-    dst.paste(im2, (0, im1.height))
+    dst.alpha_composite(im1.convert('RGBA'), (0, 0))
+    dst.alpha_composite(im2.convert('RGBA'), (0, im1.height))
     return dst
 
 
@@ -505,7 +505,7 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
 
     layout = Image.new('RGBA', (width, height), background_fill)
     for img, coord in zip(images, coords):
-        layout.paste(img, coord)
+        layout.alpha_composite(img.convert('RGBA'), coord)
 
     return layout
 

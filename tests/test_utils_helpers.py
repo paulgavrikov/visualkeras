@@ -354,3 +354,29 @@ def test_brightened_box_faces_saturate_instead_of_wrapping_channels():
     draw.flush()
     assert (255, 255, 40, 255) in image.getdata()
     assert (255, 255, 70, 255) in image.getdata()
+
+
+@pytest.mark.parametrize("layout", ["horizontal", "vertical", "concat"])
+@pytest.mark.parametrize("background, expected", [
+    ("white", (255, 127, 127, 255)),
+    ((0, 0, 0, 0), (255, 0, 0, 128)),
+    ((0, 0, 255, 128), (170, 0, 85, 192)),
+])
+def test_image_layouts_composite_alpha_over_background(layout, background, expected):
+    source = Image.new("RGBA", (4, 4), (255, 0, 0, 128))
+    second = Image.new("RGB", (4, 4), "lime")
+    if layout == "concat":
+        image = utils.vertical_image_concat(source, second, background_fill=background)
+        first_xy, second_xy = (0, 0), (0, 4)
+    else:
+        image = utils.linear_layout(
+            [source, second], horizontal=layout == "horizontal", padding=2, spacing=1,
+            background_fill=background,
+        )
+        first_xy = (2, 2)
+        second_xy = (7, 2) if layout == "horizontal" else (2, 7)
+        assert image.getpixel((0, 0)) == utils.get_rgba_tuple(background)
+    assert image.getpixel(first_xy) == expected
+    assert image.getpixel(second_xy) == (0, 255, 0, 255)
+    assert source.getpixel((0, 0)) == (255, 0, 0, 128)
+    assert second.mode == "RGB"
