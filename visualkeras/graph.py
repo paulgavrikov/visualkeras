@@ -1,4 +1,5 @@
 from typing import Any, Dict, Mapping, Optional, Union, List, Sequence, Tuple
+from os import PathLike as _PathLike, fspath as _fspath
 import aggdraw
 from PIL import Image, ImageDraw, ImageFont
 from PIL import ImageChops as _ImageChops
@@ -816,9 +817,9 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
             return ImageFont.truetype("arial.ttf", font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, str):
+    elif isinstance(font_src, (str, _PathLike)):
          try:
-            return ImageFont.truetype(font_src, font_size)
+            return ImageFont.truetype(_fspath(font_src), font_size)
          except IOError:
             return ImageFont.load_default()
     elif isinstance(font_src, (ImageFont.ImageFont, ImageFont.FreeTypeFont)):

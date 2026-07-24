@@ -1410,3 +1410,17 @@ def test_box_autoshrink_accepts_font_objects(in_memory, as_fallback):
     )
     assert image.tobytes() == reference.tobytes()
     assert font.size == 26
+
+
+@pytest.mark.parametrize("resolver", ["box", "annotation"])
+def test_font_path_objects_preserve_requested_family(resolver):
+    from pathlib import Path
+
+    requested = ImageFont.truetype("DejaVuSansMono.ttf", 24)
+    path = Path(requested.path)
+    if resolver == "box":
+        font, _, _ = functional._resolve_box_font({"box_text_font": path, "box_text_font_size": 24}, None)
+    else:
+        font = functional._resolve_annotation_font(path, None, 24)
+    assert font.getname() == requested.getname()
+    assert font.size == 24

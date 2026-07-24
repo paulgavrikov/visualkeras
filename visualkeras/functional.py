@@ -17,6 +17,7 @@ from collections import deque
 import warnings
 import re
 
+from os import PathLike as _PathLike, fspath as _fspath
 import aggdraw
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -1858,9 +1859,9 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
             return ImageFont.truetype("arial.ttf", font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, str):
+    elif isinstance(font_src, (str, _PathLike)):
          try:
-            return ImageFont.truetype(font_src, font_size)
+            return ImageFont.truetype(_fspath(font_src), font_size)
          except IOError:
             return ImageFont.load_default()
     elif isinstance(font_src, (ImageFont.ImageFont, ImageFont.FreeTypeFont)):
@@ -1922,7 +1923,8 @@ def _resolve_box_font(style: Mapping[str, Any], fallback: Optional[Any]) -> Tupl
     src = style.get("box_text_font")
     if _is_font_like(src):
         return src, None, size
-    if isinstance(src, str):
+    if isinstance(src, (str, _PathLike)):
+        src = _fspath(src)
         f = _try_load_font(src, size)
         if f is not None:
             return f, src, size
@@ -2130,8 +2132,8 @@ def _resolve_annotation_font(
 ) -> Any:
     if _is_font_like(style_font):
         return style_font
-    if isinstance(style_font, str):
-        resolved = _try_load_font(style_font, size)
+    if isinstance(style_font, (str, _PathLike)):
+        resolved = _try_load_font(_fspath(style_font), size)
         if resolved is not None:
             return resolved
     if _is_font_like(fallback_font):

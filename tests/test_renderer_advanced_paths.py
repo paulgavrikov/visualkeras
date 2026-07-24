@@ -486,3 +486,45 @@ def test_group_captions_preserve_full_glyph_height_without_outer_padding(mode, f
             if r == 255 and b == 255 and g < 255]
     bounds = font.getbbox("Blockgy")
     assert max(rows) - min(rows) + 1 == bounds[3] - bounds[1]
+
+
+@pytest.mark.parametrize("mode", ["layered", "graph", "functional"])
+def test_group_font_path_objects_match_string_paths(mode):
+    from PIL import ImageFont
+
+    font = ImageFont.truetype("DejaVuSansMono.ttf", 24)
+    path = Path(font.path)
+    inputs = tf.keras.Input((4,), name="path_input")
+    outputs = tf.keras.layers.Dense(3, name="path_output")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    group = {"name": "Block", "layers": ["path_output"], "font_size": 24}
+    options = {"padding": 60, "layered_groups": [{**group, "font": path}]}
+    if mode == "layered":
+        options["legend_text_spacing_offset"] = 0
+    image = visualkeras.show(model, mode=mode, options=options)
+    options["layered_groups"] = [{**group, "font": str(path)}]
+    reference = visualkeras.show(model, mode=mode, options=options)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+def test_functional_box_font_path_objects_match_string_paths():
+    from PIL import ImageFont
+
+    font = ImageFont.truetype("DejaVuSansMono.ttf", 24)
+    path = Path(font.path)
+    inputs = tf.keras.Input((4,), name="path_input")
+    outputs = tf.keras.layers.Dense(3, name="path_output")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    style = {"box_size": (140, 80), "box_text": "Classify", "box_text_rotation": 0,
+             "box_text_font_size": 24, "box_text_font": path}
+    settings = {"simple_text_visualization": True, "simple_text_label_mode": "inside"}
+    image = visualkeras.functional_view(
+        model, **settings, styles={"path_input": {"box_size": (80, 80)}, "path_output": style},
+    )
+    reference = visualkeras.functional_view(
+        model, **settings, styles={"path_input": {"box_size": (80, 80)},
+                                  "path_output": {**style, "box_text_font": str(path)}},
+    )
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
