@@ -233,3 +233,28 @@ def test_layered_tensor_shape_caption_matches_primary_geometry():
     )
     assert visualkeras.LAYERED_TEXT_CALLABLES["shape"](1, split) == ("6", False)
     assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("background", ["white", (0, 0, 0, 0)])
+@pytest.mark.parametrize("draw_volume", [False, True])
+def test_layered_legend_text_composites_font_alpha_once(background, draw_volume):
+    from PIL import ImageDraw, ImageFont
+
+    def glyph_crop(image):
+        mask = Image.new("L", image.size)
+        mask.putdata([255 if r == b == 255 and g < 255 and a > 0 else 0
+                      for r, g, b, a in image.getdata()])
+        return image.crop(mask.getbbox())
+
+    model = tf.keras.Sequential([tf.keras.Input((3,)), tf.keras.layers.Dense(2)])
+    font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    image = visualkeras.layered_view(
+        model, legend=True, font=font, font_color="magenta", background_fill=background,
+        draw_volume=draw_volume, legend_text_spacing_offset=0,
+    )
+    reference = Image.new("RGBA", (160, 60), background)
+    ImageDraw.Draw(reference).text((4, 4), "Dense", font=font, fill="magenta")
+    actual_glyph = glyph_crop(image)
+    reference_glyph = glyph_crop(reference)
+    assert actual_glyph.size == reference_glyph.size
+    assert actual_glyph.tobytes() == reference_glyph.tobytes()

@@ -1515,7 +1515,7 @@ def layered_view(model,
             draw_text.text((text_x, text_y), label, font=font, fill=font_color)
 
             draw_box.flush()
-            img_box.paste(img_text, mask=img_text)
+            img_box.alpha_composite(img_text)
             patches.append(img_box)
 
         legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding,
