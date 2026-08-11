@@ -1424,3 +1424,22 @@ def test_font_path_objects_preserve_requested_family(resolver):
         font = functional._resolve_annotation_font(path, None, 24)
     assert font.getname() == requested.getname()
     assert font.size == 24
+
+
+@pytest.mark.parametrize("kind", ["single", "split", "scalar"])
+def test_synthetic_outputs_retain_actual_tensor_shapes(kind):
+    tf = pytest.importorskip("tensorflow")
+    inputs = tf.keras.Input((8,), batch_size=4, name="in")
+    if kind == "split":
+        outputs = tf.keras.layers.Lambda(lambda x: (x[:, :6], x[:, 6:]), name="split")(inputs)
+    elif kind == "scalar":
+        outputs = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=1), name="scalar")(inputs)
+    else:
+        outputs = tf.keras.layers.Dense(3, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    nodes = {id(layer): _node(id(layer), layer=layer) for layer in model.layers}
+    attached, edges = functional._attach_output_nodes(model, nodes, [], virtual_node_size=8)
+    synthetic = sorted((node for key, node in attached.items() if key not in nodes), key=lambda node: node.order)
+    assert [node.shape for node in synthetic] == [tuple(tensor.shape) for tensor in model.outputs]
+    assert [node.layer.output_shape for node in synthetic] == [tuple(tensor.shape) for tensor in model.outputs]
+    assert len(edges) == len(model.outputs)

@@ -1152,12 +1152,16 @@ def _attach_output_nodes(
     new_nodes = dict(nodes)
     new_edges = list(edges)
     outputs = list(find_output_layers(model))
+    output_tensors = list(getattr(model, "outputs", ()))
 
     output_size = max(virtual_node_size * 2, 16)
 
     for index, layer in enumerate(outputs):
         name = f"output_{index}"
-        synthetic = _SyntheticLayer(name=name, output_shape=getattr(layer, "output_shape", None))
+        shape = getattr(output_tensors[index], "shape", None) if index < len(output_tensors) else None
+        if shape is None:
+            shape = _resolve_layer_output_shape(layer)
+        synthetic = _SyntheticLayer(name=name, output_shape=_shape_to_tuple(shape))
         node_id = id(synthetic)
         new_nodes[node_id] = FunctionalNode(
             layer=synthetic,

@@ -148,3 +148,14 @@ def test_functional_rendering_preserves_reusable_style_maps(via_options, root_st
     )
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+def test_functional_output_markers_show_each_tensor_shape():
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = tf.keras.layers.Lambda(lambda x: (x[:, :6], x[:, 6:]), name="split")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.functional_view(
+        model, add_output_nodes=True, simple_text_visualization=True,
+        text_callable="name_shape", styles={object: {"box_size": (60, 40)}},
+    )
+    assert image.width > 0 and image.height > 0
