@@ -756,7 +756,7 @@ def functional_view(
     if color_map is None:
         color_map = {}
 
-    if styles is not None and not isinstance(styles, dict):
+    if styles is not None:
         styles = dict(styles)
 
     if styles is None:

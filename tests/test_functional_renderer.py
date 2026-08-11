@@ -123,3 +123,28 @@ def test_functional_supplied_box_font_autoshrinks_like_font_path():
     )
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("via_options", [False, True])
+@pytest.mark.parametrize("root_style", [None, {"fill": "cyan"}])
+def test_functional_rendering_preserves_reusable_style_maps(via_options, root_style):
+    from copy import deepcopy
+
+    inputs = tf.keras.Input((4,), name="in")
+    outputs = tf.keras.layers.Dense(3, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    styles = {"in": {"box_size": (80, 80)}, "out": {"box_size": (80, 80)}}
+    if root_style is not None:
+        styles[object] = deepcopy(root_style)
+    original = deepcopy(styles)
+    kwargs = {"options": FunctionalOptions(styles=styles)} if via_options else {"styles": styles}
+    below = visualkeras.functional_view(model, simple_text_visualization=True, **kwargs)
+    assert styles == original
+    image = visualkeras.functional_view(
+        model, simple_text_visualization=True, simple_text_label_mode="inside", **kwargs,
+    )
+    reference = visualkeras.functional_view(
+        model, simple_text_visualization=True, simple_text_label_mode="inside", styles=original,
+    )
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
