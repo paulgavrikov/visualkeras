@@ -173,3 +173,28 @@ def test_functional_collapsed_caption_matches_last_output_shape():
         styles={object: {"box_size": (80, 60)}},
     )
     assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("override", [False, True])
+def test_functional_output_markers_honor_global_and_named_styles(monkeypatch, override):
+    inputs = tf.keras.Input((4,), name="in")
+    outputs = tf.keras.layers.Dense(3, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    styles = {object: {"fill": "cyan", "box_size": (80, 60)}}
+    if override:
+        styles["output_0"] = {"fill": "red"}
+    captured = []
+    render = functional._render_graph
+
+    def record(graph, **kwargs):
+        captured.extend(dict(node.style) for node in graph.nodes.values() if node.name == "output_0")
+        return render(graph, **kwargs)
+
+    monkeypatch.setattr(functional, "_render_graph", record)
+    image = visualkeras.functional_view(
+        model, add_output_nodes=True, simple_text_visualization=True,
+        text_callable="name_shape", styles=styles,
+    )
+    assert captured[0]["box_text_enabled"] is False
+    assert captured[0]["fill"] == ("red" if override else "cyan")
+    assert image.width > 0 and image.height > 0

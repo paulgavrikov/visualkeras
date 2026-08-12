@@ -1120,6 +1120,9 @@ def _build_graph(
 
     if add_output_nodes:
         nodes, edges = _attach_output_nodes(model, nodes, edges, virtual_node_size)
+        for node in nodes.values():
+            if node.kind == "output":
+                node.style = resolve_style(node.layer, node.name, styles, global_defaults)
 
     inputs, outputs = _find_inputs_outputs(nodes, edges)
     return FunctionalGraph(nodes=nodes, edges=edges, inputs=inputs, outputs=outputs)
