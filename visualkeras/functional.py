@@ -1326,15 +1326,18 @@ def _collapse_node_sequence(
     collapse_label = str(rule.get("label", f"{rule['repeat_count']}x"))
     collapse_kind = str(rule["kind"])
     synthetic_name = f"collapsed_{first_node.name}_{collapse_label}"
+    output_shape = last_node.shape
+    if output_shape is None:
+        output_shape = _resolve_layer_output_shape(last_node.layer)
     synthetic_layer = _SyntheticLayer(
         name=synthetic_name,
-        output_shape=getattr(last_node.layer, "output_shape", None),
+        output_shape=output_shape,
     )
     collapsed_node_id = id(synthetic_layer)
     while collapsed_node_id in old_nodes:
         synthetic_layer = _SyntheticLayer(
             name=f"{synthetic_name}_{collapsed_node_id}",
-            output_shape=getattr(last_node.layer, "output_shape", None),
+            output_shape=output_shape,
         )
         collapsed_node_id = id(synthetic_layer)
 

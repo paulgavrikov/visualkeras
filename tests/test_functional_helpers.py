@@ -1443,3 +1443,19 @@ def test_synthetic_outputs_retain_actual_tensor_shapes(kind):
     assert [node.shape for node in synthetic] == [tuple(tensor.shape) for tensor in model.outputs]
     assert [node.layer.output_shape for node in synthetic] == [tuple(tensor.shape) for tensor in model.outputs]
     assert len(edges) == len(model.outputs)
+
+
+def test_collapsed_layer_metadata_retains_last_output_shape():
+    first = _node(1, name="first")
+    last = _node(2, name="last")
+    first.shape = (None, 8)
+    last.shape = (None, 3)
+    graph = functional.FunctionalGraph(
+        nodes={1: first, 2: last}, edges=[functional.FunctionalEdge(1, 2)], inputs=[1], outputs=[2],
+    )
+    result = functional._collapse_node_sequence(
+        graph, [1, 2], rule={"kind": "layer", "repeat_count": 2}, collapse_annotations=False,
+    )
+    node = next(iter(result.nodes.values()))
+    assert node.shape == (None, 3)
+    assert node.layer.output_shape == (None, 3)

@@ -159,3 +159,17 @@ def test_functional_output_markers_show_each_tensor_shape():
         text_callable="name_shape", styles={object: {"box_size": (60, 40)}},
     )
     assert image.width > 0 and image.height > 0
+
+
+def test_functional_collapsed_caption_matches_last_output_shape():
+    inputs = tf.keras.Input((8,), name="in")
+    first = tf.keras.layers.Dense(6, name="first")(inputs)
+    last = tf.keras.layers.Dense(3, name="last")(first)
+    model = tf.keras.Model(inputs, last)
+    image = visualkeras.functional_view(
+        model, collapse_enabled=True, collapse_annotations=False,
+        collapse_rules=[{"kind": "layer", "selector": tf.keras.layers.Dense, "repeat_count": 2}],
+        simple_text_visualization=True, text_callable="shape",
+        styles={object: {"box_size": (80, 60)}},
+    )
+    assert image.width > 0 and image.height > 0
