@@ -485,3 +485,15 @@ def test_contained_face_images_blend_over_the_existing_face_once(background_alph
     assert image.getpixel((7, 7)) == expected
     assert image.getpixel((7, 4)) == fill
     assert source.getpixel((0, 0)) == (255, 0, 0, 128)
+
+
+@pytest.mark.parametrize("inset, should_paint", [(1, True), (2, False), (3, False), (8, False)])
+def test_face_insets_cannot_paint_an_empty_or_inverted_region(inset, should_paint):
+    image = Image.new("RGBA", (20, 20), "white")
+    source = Image.new("RGBA", (4, 4), "red")
+    stack = FeatureMapStack(3, 3, 4, 4, 1, map_spacing=0, max_visual_channels=1, fill="white", outline="black")
+    before = image.tobytes()
+    _apply_face_images(image, [{"stack": stack, "style": {"face_image": source, "face_image_inset": inset}}])
+    assert (image.tobytes() != before) is should_paint
+    if should_paint:
+        assert image.getpixel((4, 4)) == (255, 0, 0, 255)

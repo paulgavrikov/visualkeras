@@ -374,8 +374,10 @@ def _apply_face_images(img: Image.Image, stacks: Sequence[Dict[str, Any]]) -> No
         ix2 -= inset_px
         iy2 -= inset_px
 
-        w = max(1, ix2 - ix1)
-        h = max(1, iy2 - iy1)
+        w = ix2 - ix1
+        h = iy2 - iy1
+        if w <= 0 or h <= 0:
+            continue
 
         fitted = _fit_image_to_rect(face_img, w, h, fit=fit, background=(0, 0, 0, 0))
 
