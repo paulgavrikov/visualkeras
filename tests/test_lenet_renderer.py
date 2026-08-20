@@ -99,3 +99,26 @@ def test_lenet_fixed_batch_scalar_has_one_output_unit():
     assert shape.c == 1
     image = visualkeras.lenet_view(model, seed=7)
     assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("text", ["A\ng", "A\n\ng", "jazz"])
+@pytest.mark.parametrize("above", [False, True])
+def test_lenet_captions_keep_full_glyphs_outside_the_maps(text, above):
+    from PIL import ImageDraw, ImageFont
+
+    model = tf.keras.Sequential([tf.keras.Input((4,)), tf.keras.layers.Dense(3, name="out")])
+    font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    caption = lambda layer, shape: text if layer.name == "out" else ""
+    image = visualkeras.lenet_view(
+        model, padding=0, font=font, font_color="magenta", background_fill="white",
+        top_label=above, bottom_label=not above, top_label_callable=caption,
+        bottom_label_callable=caption, draw_connections=False, draw_patches=False,
+        styles={object: {"fill": "blue", "outline": "blue", "shade_step": 0}},
+    )
+    reference = Image.new("RGBA", (200, 200), "white")
+    ImageDraw.Draw(reference).multiline_text((10, 10), text, font=font, fill="magenta", spacing=2, align="center")
+    rows = [i // image.width for i, (r, g, b, a) in enumerate(image.getdata()) if r == b == 255 and g < 255]
+    expected_rows = [i // reference.width for i, (r, g, b, a) in enumerate(reference.getdata()) if r == b == 255 and g < 255]
+    map_rows = [i // image.width for i, (r, g, b, a) in enumerate(image.getdata()) if b == 255 and r == g < 255]
+    assert max(rows) - min(rows) == max(expected_rows) - min(expected_rows)
+    assert max(rows) < min(map_rows) if above else min(rows) > max(map_rows)

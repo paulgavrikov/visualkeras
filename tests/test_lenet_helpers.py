@@ -458,3 +458,13 @@ def test_lenet_view_face_image_style_and_text_font_fallback(tmp_path, monkeypatc
 def test_scalar_shape_has_one_unit_regardless_of_batch_size(shape):
     result = _canonicalize_shape(SimpleNamespace(), shape)
     assert (result.kind, result.c, result.c_dim) == ("vector", 1, 1)
+
+
+@pytest.mark.parametrize("text", ["A\ng", "A\n\ng", "jazz"])
+def test_lenet_multiline_measurement_matches_pillow(text):
+    import math
+
+    font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    left, top, right, bottom = draw.multiline_textbbox((0, 0), text, font=font, spacing=2, align="center")
+    assert _get_multiline_text_size(draw, text, font) == (math.ceil(right - left), math.ceil(bottom - top))

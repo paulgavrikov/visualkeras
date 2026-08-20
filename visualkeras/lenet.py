@@ -857,6 +857,24 @@ def _get_text_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFo
     return draw.textsize(text, font=font)
 
 
+def _get_multiline_text_bbox(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+    *,
+    spacing: int = 2,
+) -> Tuple[float, float, float, float]:
+    if not text:
+        return (0, 0, 0, 0)
+    if hasattr(draw, "multiline_textbbox"):
+        return draw.multiline_textbbox((0, 0), str(text), font=font, spacing=spacing, align="center")
+    parts = str(text).splitlines()
+    sizes = [_get_text_size(draw, part, font) for part in parts]
+    width = max((size[0] for size in sizes), default=0)
+    height = sum(size[1] for size in sizes) + spacing * max(0, len(parts) - 1)
+    return (0, 0, width, height)
+
+
 def _get_multiline_text_size(
     draw: ImageDraw.ImageDraw,
     text: str,
@@ -865,18 +883,8 @@ def _get_multiline_text_size(
     spacing: int = 2,
 ) -> Tuple[int, int]:
     """Measure multiline text (\n-delimited) in a Pillow-version-safe way."""
-    if not text:
-        return (0, 0)
-    parts = str(text).splitlines()
-    widths: list[int] = []
-    heights: list[int] = []
-    for part in parts:
-        w, h = _get_text_size(draw, part, font)
-        widths.append(int(w))
-        heights.append(int(h))
-    total_h = int(sum(heights) + spacing * max(0, len(parts) - 1))
-    return (int(max(widths) if widths else 0), total_h)
-
+    left, top, right, bottom = _get_multiline_text_bbox(draw, text, font, spacing=spacing)
+    return (math.ceil(right - left), math.ceil(bottom - top))
 
 def _default_top_label(layer: Any, rshape: RenderShape) -> str:
     return type(layer).__name__
@@ -1654,7 +1662,8 @@ def lenet_view(
                 text = bottom_label_callable(layer, rshape)
                 if text:
                     tw, th = _get_multiline_text_size(dtext, str(text), font)
-                    dtext.multiline_text((cx - tw / 2.0, y2 + bottom_pad), str(text), font=font, fill=font_color, spacing=2, align='center')
+                    left, top, _, _ = _get_multiline_text_bbox(dtext, str(text), font)
+                    dtext.multiline_text((cx - tw / 2.0 - left, y2 + bottom_pad - top), str(text), font=font, fill=font_color, spacing=2, align='center')
 
             if top_label:
                 text = top_label_callable(layer, rshape)
@@ -1662,7 +1671,8 @@ def lenet_view(
                     # Account for stack offset: top of visible stack is y1 - offset
                     vis_top = y1 - stack.offset
                     tw, th = _get_multiline_text_size(dtext, str(text), font)
-                    dtext.multiline_text((cx - tw / 2.0, vis_top - th - top_pad), str(text), font=font, fill=font_color, spacing=2, align='center')
+                    left, top, _, _ = _get_multiline_text_bbox(dtext, str(text), font)
+                    dtext.multiline_text((cx - tw / 2.0 - left, vis_top - th - top_pad - top), str(text), font=font, fill=font_color, spacing=2, align='center')
 
     if to_file:
         img.save(to_file)
