@@ -377,8 +377,7 @@ def _apply_face_images(img: Image.Image, stacks: Sequence[Dict[str, Any]]) -> No
         w = max(1, ix2 - ix1)
         h = max(1, iy2 - iy1)
 
-        bg = get_rgba_tuple(style.get("fill", st.fill))
-        fitted = _fit_image_to_rect(face_img, w, h, fit=fit, background=bg)
+        fitted = _fit_image_to_rect(face_img, w, h, fit=fit, background=(0, 0, 0, 0))
 
         if alpha < 255:
             # Multiply alpha channel

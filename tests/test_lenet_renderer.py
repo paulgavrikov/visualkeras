@@ -122,3 +122,29 @@ def test_lenet_captions_keep_full_glyphs_outside_the_maps(text, above):
     map_rows = [i // image.width for i, (r, g, b, a) in enumerate(image.getdata()) if b == 255 and r == g < 255]
     assert max(rows) - min(rows) == max(expected_rows) - min(expected_rows)
     assert max(rows) < min(map_rows) if above else min(rows) > max(map_rows)
+
+
+@pytest.mark.parametrize("face_alpha", [128, 255])
+def test_lenet_translucent_face_uses_one_background_blend(tmp_path, face_alpha):
+    from collections import Counter
+    icon = tmp_path / "face.png"
+    Image.new("RGBA", (8, 4), (255, 0, 0, 128)).save(icon)
+    inputs = tf.keras.Input((8, 8, 1), name="in")
+    outputs = tf.keras.layers.Conv2D(1, 1, name="face")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    settings = {
+        "background_fill": (0, 0, 0, 0), "draw_connections": False, "draw_patches": False,
+        "top_label": False, "bottom_label": False,
+    }
+    reference = visualkeras.lenet_view(model, **settings, styles={object: {"fill": (0, 0, 255, 128)}})
+    face_pixels = Counter(pixel for pixel in reference.getdata() if pixel[2] > 0 and pixel[0] == pixel[1] == 0)
+    existing_fill = face_pixels.most_common(1)[0][0]
+    expected = Image.alpha_composite(
+        Image.new("RGBA", (1, 1), existing_fill),
+        Image.new("RGBA", (1, 1), (255, 0, 0, int(128 * face_alpha / 255))),
+    ).getpixel((0, 0))
+    image = visualkeras.lenet_view(
+        model, **settings, styles={object: {"fill": (0, 0, 255, 128)},
+                                  "face": {"face_image": str(icon), "face_image_fit": "contain", "face_image_alpha": face_alpha}},
+    )
+    assert expected in image.getdata()

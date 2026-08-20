@@ -468,3 +468,20 @@ def test_lenet_multiline_measurement_matches_pillow(text):
     draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     left, top, right, bottom = draw.multiline_textbbox((0, 0), text, font=font, spacing=2, align="center")
     assert _get_multiline_text_size(draw, text, font) == (math.ceil(right - left), math.ceil(bottom - top))
+
+
+@pytest.mark.parametrize("background_alpha", [128, 255])
+@pytest.mark.parametrize("face_alpha", [128, 255])
+def test_contained_face_images_blend_over_the_existing_face_once(background_alpha, face_alpha):
+    fill = (0, 0, 255, background_alpha)
+    image = Image.new("RGBA", (16, 16), fill)
+    source = Image.new("RGBA", (8, 4), (255, 0, 0, 128))
+    stack = FeatureMapStack(4, 4, 8, 8, 1, map_spacing=0, max_visual_channels=1, fill=fill, outline="black")
+    style = {"face_image": source, "face_image_fit": "contain", "face_image_alpha": face_alpha,
+             "face_image_inset": 0, "fill": fill}
+    _apply_face_images(image, [{"stack": stack, "style": style}])
+    overlay = Image.new("RGBA", (1, 1), (255, 0, 0, int(128 * face_alpha / 255)))
+    expected = Image.alpha_composite(Image.new("RGBA", (1, 1), fill), overlay).getpixel((0, 0))
+    assert image.getpixel((7, 7)) == expected
+    assert image.getpixel((7, 4)) == fill
+    assert source.getpixel((0, 0)) == (255, 0, 0, 128)
