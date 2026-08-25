@@ -1983,8 +1983,10 @@ def _render_text_image_bbox(text: str, font: ImageFont.ImageFont, color: Any, sp
 
 def _wrap_text_to_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int, mode: str, max_lines: Optional[int]) -> str:
     mode = (mode or "words").lower()
+    if max_lines is not None and max_lines <= 0:
+        return ""
     if mode == "none" or max_width <= 0:
-        return text
+        return text if max_lines is None else "\n".join(text.split("\n")[:max_lines])
     if mode not in {"words", "chars"}:
         mode = "words"
     lines = []

@@ -224,3 +224,20 @@ def test_functional_group_caption_and_frame_fit_inside_canvas(padding, group_pad
     assert max(x for x, y in points) - min(x for x, y in points) == max(x for x, y in expected) - min(x for x, y in expected)
     assert max(y for x, y in points) - min(y for x, y in points) == max(y for x, y in expected) - min(y for x, y in expected)
     assert min(x for x, y in points) >= 0
+
+
+def test_functional_unwrapped_box_labels_honor_line_limit():
+    inputs = tf.keras.Input((4,), name="in")
+    outputs = tf.keras.layers.Dense(3, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    style = {"box_size": (140, 80), "box_text": "First\nSecond", "box_text_wrap": "none",
+             "box_text_max_lines": 1, "box_text_rotation": 0}
+    settings = {"simple_text_visualization": True, "simple_text_label_mode": "inside"}
+    image = visualkeras.functional_view(
+        model, **settings, styles={"in": {"box_size": (80, 80)}, "out": style},
+    )
+    reference = visualkeras.functional_view(
+        model, **settings, styles={"in": {"box_size": (80, 80)}, "out": {**style, "box_text": "First"}},
+    )
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()

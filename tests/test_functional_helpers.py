@@ -1459,3 +1459,11 @@ def test_collapsed_layer_metadata_retains_last_output_shape():
     node = next(iter(result.nodes.values()))
     assert node.shape == (None, 3)
     assert node.layer.output_shape == (None, 3)
+
+
+@pytest.mark.parametrize("mode, width", [("none", 200), ("words", 0), ("chars", 0)])
+@pytest.mark.parametrize("limit, expected", [(0, ""), (1, "First"), (2, "First\nSecond")])
+def test_box_line_limits_apply_without_automatic_wrapping(mode, width, limit, expected):
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    font = ImageFont.load_default()
+    assert functional._wrap_text_to_width(draw, "First\nSecond\nThird", font, width, mode, limit) == expected
