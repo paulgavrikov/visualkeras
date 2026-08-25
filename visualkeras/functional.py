@@ -11,9 +11,10 @@ output structures. The pipeline is:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 from collections import deque
+from math import ceil
 import warnings
 import re
 
@@ -2423,6 +2424,8 @@ def _render_graph(
     """
     max_right = padding
     max_bottom = padding
+    min_left = 0
+    min_top = 0
     for node in graph.nodes.values():
         max_right = max(max_right, node.x + node.width + padding)
         max_bottom = max(max_bottom, node.y + node.height + padding)
@@ -2461,8 +2464,11 @@ def _render_graph(
             g_min_y -= g_padding
             g_max_y += g_padding
             
-            max_right = max(max_right, g_max_x + padding)
-            max_bottom = max(max_bottom, g_max_y + padding)
+            stroke = float(group.get("width", 1)) / 2
+            min_left = min(min_left, g_min_x - stroke)
+            min_top = min(min_top, g_min_y - stroke)
+            max_right = max(max_right, g_max_x + padding + stroke)
+            max_bottom = max(max_bottom, g_max_y + padding + stroke)
             caption = group.get("name", group.get("caption"))
             if caption:
                 font = _get_font(group)
@@ -2473,8 +2479,21 @@ def _render_graph(
                 gap = group.get("text_spacing", 5)
                 text_y = g_max_y + gap
                 
+                min_left = min(min_left, text_x)
+                min_top = min(min_top, text_y)
                 max_right = max(max_right, text_x + text_w + padding)
                 max_bottom = max(max_bottom, text_y + text_h + padding)
+
+    shift_x = ceil(-min_left)
+    shift_y = ceil(-min_top)
+    if shift_x or shift_y:
+        graph = FunctionalGraph(
+            nodes={node_id: replace(node, x=node.x + shift_x, y=node.y + shift_y)
+                   for node_id, node in graph.nodes.items()},
+            edges=graph.edges, inputs=graph.inputs, outputs=graph.outputs,
+        )
+        max_right += shift_x
+        max_bottom += shift_y
 
     node_logos = {} # node_id -> list of (group, image)
     if logo_groups:
@@ -2492,7 +2511,7 @@ def _render_graph(
                     node_logos[node.node_id] = []
                 node_logos[node.node_id].append((group, logo_img))
 
-    img = Image.new("RGBA", (int(max_right), int(max_bottom)), background_fill)
+    img = Image.new("RGBA", (ceil(max_right), ceil(max_bottom)), background_fill)
     draw = aggdraw.Draw(img)
     color_wheel = ColorWheel()
 

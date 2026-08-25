@@ -198,3 +198,29 @@ def test_functional_output_markers_honor_global_and_named_styles(monkeypatch, ov
     assert captured[0]["box_text_enabled"] is False
     assert captured[0]["fill"] == ("red" if override else "cyan")
     assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("padding", [0, 8])
+@pytest.mark.parametrize("group_padding", [10, 40])
+def test_functional_group_caption_and_frame_fit_inside_canvas(padding, group_padding):
+    from PIL import ImageDraw, ImageFont
+
+    inputs = tf.keras.Input((3,), name="in")
+    outputs = tf.keras.layers.Dense(2, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    font = ImageFont.truetype("DejaVuSansMono.ttf", 24)
+    label = "Long group caption"
+    image = visualkeras.functional_view(
+        model, padding=padding,
+        layered_groups=[{"name": label, "layers": ["in"], "padding": group_padding,
+                         "font": font, "font_color": "magenta"}],
+    )
+    reference = Image.new("RGBA", (320, 80), "white")
+    ImageDraw.Draw(reference).text((10, 10), label, font=font, fill="magenta")
+    points = [(i % image.width, i // image.width) for i, (r, g, b, a) in enumerate(image.getdata())
+              if r == b == 255 and g < 255]
+    expected = [(i % reference.width, i // reference.width) for i, (r, g, b, a) in enumerate(reference.getdata())
+                if r == b == 255 and g < 255]
+    assert max(x for x, y in points) - min(x for x, y in points) == max(x for x, y in expected) - min(x for x, y in expected)
+    assert max(y for x, y in points) - min(y for x, y in points) == max(y for x, y in expected) - min(y for x, y in expected)
+    assert min(x for x, y in points) >= 0
