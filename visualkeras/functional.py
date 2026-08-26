@@ -1972,9 +1972,12 @@ def _render_text_image_bbox(text: str, font: ImageFont.ImageFont, color: Any, sp
     # IMPORTANT: account for negative bearings by offsetting by -left/-top
     dummy = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     d = ImageDraw.Draw(dummy)
-    l, t, r, b = _multiline_bbox(d, text, font, spacing)
-    w = max(1, int(r - l))
-    h = max(1, int(b - t))
+    if hasattr(d, "multiline_textbbox"):
+        l, t, r, b = d.multiline_textbbox((0, 0), text, font=font, spacing=spacing, align="center")
+    else:
+        l, t, r, b = _multiline_bbox(d, text, font, spacing)
+    w = max(1, ceil(r - l))
+    h = max(1, ceil(b - t))
     img = Image.new("RGBA", (w + 2 * margin, h + 2 * margin), (0, 0, 0, 0))
     d2 = ImageDraw.Draw(img)
     d2.multiline_text((margin - l, margin - t), text, font=font, fill=color, spacing=spacing, align="center")

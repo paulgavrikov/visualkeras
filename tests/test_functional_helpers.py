@@ -1467,3 +1467,20 @@ def test_box_line_limits_apply_without_automatic_wrapping(mode, width, limit, ex
     draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     font = ImageFont.load_default()
     assert functional._wrap_text_to_width(draw, "First\nSecond\nThird", font, width, mode, limit) == expected
+
+
+@pytest.mark.parametrize("text", ["j\nMMMMMM", "ffff\nj", "W\njjjjj"])
+@pytest.mark.parametrize("margin", [0, 2])
+def test_centered_text_image_uses_alignment_aware_bounds(text, margin):
+    import math
+
+    font = ImageFont.truetype("DejaVuSans-Oblique.ttf", 36)
+    image = functional._render_text_image_bbox(text, font, "black", 2, margin=margin)
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    left, top, right, bottom = draw.multiline_textbbox((0, 0), text, font=font, spacing=2, align="center")
+    reference = Image.new("RGBA", (math.ceil(right - left) + 2 * margin, math.ceil(bottom - top) + 2 * margin))
+    ImageDraw.Draw(reference).multiline_text(
+        (margin - left, margin - top), text, font=font, fill="black", spacing=2, align="center",
+    )
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()

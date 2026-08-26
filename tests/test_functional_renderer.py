@@ -241,3 +241,20 @@ def test_functional_unwrapped_box_labels_honor_line_limit():
     )
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+def test_functional_centered_italic_multiline_label():
+    from PIL import ImageFont
+
+    inputs = tf.keras.Input((4,), name="in")
+    outputs = tf.keras.layers.Dense(3, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    font = ImageFont.truetype("DejaVuSans-Oblique.ttf", 26)
+    image = visualkeras.functional_view(
+        model, simple_text_visualization=True, simple_text_label_mode="inside",
+        styles={"in": {"box_size": (80, 80)}, "out": {
+            "box_size": (180, 110), "box_text": "j\nMMMMMM", "box_text_font": font,
+            "box_text_autoshrink": False, "box_text_rotation": 0,
+        }},
+    )
+    assert image.width > 0 and image.height > 0
