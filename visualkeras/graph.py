@@ -408,8 +408,10 @@ def graph_view(model, to_file: str = None,
                     layers_producing_outputs.append(layer)
                     break
 
-        # Only add dummy outputs if some output-producing layers are NOT in the last level
-        should_add_dummy_outputs = not all(layer in last_level_layers for layer in layers_producing_outputs)
+        shared_output_layer = len({id(layer) for layer in layers_producing_outputs}) < len(layers_producing_outputs)
+        should_add_dummy_outputs = shared_output_layer or not all(
+            layer in last_level_layers for layer in layers_producing_outputs
+        )
     
     if should_add_dummy_outputs:
         output_shapes = model.output_shape

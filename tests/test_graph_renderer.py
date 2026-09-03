@@ -265,3 +265,26 @@ def test_graph_explicit_symbolic_output_neurons_still_require_dimensions():
             model, inout_as_tensor=False, show_neurons=False,
             styles={"sequence": {"show_neurons": True}},
         )
+
+
+@pytest.mark.parametrize("kind", ["split", "duplicate"])
+@pytest.mark.parametrize("show_neurons", [False, True])
+def test_graph_keeps_distinct_output_slots_from_one_terminal_layer(kind, show_neurons):
+    inputs = tf.keras.Input((8,), name="in")
+    if kind == "split":
+        outputs = tf.keras.layers.Lambda(lambda x: (x[:, :3], x[:, 3:]), name="out")(inputs)
+        neuron_count = 8
+    else:
+        output = tf.keras.layers.Dense(3, name="out")(inputs)
+        outputs = [output, output]
+        neuron_count = 6
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.graph_view(
+        model, inout_as_tensor=False, show_neurons=show_neurons, node_size=12, node_spacing=5,
+        layer_spacing=30, padding=8, ellipsize_after=0,
+        styles={"out": {"fill": "red", "outline": "red"}},
+    )
+    x = image.width - 8 - 6
+    column = [image.getpixel((x, y))[:3] == (255, 0, 0) for y in range(image.height)]
+    count = sum(value and (index == 0 or not column[index - 1]) for index, value in enumerate(column))
+    assert count == (neuron_count if show_neurons else 2)
