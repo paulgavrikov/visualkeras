@@ -416,3 +416,10 @@ def test_shape_caption_can_iterate_when_as_list_is_unavailable():
 
     layer = SimpleNamespace(output=SimpleNamespace(shape=LegacyShape()))
     assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == ("6", False)
+
+
+@pytest.mark.parametrize("shape, expected", [({}, "?"), ({"main": (None, 6), "aux": (None, 2)}, "6")])
+def test_dictionary_shape_captions_use_primary_metadata(shape, expected):
+    from types import SimpleNamespace
+
+    assert LAYERED_TEXT_CALLABLES["shape"](0, SimpleNamespace(output_shape=shape)) == (expected, False)

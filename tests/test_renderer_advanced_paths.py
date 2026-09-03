@@ -528,3 +528,25 @@ def test_functional_box_font_path_objects_match_string_paths():
     )
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["layered", "functional", "lenet"])
+def test_dictionary_output_shape_metadata_renders(mode):
+    class DictionarySplit(tf.keras.layers.Layer):
+        def call(self, inputs):
+            return {"main": inputs[:, :6], "aux": inputs[:, 6:]}
+
+        @property
+        def output_shape(self):
+            return {"main": (None, 6), "aux": (None, 2)}
+
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = DictionarySplit(name="split")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    settings = {}
+    if mode in {"layered", "functional"}:
+        settings.update(text_callable="name_shape", draw_volume=False)
+    if mode == "layered":
+        settings.update(spacing=40, legend_text_spacing_offset=0)
+    image = visualkeras.show(model, mode=mode, **settings)
+    assert image.width > 0 and image.height > 0

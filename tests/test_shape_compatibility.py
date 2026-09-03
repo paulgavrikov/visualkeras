@@ -50,3 +50,20 @@ def test_unknown_rank_layer_metadata_renders_fallback(mode):
     dense.output_shape = tf.TensorShape(None)
     image = visualkeras.show(model, mode=mode)
     assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("module", [layered, functional, lenet])
+@pytest.mark.parametrize("proxy", [False, True])
+def test_explicit_dictionary_shape_metadata_selects_primary(module, proxy):
+    from types import MappingProxyType
+
+    shapes = {"main": (None, 6), "aux": (None, 2)}
+    layer = SimpleNamespace(output_shape=MappingProxyType(shapes) if proxy else shapes)
+    with pytest.warns(UserWarning, match="Multi-output layer"):
+        shape = extract_primary_shape(module._resolve_layer_output_shape(layer), "split")
+    assert shape == (None, 6)
+
+
+def test_empty_dictionary_shape_metadata_uses_fallback():
+    with pytest.warns(UserWarning, match="empty"):
+        assert extract_primary_shape({}, "empty") == (None, 1)

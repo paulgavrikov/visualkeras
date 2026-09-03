@@ -464,6 +464,8 @@ def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
         If the shape uses an unsupported container format.
     """
     layer_info = f" (layer: {layer_name})" if layer_name else ""
+    if isinstance(layer_output_shape, Mapping):
+        layer_output_shape = list(layer_output_shape.values())
     if hasattr(layer_output_shape, "as_list"):
         try:
             layer_output_shape = tuple(layer_output_shape.as_list())
