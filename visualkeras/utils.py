@@ -826,9 +826,13 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
     if isinstance(size, (float, int)):
          scale = float(size)
          base = min(face_w, face_h)
-         target_w = int(base * scale)
-         if target_w <= 0: target_w = 1
-         target_h = int(target_w * logo_img.height / logo_img.width)
+         edge = max(1, int(base * scale))
+         aspect = logo_img.height / logo_img.width
+         target_w = edge
+         target_h = max(1, int(target_w * aspect))
+         if target_h > edge:
+             target_h = edge
+             target_w = max(1, int(target_h / aspect))
     elif isinstance(size, (tuple, list)):
          target_w, target_h = size
     

@@ -380,3 +380,23 @@ def test_image_layouts_composite_alpha_over_background(layout, background, expec
     assert image.getpixel(second_xy) == (0, 255, 0, 255)
     assert source.getpixel((0, 0)) == (255, 0, 0, 128)
     assert second.mode == "RGB"
+
+
+@pytest.mark.parametrize("size", [(1000, 1), (1, 1000)])
+@pytest.mark.parametrize("corner", ["top-left", "bottom-right", "center"])
+def test_extreme_aspect_logos_stay_within_the_requested_size(size, corner):
+    image = Image.new("RGBA", (60, 60), "white")
+    logo = Image.new("RGBA", size, "red")
+    box = utils.Box()
+    box.x1, box.y1, box.x2, box.y2, box.de = 10, 10, 50, 50, 0
+    box.fill, box.outline = "white", "black"
+    draw = aggdraw.Draw(image)
+    box.draw(draw)
+    draw.flush()
+    utils.draw_node_logo(image, box, logo, {"size": 0.5, "corner": corner}, False)
+    points = [(i % image.width, i // image.width) for i, pixel in enumerate(image.getdata()) if pixel[:3] == (255, 0, 0)]
+    left, right = min(x for x, y in points), max(x for x, y in points)
+    top, bottom = min(y for x, y in points), max(y for x, y in points)
+    assert 10 <= left <= right < 50 and 10 <= top <= bottom < 50
+    assert right - left + 1 <= 20 and bottom - top + 1 <= 20
+    assert logo.size == size

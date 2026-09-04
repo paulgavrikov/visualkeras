@@ -550,3 +550,21 @@ def test_dictionary_output_shape_metadata_renders(mode):
         settings.update(spacing=40, legend_text_spacing_offset=0)
     image = visualkeras.show(model, mode=mode, **settings)
     assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+@pytest.mark.parametrize("size", [(1000, 1), (1, 1000)])
+def test_extreme_aspect_node_logos_fit_the_requested_fraction(tmp_path, mode, size):
+    icon = tmp_path / "thin.png"
+    Image.new("RGBA", size, "red").save(icon)
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = tf.keras.layers.Dense(8, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    settings = {"draw_volume": False, "min_xy": 60, "min_z": 60,
+                "logo_groups": [{"file": str(icon), "layers": ["out"], "size": 0.5, "corner": "center"}]}
+    if mode == "layered":
+        settings["legend_text_spacing_offset"] = 0
+    image = visualkeras.show(model, mode=mode, **settings)
+    points = [(i % image.width, i // image.width) for i, pixel in enumerate(image.getdata()) if pixel[:3] == (255, 0, 0)]
+    assert max(x for x, y in points) - min(x for x, y in points) + 1 <= 30
+    assert max(y for x, y in points) - min(y for x, y in points) + 1 <= 30
