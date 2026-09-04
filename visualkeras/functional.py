@@ -1678,6 +1678,7 @@ def _compute_external_text_padding(
     text_top_padding: Dict[int, int] = {}
     text_bottom_padding: Dict[int, int] = {}
     active_font = font or ImageFont.load_default()
+    measure_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
 
     visible_nodes = [
         node
@@ -1698,7 +1699,9 @@ def _compute_external_text_padding(
                 text_height += active_font.getbbox(line)[3]
         text_height += (len(text_value.split("\n")) - 1) * text_vspacing
 
-        extent = max(0, int(text_height) + 4)
+        bounds = _multiline_bbox(measure_draw, text_value, active_font, text_vspacing)
+        # Preserve existing row spacing while reserving any missing glyph extent.
+        extent = max(0, int(text_height) + 4, ceil(bounds[3]) + 4)
         if above:
             text_top_padding[node.node_id] = extent
         else:
@@ -2489,6 +2492,54 @@ def _render_graph(
                 max_right = max(max_right, text_x + text_w + padding)
                 max_bottom = max(max_bottom, text_y + text_h + padding)
 
+    external_labels: List[Dict[str, Any]] = []
+    if text_callable is not None:
+        external_font = font or ImageFont.load_default()
+        measure_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        visible_nodes = [
+            node
+            for node in sorted(graph.nodes.values(), key=lambda n: n.order)
+            if node.kind != "virtual"
+        ]
+        for index, node in enumerate(visible_nodes):
+            text, above = text_callable(index, node.layer)
+            text_value = "" if text is None else str(text)
+            if not text_value:
+                continue
+            _, text_top, text_right, text_bottom = _multiline_bbox(
+                measure_draw, text_value, external_font, text_vspacing,
+            )
+            text_height = max(0, ceil(text_bottom))
+            text_width = max(0, ceil(text_right))
+
+            de = getattr(node, 'de', 0)
+            real_width = node.width - de
+            real_height = node.height - de
+
+            face_x = node.x
+            face_y = node.y + de
+
+            text_x = face_x + real_width / 2 - text_width / 2
+
+            if above:
+                text_y = face_y - text_height - 4
+            else:
+                text_y = face_y + real_height + 4
+
+            external_labels.append(
+                {
+                    "x": float(text_x),
+                    "x_pref": float(text_x),
+                    "y": float(text_y),
+                    "w": int(text_width),
+                    "h": int(text_height),
+                    "text": text_value,
+                }
+            )
+
+            min_top = min(min_top, int(text_y) + text_top)
+            max_bottom = max(max_bottom, int(text_y) + text_bottom)
+
     shift_x = ceil(-min_left)
     shift_y = ceil(-min_top)
     if shift_x or shift_y:
@@ -2499,6 +2550,11 @@ def _render_graph(
         )
         max_right += shift_x
         max_bottom += shift_y
+
+    for label in external_labels:
+        label["x"] += shift_x
+        label["x_pref"] += shift_x
+        label["y"] = int(label["y"] + shift_y)
 
     node_logos = {} # node_id -> list of (group, image)
     if logo_groups:
@@ -2674,58 +2730,8 @@ def _render_graph(
             )
 
     if text_callable is not None:
-        if font is None:
-            font = ImageFont.load_default()
+        font = external_font
         draw_text = ImageDraw.Draw(img)
-        external_labels: List[Dict[str, Any]] = []
-        visible_nodes = [
-            node
-            for node in sorted(graph.nodes.values(), key=lambda n: n.order)
-            if node.kind != "virtual"
-        ]
-        for index, node in enumerate(visible_nodes):
-            text, above = text_callable(index, node.layer)
-            text_value = "" if text is None else str(text)
-            if not text_value:
-                continue
-            text_height = 0
-            text_widths = []
-            for line in text_value.split("\n"):
-                if hasattr(font, "getsize"):
-                    text_widths.append(font.getsize(line)[0])
-                    text_height += font.getsize(line)[1]
-                else:
-                    bbox = font.getbbox(line)
-                    text_widths.append(bbox[2])
-                    text_height += bbox[3]
-            text_height += (len(text_value.split("\n")) - 1) * text_vspacing
-
-            de = getattr(node, 'de', 0)
-            real_width = node.width - de
-            real_height = node.height - de
-
-            face_x = node.x
-            face_y = node.y + de
-
-            text_x = face_x + real_width / 2 - max(text_widths or [0]) / 2
-
-            if above:
-                text_y = face_y - text_height - 4
-            else:
-                text_y = face_y + real_height + 4
-
-            text_width = max(text_widths or [0])
-            external_labels.append(
-                {
-                    "x": float(text_x),
-                    "x_pref": float(text_x),
-                    "y": int(text_y),
-                    "w": int(text_width),
-                    "h": int(text_height),
-                    "text": text_value,
-                }
-            )
-
         _resolve_external_label_x_collisions(
             external_labels,
             image_width=img.size[0],

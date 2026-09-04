@@ -258,3 +258,73 @@ def test_functional_centered_italic_multiline_label():
         }},
     )
     assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("simple", [False, True])
+@pytest.mark.parametrize("above", [False, True])
+@pytest.mark.parametrize("text", ["A\ng", "A\n\ng"])
+@pytest.mark.parametrize("italic", [False, True])
+def test_functional_external_captions_preserve_glyphs_and_diagram(simple, above, text, italic):
+    from PIL import ImageChops, ImageDraw, ImageFont
+
+    inputs = tf.keras.Input((8,), name="in")
+    model = tf.keras.Model(inputs, tf.keras.layers.Dense(6, name="out")(inputs))
+    font = ImageFont.truetype("DejaVuSans-Oblique.ttf", 24) if italic else ImageFont.load_default()
+    image = visualkeras.functional_view(
+        model, draw_volume=False, padding=2, font=font, font_color="magenta", text_vspacing=10,
+        simple_text_visualization=simple, styles={object: {"box_text_enabled": False}},
+        text_callable=lambda i, layer: (text if layer.name == "out" else "", above),
+    )
+    reference = Image.new("RGBA", (160, 160), "white")
+    ImageDraw.Draw(reference).multiline_text((10, 10), text, font=font, spacing=10, fill="magenta")
+
+    def glyph_mask(im):
+        mask = Image.new("L", im.size)
+        mask.putdata([255 - g if r == b == 255 else 0 for r, g, b, a in im.getdata()])
+        return mask
+
+    actual_mask, expected_mask = glyph_mask(image), glyph_mask(reference)
+    actual_bounds, expected_bounds = actual_mask.getbbox(), expected_mask.getbbox()
+    assert actual_bounds is not None
+    actual_glyphs = actual_mask.crop(actual_bounds)
+    expected_glyphs = expected_mask.crop(expected_bounds)
+    assert actual_glyphs.size == expected_glyphs.size
+    assert actual_glyphs.tobytes() == expected_glyphs.tobytes()
+
+    if not simple:
+        diagram = image.copy()
+        diagram.paste("white", mask=actual_mask.point(lambda value: 255 if value else 0))
+        plain = visualkeras.functional_view(model, draw_volume=False, padding=2)
+        diagram_bounds = ImageChops.difference(diagram.convert("RGB"), Image.new("RGB", diagram.size, "white")).getbbox()
+        plain_bounds = ImageChops.difference(plain.convert("RGB"), Image.new("RGB", plain.size, "white")).getbbox()
+        assert diagram.crop(diagram_bounds).size == plain.crop(plain_bounds).size
+        assert diagram.crop(diagram_bounds).tobytes() == plain.crop(plain_bounds).tobytes()
+        if above:
+            assert actual_bounds[3] <= diagram_bounds[1] - 3
+        else:
+            assert actual_bounds[1] >= diagram_bounds[3] + 3
+
+
+def test_functional_default_name_shape_captions_fit_and_callbacks_run_once():
+    from visualkeras.options import LAYERED_TEXT_CALLABLES
+
+    inputs = tf.keras.Input((8,), name="in")
+    model = tf.keras.Model(inputs, tf.keras.layers.Dense(6, name="out")(inputs))
+    calls = []
+
+    def caption(index, layer):
+        calls.append(layer.name)
+        return LAYERED_TEXT_CALLABLES["name_shape"](index, layer)
+
+    image = visualkeras.functional_view(model, draw_volume=False, text_callable=caption, font_color="magenta")
+    reference = visualkeras.functional_view(model, draw_volume=False, text_callable="name_shape", font_color="magenta", padding=80)
+
+    def glyphs(im):
+        mask = Image.new("L", im.size)
+        mask.putdata([255 - g if r == b == 255 else 0 for r, g, b, a in im.getdata()])
+        return mask.crop(mask.getbbox())
+
+    actual, expected = glyphs(image), glyphs(reference)
+    assert actual.size == expected.size
+    assert actual.tobytes() == expected.tobytes()
+    assert calls == ["in", "out"]
