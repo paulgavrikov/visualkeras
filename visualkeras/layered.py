@@ -127,7 +127,7 @@ def _get_logo_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
             if ref in type_to_boxes:
                 target_boxes.extend(type_to_boxes[ref])
                 
-    return target_boxes
+    return list({id(item): item for item in target_boxes}.values())
 
 
 def _draw_layered_group_boxes(draw, boxes, groups, draw_reversed):

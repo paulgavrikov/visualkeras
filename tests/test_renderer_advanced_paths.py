@@ -568,3 +568,19 @@ def test_extreme_aspect_node_logos_fit_the_requested_fraction(tmp_path, mode, si
     points = [(i % image.width, i // image.width) for i, pixel in enumerate(image.getdata()) if pixel[:3] == (255, 0, 0)]
     assert max(x for x, y in points) - min(x for x, y in points) + 1 <= 30
     assert max(y for x, y in points) - min(y for x, y in points) + 1 <= 30
+
+
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+def test_overlapping_logo_selectors_paint_each_layer_once(tmp_path, mode):
+    icon = tmp_path / "logo.png"
+    Image.new("RGBA", (12, 12), (255, 0, 0, 128)).save(icon)
+    inputs = tf.keras.Input((8,), name="in")
+    model = tf.keras.Model(inputs, tf.keras.layers.Dense(8, name="out")(inputs))
+    settings = {"draw_volume": False, "min_xy": 60, "min_z": 60}
+    if mode == "layered":
+        settings["legend_text_spacing_offset"] = 0
+    group = {"file": str(icon), "layers": ["out", tf.keras.layers.Dense, "out"], "corner": "center"}
+    image = visualkeras.show(model, mode=mode, logo_groups=[group], **settings)
+    reference = visualkeras.show(model, mode=mode, logo_groups=[{**group, "layers": ["out"]}], **settings)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()

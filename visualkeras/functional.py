@@ -3280,4 +3280,4 @@ def _get_logo_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[Funct
             if ref in type_to_nodes:
                 target_nodes.extend(type_to_nodes[ref])
                 
-    return target_nodes
+    return list({id(item): item for item in target_nodes}.values())
