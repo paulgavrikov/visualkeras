@@ -584,3 +584,20 @@ def test_overlapping_logo_selectors_paint_each_layer_once(tmp_path, mode):
     reference = visualkeras.show(model, mode=mode, logo_groups=[{**group, "layers": ["out"]}], **settings)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+def test_logo_selectors_accept_layer_instances(tmp_path, mode):
+    icon = tmp_path / "logo.png"
+    Image.new("RGBA", (12, 12), "red").save(icon)
+    inputs = tf.keras.Input((8,), name="in")
+    output_layer = tf.keras.layers.Dense(8, name="out")
+    model = tf.keras.Model(inputs, output_layer(inputs))
+    settings = {"draw_volume": False, "min_xy": 60, "min_z": 60}
+    if mode == "layered":
+        settings["legend_text_spacing_offset"] = 0
+    group = {"file": str(icon), "layers": [output_layer], "corner": "center"}
+    image = visualkeras.show(model, mode=mode, logo_groups=[group], **settings)
+    reference = visualkeras.show(model, mode=mode, logo_groups=[{**group, "layers": ["out"]}], **settings)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()

@@ -3279,5 +3279,7 @@ def _get_logo_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[Funct
         elif isinstance(ref, type):
             if ref in type_to_nodes:
                 target_nodes.extend(type_to_nodes[ref])
+        else:
+            target_nodes.extend(node for node in graph.nodes.values() if getattr(node, "layer", None) is ref)
                 
     return list({id(item): item for item in target_nodes}.values())
