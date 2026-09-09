@@ -124,9 +124,10 @@ def _get_logo_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
             if ref in name_to_boxes:
                 target_boxes.extend(name_to_boxes[ref])
         elif isinstance(ref, type):
-            if ref in type_to_boxes:
-                target_boxes.extend(type_to_boxes[ref])
-        else:
+            for layer_type, matches in type_to_boxes.items():
+                if issubclass(layer_type, ref):
+                    target_boxes.extend(matches)
+        elif ref is not None:
             target_boxes.extend(box for box in boxes if getattr(box, "layer", None) is ref)
                 
     return list({id(item): item for item in target_boxes}.values())

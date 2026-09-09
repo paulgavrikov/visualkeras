@@ -601,3 +601,22 @@ def test_logo_selectors_accept_layer_instances(tmp_path, mode):
     reference = visualkeras.show(model, mode=mode, logo_groups=[{**group, "layers": ["out"]}], **settings)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["layered", "functional"])
+def test_logo_class_selectors_include_subclasses(tmp_path, mode):
+    class CustomDense(tf.keras.layers.Dense):
+        pass
+
+    icon = tmp_path / "logo.png"
+    Image.new("RGBA", (12, 12), "red").save(icon)
+    inputs = tf.keras.Input((8,), name="in")
+    model = tf.keras.Model(inputs, CustomDense(8, name="out")(inputs))
+    settings = {"draw_volume": False, "min_xy": 60, "min_z": 60}
+    if mode == "layered":
+        settings["legend_text_spacing_offset"] = 0
+    group = {"file": str(icon), "layers": [tf.keras.layers.Dense], "corner": "center"}
+    image = visualkeras.show(model, mode=mode, logo_groups=[group], **settings)
+    reference = visualkeras.show(model, mode=mode, logo_groups=[{**group, "layers": ["out"]}], **settings)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
