@@ -417,3 +417,24 @@ def test_logo_legend_preserves_base_pixels_and_composites_background_once(tmp_pa
     icon_size = font.getbbox("Ag")[3] * 2
     expected = Image.alpha_composite(Image.new("RGBA", (1, 1), background), Image.new("RGBA", (1, 1), (255, 0, 0, 128)))
     assert image.getpixel((4 + icon_size // 2, base.height + 4 + icon_size // 2)) == expected.getpixel((0, 0))
+
+
+@pytest.mark.parametrize("label", ["jazz", "j\n\ng"])
+def test_logo_legend_preserves_complete_label_glyphs(tmp_path, label):
+    from PIL import ImageDraw
+
+    icon = tmp_path / "logo.png"
+    Image.new("RGBA", (12, 12), "blue").save(icon)
+    font = ImageFont.truetype("DejaVuSans-Oblique.ttf", 24)
+    image = utils.draw_logos_legend(Image.new("RGBA", (160, 10), "white"), [{"name": label, "file": str(icon)}], {"padding": 4, "spacing": 5}, "white", font, "magenta")
+    reference = Image.new("RGBA", (160, 160), "white")
+    ImageDraw.Draw(reference).multiline_text((10, 10), label, font=font, fill="magenta")
+
+    def glyphs(im):
+        mask = Image.new("L", im.size)
+        mask.putdata([255 - g if r == b == 255 else 0 for r, g, b, a in im.getdata()])
+        return mask.crop(mask.getbbox())
+
+    actual, expected = glyphs(image), glyphs(reference)
+    assert actual.size == expected.size
+    assert actual.tobytes() == expected.tobytes()

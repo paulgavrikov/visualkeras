@@ -873,6 +873,26 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
     apply_affine_transform(img, resized_logo, logo_quad, "fill")
 
 
+def _multiline_bbox(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, spacing: int) -> Tuple[int, int, int, int]:
+    # Prefer PIL's bbox helper (handles glyph bearings correctly)
+    if hasattr(draw, "multiline_textbbox"):
+        return draw.multiline_textbbox((0, 0), text, font=font, spacing=spacing, align="left")
+    # Fallback: union per-line bbox
+    lefts, tops, rights, bottoms = [], [], [], []
+    y = 0
+    for line in text.split("\n"):
+        if hasattr(draw, "textbbox"):
+            l, t, r, b = draw.textbbox((0, y), line, font=font)
+        else:
+            w, h = draw.textsize(line, font=font)
+            l, t, r, b = 0, y, w, y + h
+        lefts.append(l); tops.append(t); rights.append(r); bottoms.append(b)
+        y += (b - t) + spacing
+    if not lefts:
+        return (0, 0, 0, 0)
+    return (min(lefts), min(tops), max(rights), max(bottoms))
+
+
 def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], legend_config: Union[bool, Dict[str, Any]], background_fill: Any, font: ImageFont.ImageFont, font_color: Any) -> Image.Image:
     """Append a legend describing configured logo groups.
 
@@ -931,17 +951,13 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
         icon_size = int(text_height * 2)
         logo_img = resize_image_to_fit(logo_img, icon_size, icon_size, "contain")
         
-        # Measure text
-        if hasattr(font, 'getsize'):
-            text_w, text_h = font.getsize(name)
-        else:
-            bbox = font.getbbox(name)
-            text_w = bbox[2]
-            text_h = bbox[3]
-            
+        measure_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        left, top, right, bottom = _multiline_bbox(measure_draw, name, font, 4)
+        text_w, text_h = math.ceil(right - left), math.ceil(bottom - top)
+
         patch_w = icon_size + spacing + text_w
         patch_h = max(icon_size, text_h)
-        
+
         patch = Image.new("RGBA", (patch_w, patch_h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(patch)
         
@@ -951,9 +967,9 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
         patch.alpha_composite(logo_img, (0, logo_y))
         
         # Draw text
-        text_x = icon_size + spacing
-        text_y = (patch_h - text_h) // 2
-        draw.text((text_x, text_y), name, font=font, fill=font_color)
+        text_x = icon_size + spacing - left
+        text_y = (patch_h - text_h) // 2 - top
+        draw.multiline_text((text_x, text_y), name, font=font, fill=font_color)
         
         patches.append(patch)
         

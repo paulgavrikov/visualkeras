@@ -43,6 +43,7 @@ from .utils import (
     draw_node_logo,
     draw_logos_legend,
     resolve_style,
+    _multiline_bbox,
 )
 
 
@@ -1949,26 +1950,6 @@ def _resolve_box_font(style: Mapping[str, Any], fallback: Optional[Any]) -> Tupl
         if f is not None:
             return f, cand, size
     return ImageFont.load_default(), None, size
-
-
-def _multiline_bbox(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, spacing: int) -> Tuple[int, int, int, int]:
-    # Prefer PIL's bbox helper (handles glyph bearings correctly)
-    if hasattr(draw, "multiline_textbbox"):
-        return draw.multiline_textbbox((0, 0), text, font=font, spacing=spacing, align="left")
-    # Fallback: union per-line bbox
-    lefts, tops, rights, bottoms = [], [], [], []
-    y = 0
-    for line in text.split("\n"):
-        if hasattr(draw, "textbbox"):
-            l, t, r, b = draw.textbbox((0, y), line, font=font)
-        else:
-            w, h = draw.textsize(line, font=font)
-            l, t, r, b = 0, y, w, y + h
-        lefts.append(l); tops.append(t); rights.append(r); bottoms.append(b)
-        y += (b - t) + spacing
-    if not lefts:
-        return (0, 0, 0, 0)
-    return (min(lefts), min(tops), max(rights), max(bottoms))
 
 
 def _render_text_image_bbox(text: str, font: ImageFont.ImageFont, color: Any, spacing: int, margin: int = 2) -> Image.Image:
