@@ -1484,3 +1484,19 @@ def test_centered_text_image_uses_alignment_aware_bounds(text, margin):
     )
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("background", [(255, 255, 255, 255), (10, 20, 30, 128), (0, 0, 0, 0)])
+def test_collapsed_annotation_background_uses_source_over(background):
+    image = Image.new("RGBA", (120, 100), background)
+    font = ImageFont.load_default()
+    node = _node(1, kind="collapsed", style={"collapsed": True, "collapse_kind": "block",
+                 "collapse_label": "2x", "collapse_badge_enabled": False,
+                 "collapse_annotation_position": "below", "collapse_annotation_font": font})
+    functional._draw_collapsed_annotations(image, [(node, (10, 10, 90, 40))],
+        fallback_font=font, fallback_font_color="black", default_annotation_color="gray")
+    left, top, right, bottom = ImageDraw.Draw(Image.new("RGBA", (1, 1))).textbbox((0, 0), "2x", font=font)
+    text_x = int((100 - (right - left)) / 2)
+    expected = Image.alpha_composite(Image.new("RGBA", (1, 1), background), Image.new("RGBA", (1, 1), (255, 255, 255, 220)))
+    assert image.getpixel((text_x - 2, 53)) == expected.getpixel((0, 0))
+    assert image.getpixel((0, 0)) == background

@@ -328,3 +328,18 @@ def test_functional_default_name_shape_captions_fit_and_callbacks_run_once():
     assert actual.size == expected.size
     assert actual.tobytes() == expected.tobytes()
     assert calls == ["in", "out"]
+
+
+def test_collapsed_block_annotations_preserve_opaque_canvas():
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = inputs
+    for index in range(4):
+        outputs = tf.keras.layers.Dense(6, name=f"dense_{index}")(outputs)
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.functional_view(
+        model, simple_text_visualization=True, collapse_enabled=True,
+        collapse_rules=[{"kind": "block", "selector": [tf.keras.layers.Dense, tf.keras.layers.Dense],
+                         "repeat_count": 2, "label": "2x", "annotation_position": "below"}],
+        styles={object: {"box_size": (100, 80)}},
+    )
+    assert image.getextrema()[3] == (255, 255)

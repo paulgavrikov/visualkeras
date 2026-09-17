@@ -2303,7 +2303,8 @@ def _draw_collapsed_annotations(
     if not collapsed_nodes:
         return
 
-    draw = ImageDraw.Draw(img)
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
     for node, rect in collapsed_nodes:
         style = node.style or {}
         if not bool(style.get("collapsed", False)):
@@ -2353,6 +2354,8 @@ def _draw_collapsed_annotations(
                 font=annotation_font,
                 image_size=img.size,
             )
+
+    img.alpha_composite(overlay)
 
 
 def _render_graph(
