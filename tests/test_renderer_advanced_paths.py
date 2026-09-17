@@ -620,3 +620,25 @@ def test_logo_class_selectors_include_subclasses(tmp_path, mode):
     reference = visualkeras.show(model, mode=mode, logo_groups=[{**group, "layers": ["out"]}], **settings)
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("ignore_hidden", [False, True])
+def test_layered_caption_callback_runs_once_per_visible_layer(ignore_hidden):
+    inputs = tf.keras.Input((4,), name="in")
+    hidden = tf.keras.layers.Dense(3, name="hidden")(inputs)
+    model = tf.keras.Model(inputs, tf.keras.layers.Dense(2, name="out")(hidden))
+    calls = []
+
+    def caption(index, layer):
+        repeated = layer.name in [name for i, name in calls]
+        calls.append((index, layer.name))
+        return ("Once" if not repeated else "Unexpected second invocation", False)
+
+    settings = {"draw_volume": False, "legend_text_spacing_offset": 0,
+                "index_ignore": [1] if ignore_hidden else []}
+    image = visualkeras.layered_view(model, text_callable=caption, **settings)
+    reference = visualkeras.layered_view(model, text_callable=lambda i, layer: ("Once", False), **settings)
+    names = [layer.name for i, layer in enumerate(model.layers) if i not in settings["index_ignore"]]
+    assert calls == list(enumerate(names))
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()

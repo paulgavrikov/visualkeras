@@ -1089,6 +1089,7 @@ def layered_view(model,
         min_scene_x = min(min_scene_x, visual_x1)
         max_scene_x = max(max_scene_x, visual_x2)
 
+    external_labels = []
     if text_callable is not None:
         if font is None:
             font = ImageFont.load_default()
@@ -1104,6 +1105,7 @@ def layered_view(model,
             local_vspacing = box.style.get('text_vspacing', text_vspacing)
 
             text, above = text_callable(box_idx, layer)
+            external_labels.append((text, above))
 
             text_w = 0
             text_h = 0
@@ -1418,7 +1420,7 @@ def layered_view(model,
             local_font_color = box.style.get('font_color', font_color)
             local_vspacing = box.style.get('text_vspacing', text_vspacing)
 
-            text, above = text_callable(i, layer)
+            text, above = external_labels[i]
             text_height = 0
             text_x_adjust = []
             for line in text.split('\n'):
