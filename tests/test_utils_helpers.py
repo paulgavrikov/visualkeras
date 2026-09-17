@@ -400,3 +400,20 @@ def test_extreme_aspect_logos_stay_within_the_requested_size(size, corner):
     assert 10 <= left <= right < 50 and 10 <= top <= bottom < 50
     assert right - left + 1 <= 20 and bottom - top + 1 <= 20
     assert logo.size == size
+
+
+@pytest.mark.parametrize("background", [(0, 0, 0, 0), (10, 20, 30, 128)])
+@pytest.mark.parametrize("base_alpha", [0, 128, 255])
+def test_logo_legend_preserves_base_pixels_and_composites_background_once(tmp_path, background, base_alpha):
+    icon = tmp_path / "logo.png"
+    Image.new("RGBA", (16, 16), (255, 0, 0, 128)).save(icon)
+    base = Image.new("RGBA", (160, 20), (20, 50, 80, base_alpha))
+    original = base.tobytes()
+    font = ImageFont.load_default()
+    image = utils.draw_logos_legend(base, [{"name": "A", "file": str(icon)}], {"padding": 4, "spacing": 5}, background, font, "white")
+    assert base.tobytes() == original
+    assert image.crop((0, 0, base.width, base.height)).tobytes() == original
+    assert image.getpixel((0, base.height)) == background
+    icon_size = font.getbbox("Ag")[3] * 2
+    expected = Image.alpha_composite(Image.new("RGBA", (1, 1), background), Image.new("RGBA", (1, 1), (255, 0, 0, 128)))
+    assert image.getpixel((4 + icon_size // 2, base.height + 4 + icon_size // 2)) == expected.getpixel((0, 0))

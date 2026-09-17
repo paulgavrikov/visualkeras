@@ -942,7 +942,7 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
         patch_w = icon_size + spacing + text_w
         patch_h = max(icon_size, text_h)
         
-        patch = Image.new("RGBA", (patch_w, patch_h), background_fill)
+        patch = Image.new("RGBA", (patch_w, patch_h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(patch)
         
         # Paste logo
@@ -964,4 +964,7 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
                                  spacing=spacing,
                                  background_fill=background_fill, horizontal=True)
                                  
-    return vertical_image_concat(img, legend_image, background_fill=background_fill)
+    result = Image.new("RGBA", (max(img.width, legend_image.width), img.height + legend_image.height), background_fill)
+    result.paste(img, (0, 0))
+    result.paste(legend_image, (0, img.height))
+    return result
