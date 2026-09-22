@@ -642,3 +642,32 @@ def test_layered_caption_callback_runs_once_per_visible_layer(ignore_hidden):
     assert calls == list(enumerate(names))
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["layered"])
+@pytest.mark.parametrize("caption", ["Wide\nGroup", "A\n\ng"])
+def test_group_captions_preserve_multiline_glyphs(mode, caption):
+    from PIL import ImageDraw, ImageFont
+
+    inputs = tf.keras.Input((4,), name="in")
+    model = tf.keras.Model(inputs, tf.keras.layers.Dense(3, name="out")(inputs))
+    font = ImageFont.truetype("DejaVuSansMono.ttf", 24)
+    settings = {"padding": 2, "layered_groups": [{"name": caption, "layers": ["out"], "font": font, "font_color": "magenta"}]}
+    if mode == "layered":
+        settings.update(legend_text_spacing_offset=0, draw_volume=False)
+    elif mode == "functional":
+        settings["draw_volume"] = False
+    else:
+        settings.update(node_size=20, layer_spacing=40, show_neurons=False)
+    image = visualkeras.show(model, mode=mode, **settings)
+    reference = Image.new("RGBA", (240, 160), "white")
+    ImageDraw.Draw(reference).multiline_text((10, 10), caption, font=font, fill="magenta")
+
+    def glyphs(im):
+        mask = Image.new("L", im.size)
+        mask.putdata([255 - g if r == b == 255 else 0 for r, g, b, a in im.getdata()])
+        return mask.crop(mask.getbbox())
+
+    actual, expected = glyphs(image), glyphs(reference)
+    assert actual.size == expected.size
+    assert actual.tobytes() == expected.tobytes()

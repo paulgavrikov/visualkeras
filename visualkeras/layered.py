@@ -4,6 +4,7 @@ import aggdraw
 from PIL import ImageFont
 from math import ceil
 from .utils import *
+from .utils import _multiline_bbox
 from .layer_utils import *
 from .layer_utils import _shape_from_tensor_output
 from .options import LayeredOptions, LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
@@ -212,12 +213,11 @@ def _draw_layered_group_captions(img, boxes, groups, draw_reversed):
         center_x = (min_x + max_x) / 2
         text_x = center_x - text_w / 2
         text_y = max_y + gap
-        if hasattr(font, "getbbox"):
-            left, top, _, _ = font.getbbox(caption)
-            text_x -= left
-            text_y -= top
+        left, top, _, _ = _multiline_bbox(draw, caption, font, 4)
+        text_x -= left
+        text_y -= top
         
-        draw.text((text_x, text_y), caption, fill=color, font=font)
+        draw.multiline_text((text_x, text_y), caption, fill=color, font=font)
 
 
 
@@ -242,11 +242,8 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
 
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
-    if hasattr(font, "getbbox"):
-        left, top, right, bottom = font.getbbox(text)
-        return right - left, bottom - top
-    else:
-        return draw.textsize(text, font=font)
+    left, top, right, bottom = _multiline_bbox(draw, text, font, 4)
+    return right - left, bottom - top
 
 
 @_track_explicit_arguments
