@@ -644,7 +644,7 @@ def test_layered_caption_callback_runs_once_per_visible_layer(ignore_hidden):
     assert image.tobytes() == reference.tobytes()
 
 
-@pytest.mark.parametrize("mode", ["layered"])
+@pytest.mark.parametrize("mode", ["layered", "functional"])
 @pytest.mark.parametrize("caption", ["Wide\nGroup", "A\n\ng"])
 def test_group_captions_preserve_multiline_glyphs(mode, caption):
     from PIL import ImageDraw, ImageFont

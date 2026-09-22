@@ -1886,11 +1886,8 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
 
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
-    if hasattr(font, "getbbox"):
-        left, top, right, bottom = font.getbbox(text)
-        return right - left, bottom - top
-    else:
-        return draw.textsize(text, font=font)
+    left, top, right, bottom = _multiline_bbox(draw, text, font, 4)
+    return right - left, bottom - top
 
 
 
@@ -2948,12 +2945,11 @@ def _draw_group_captions(
         text_x = center_x - text_w / 2
         text_y = box_max_y + gap
         
-        if hasattr(font, "getbbox"):
-            left, top, _, _ = font.getbbox(caption)
-            text_x -= left
-            text_y -= top
+        left, top, _, _ = _multiline_bbox(draw, caption, font, 4)
+        text_x -= left
+        text_y -= top
 
-        draw.text((text_x, text_y), caption, fill=color, font=font)
+        draw.multiline_text((text_x, text_y), caption, fill=color, font=font)
 
 
 def _draw_connectors(

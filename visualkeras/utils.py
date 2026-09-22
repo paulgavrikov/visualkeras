@@ -883,9 +883,12 @@ def _multiline_bbox(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageF
     for line in text.split("\n"):
         if hasattr(draw, "textbbox"):
             l, t, r, b = draw.textbbox((0, y), line, font=font)
-        else:
+        elif hasattr(draw, "textsize"):
             w, h = draw.textsize(line, font=font)
             l, t, r, b = 0, y, w, y + h
+        else:
+            l, t, r, b = font.getbbox(line)
+            t, b = t + y, b + y
         lefts.append(l); tops.append(t); rights.append(r); bottoms.append(b)
         y += (b - t) + spacing
     if not lefts:
