@@ -7,6 +7,7 @@ from math import ceil, prod as _shape_product
 from operator import index as _dimension_index
 import warnings
 from .utils import *
+from .utils import _multiline_bbox
 from .layer_utils import *
 from .options import GraphOptions, GRAPH_PRESETS
 from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
@@ -803,12 +804,11 @@ def _draw_graph_group_captions(img, id_to_node_list_map, groups, model):
         text_x = center_x - text_w / 2
         text_y = max_y + gap
         
-        if hasattr(font, "getbbox"):
-            left, top, _, _ = font.getbbox(caption)
-            text_x -= left
-            text_y -= top
+        left, top, _, _ = _multiline_bbox(draw, caption, font, 4)
+        text_x -= left
+        text_y -= top
 
-        draw.text((text_x, text_y), caption, fill=color, font=font)
+        draw.multiline_text((text_x, text_y), caption, fill=color, font=font)
 
 def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
     font_src = group.get("font", None)
@@ -830,8 +830,5 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
         return ImageFont.load_default()
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
-    if hasattr(font, "getbbox"):
-        left, top, right, bottom = font.getbbox(text)
-        return right - left, bottom - top
-    else:
-        return draw.textsize(text, font=font)
+    left, top, right, bottom = _multiline_bbox(draw, text, font, 4)
+    return right - left, bottom - top
