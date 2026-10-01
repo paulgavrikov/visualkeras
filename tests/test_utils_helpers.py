@@ -438,3 +438,23 @@ def test_logo_legend_preserves_complete_label_glyphs(tmp_path, label):
     actual, expected = glyphs(image), glyphs(reference)
     assert actual.size == expected.size
     assert actual.tobytes() == expected.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+def test_affine_fractional_face_keeps_its_last_pixel(mode):
+    image = Image.new(mode, (16, 16), "white")
+    source = Image.new("RGBA", (8, 8), "red")
+    utils.apply_affine_transform(image, source, [(2.25, 2.25), (8.75, 2.25), (8.75, 8.75), (2.25, 8.75)], "fill")
+    assert image.getpixel((8, 8))[:3] == (255, 0, 0)
+    assert image.getpixel((9, 9))[:3] == (255, 255, 255)
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+def test_affine_negative_fractional_origin_is_translation_invariant(mode):
+    quad = [(-0.5, 2.25), (6.25, 2.25), (6.25, 8.75), (-0.5, 8.75)]
+    source = Image.new("RGBA", (8, 8), "red")
+    image = Image.new(mode, (32, 24), "white")
+    reference = Image.new(mode, (40, 24), "white")
+    utils.apply_affine_transform(image, source, quad, "fill")
+    utils.apply_affine_transform(reference, source, [(x + 8, y) for x, y in quad], "fill")
+    assert image.tobytes() == reference.crop((8, 0, 40, 24)).tobytes()

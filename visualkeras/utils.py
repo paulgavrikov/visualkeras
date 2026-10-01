@@ -714,8 +714,8 @@ def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, qua
     # Calculate bounding box of the quad to determine target size
     xs = [p[0] for p in quad]
     ys = [p[1] for p in quad]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
+    min_x, max_x = math.floor(min(xs)), math.ceil(max(xs))
+    min_y, max_y = math.floor(min(ys)), math.ceil(max(ys))
     w = int(max_x - min_x)
     h = int(max_y - min_y)
     
