@@ -415,14 +415,18 @@ def graph_view(model, to_file: str = None,
         )
     
     if should_add_dummy_outputs:
-        output_shapes = model.output_shape
-        structured = (
-            isinstance(output_shapes, (list, tuple)) and output_shapes
-            and (isinstance(output_shapes[0], (list, tuple))
-                 or hasattr(output_shapes[0], "as_list"))
-        )
-        if not structured:
-            output_shapes = [output_shapes]
+        tensor_shapes = [getattr(output, "shape", None) for output in model.outputs]
+        if all(shape is not None for shape in tensor_shapes):
+            output_shapes = tensor_shapes
+        else:
+            output_shapes = model.output_shape
+            structured = (
+                isinstance(output_shapes, (list, tuple)) and output_shapes
+                and (isinstance(output_shapes[0], (list, tuple))
+                     or hasattr(output_shapes[0], "as_list"))
+            )
+            if not structured:
+                output_shapes = [output_shapes]
 
         model_layers.append([
             _DummyLayer(

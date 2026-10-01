@@ -288,3 +288,21 @@ def test_graph_keeps_distinct_output_slots_from_one_terminal_layer(kind, show_ne
     column = [image.getpixel((x, y))[:3] == (255, 0, 0) for y in range(image.height)]
     count = sum(value and (index == 0 or not column[index - 1]) for index, value in enumerate(column))
     assert count == (neuron_count if show_neurons else 2)
+
+
+@pytest.mark.parametrize("metadata", [None, {"main": (None, 6), "aux": (None, 2)}])
+def test_graph_output_neurons_use_actual_tensor_shapes(metadata):
+    class MetadataModel(tf.keras.Model):
+        @property
+        def output_shape(self):
+            return metadata
+
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = tf.keras.layers.Lambda(lambda x: (x[:, :6], x[:, 6:]), name="out")(inputs)
+    model = MetadataModel(inputs, outputs)
+    image = visualkeras.graph_view(model, inout_as_tensor=False, show_neurons=True, node_size=12,
+                                   node_spacing=5, layer_spacing=30, padding=8, ellipsize_after=0,
+                                   styles={"out": {"fill": "red", "outline": "red"}})
+    x = image.width - 8 - 6
+    pixels = [image.getpixel((x, y))[:3] == (255, 0, 0) for y in range(image.height)]
+    assert sum(value and (i == 0 or not pixels[i - 1]) for i, value in enumerate(pixels)) == 8
