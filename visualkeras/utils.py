@@ -737,19 +737,11 @@ def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, qua
     resized_source = resize_image_to_fit(source_img.convert("RGBA"), int(side_w), int(side_h), fit_mode)
     sw, sh = resized_source.size
     
-    coeffs = _calculate_affine_coeffs(quad, (sw, sh))
-    
-    # Transform
-    # x_global = x_local + min_x
-    # x_source = a*(x_local + min_x) + ...
-    #          = a*x_local + b*y_local + (a*min_x + b*min_y + c)
-    
-    new_c = coeffs[0]*min_x + coeffs[1]*min_y + coeffs[2]
-    new_f = coeffs[3]*min_x + coeffs[4]*min_y + coeffs[5]
-    
-    new_coeffs = (coeffs[0], coeffs[1], new_c, coeffs[3], coeffs[4], new_f)
-    
-    transformed = resized_source.transform((w, h), Image.AFFINE, new_coeffs, resample=Image.BILINEAR)
+    # Local coordinates avoid cancellation at fractional pixel boundaries.
+    local_quad = [(x - min_x, y - min_y) for x, y in quad]
+    coeffs = _calculate_affine_coeffs(local_quad, (sw, sh))
+
+    transformed = resized_source.transform((w, h), Image.AFFINE, coeffs, resample=Image.BILINEAR)
     
     # Paste onto target_img at (min_x, min_y)
     if target_img.mode == "RGBA":

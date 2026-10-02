@@ -458,3 +458,20 @@ def test_affine_negative_fractional_origin_is_translation_invariant(mode):
     utils.apply_affine_transform(image, source, quad, "fill")
     utils.apply_affine_transform(reference, source, [(x + 8, y) for x, y in quad], "fill")
     assert image.tobytes() == reference.crop((8, 0, 40, 24)).tobytes()
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+@pytest.mark.parametrize("origin", [29.5, 169.5])
+@pytest.mark.parametrize("vertical", [False, True])
+def test_half_pixel_affine_strips_remain_straight(mode, origin, vertical):
+    image = Image.new(mode, (240, 240), "white")
+    source = Image.new("RGBA", (1, 20) if vertical else (20, 1), "red")
+    if vertical:
+        quad = [(origin, 20), (origin + 1, 20), (origin + 1, 40), (origin, 40)]
+        expected = {(int(origin), y) for y in range(20, 40)}
+    else:
+        quad = [(20, origin), (40, origin), (40, origin + 1), (20, origin + 1)]
+        expected = {(x, int(origin)) for x in range(20, 40)}
+    utils.apply_affine_transform(image, source, quad, "fill")
+    points = {(i % image.width, i // image.width) for i, pixel in enumerate(image.getdata()) if pixel[:3] == (255, 0, 0)}
+    assert points == expected
