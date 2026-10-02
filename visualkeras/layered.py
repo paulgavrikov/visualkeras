@@ -4,7 +4,7 @@ import aggdraw
 from PIL import ImageFont
 from math import ceil
 from .utils import *
-from .utils import _multiline_bbox
+from .utils import _multiline_bbox, _load_node_image
 from .layer_utils import *
 from .layer_utils import _shape_from_tensor_output
 from .options import LayeredOptions, LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
@@ -951,7 +951,7 @@ def layered_view(model,
         
         if image_path:
             try:
-                node_image = Image.open(image_path).convert("RGBA")
+                node_image = _load_node_image(image_path)
                 fit_mode = style.get("image_fit", image_fit)
                 axis = style.get("image_axis", image_axis)
                 

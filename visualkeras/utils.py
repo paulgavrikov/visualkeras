@@ -591,6 +591,10 @@ class Ribbon:
             draw.rectangle([x - w/2, ty, x + w/2, by], pen, brush_front)
 
 
+def _load_node_image(source):
+    return source.convert("RGBA") if isinstance(source, Image.Image) else Image.open(source).convert("RGBA")
+
+
 def resize_image_to_fit(image: Image.Image, target_width: int, target_height: int, fit_mode: str) -> Image.Image:
     """Resize an image to fit a target box using a named fit strategy.
 

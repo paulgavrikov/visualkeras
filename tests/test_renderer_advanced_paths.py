@@ -671,3 +671,31 @@ def test_group_captions_preserve_multiline_glyphs(mode, caption):
     actual, expected = glyphs(image), glyphs(reference)
     assert actual.size == expected.size
     assert actual.tobytes() == expected.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["layered", "functional", "graph"])
+@pytest.mark.parametrize("palette", [False, True])
+def test_node_images_accept_pil_objects_without_mutating_them(tmp_path, mode, palette):
+    source = Image.new("P" if palette else "RGBA", (12, 8), 1 if palette else (255, 0, 0, 128))
+    if palette:
+        source.putpalette([0, 0, 0, 255, 0, 0] + [0] * 762)
+        source.info["transparency"] = 0
+    original = source.tobytes()
+    path = tmp_path / "node.png"
+    source.save(path)
+    inputs = tf.keras.Input((8,), name="in")
+    model = tf.keras.Model(inputs, tf.keras.layers.Dense(8, name="out")(inputs))
+    settings = {"styles": {"out": {"image": source, "image_fit": "contain"}}}
+    if mode == "layered":
+        settings.update(legend_text_spacing_offset=0, draw_volume=False)
+    elif mode == "functional":
+        settings["draw_volume"] = False
+    else:
+        settings.update(node_size=20, layer_spacing=40, show_neurons=False)
+    image = visualkeras.show(model, mode=mode, **settings)
+    settings["styles"] = {"out": {"image": str(path), "image_fit": "contain"}}
+    reference = visualkeras.show(model, mode=mode, **settings)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+    assert source.tobytes() == original
+    assert source.mode == ("P" if palette else "RGBA")

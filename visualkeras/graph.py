@@ -7,7 +7,7 @@ from math import ceil, prod as _shape_product
 from operator import index as _dimension_index
 import warnings
 from .utils import *
-from .utils import _multiline_bbox
+from .utils import _multiline_bbox, _load_node_image
 from .layer_utils import *
 from .options import GraphOptions, GRAPH_PRESETS
 from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
@@ -468,7 +468,7 @@ def graph_view(model, to_file: str = None,
             node_image = None
             if image_path:
                 try:
-                    node_image = Image.open(image_path).convert("RGBA")
+                    node_image = _load_node_image(image_path)
                 except Exception as e:
                     warnings.warn(f"Could not load image {image_path} for layer {layer_name}: {e}")
 

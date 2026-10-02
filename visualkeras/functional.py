@@ -44,6 +44,7 @@ from .utils import (
     draw_logos_legend,
     resolve_style,
     _multiline_bbox,
+    _load_node_image,
 )
 
 
@@ -1053,7 +1054,7 @@ def _build_graph(
 
         if image_path:
             try:
-                node_image = Image.open(image_path).convert("RGBA")
+                node_image = _load_node_image(image_path)
                 fit_mode = node_style.get("image_fit", image_fit)
                 axis = ("z" if simple_text_visualization else node_style.get("image_axis", image_axis))
                 if fit_mode == "match_aspect":
