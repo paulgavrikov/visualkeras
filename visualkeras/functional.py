@@ -866,12 +866,25 @@ def functional_view(
 
     text_top_padding: Dict[int, int] = {}
     text_bottom_padding: Dict[int, int] = {}
-    if simple_text_visualization and simple_text_label_mode == "below" and text_callable is not None:
+    reserve_labels = simple_text_visualization and simple_text_label_mode == "below"
+    has_block_annotations = any(
+        node.kind == "collapsed" and node.style.get("collapse_kind") == "block"
+        and node.style.get("collapse_annotation_enabled", True)
+        for node in graph.nodes.values()
+    )
+    if text_callable is not None and has_block_annotations:
+        # Measure and paint the same captions without invoking user callbacks twice.
+        captions = [text_callable(i, node.layer) for i, node in enumerate(
+            sorted((n for n in graph.nodes.values() if n.kind != "virtual"), key=lambda n: n.order)
+        )]
+        text_callable = lambda i, layer: captions[i]
+    if text_callable is not None and (reserve_labels or has_block_annotations):
         text_top_padding, text_bottom_padding = _compute_external_text_padding(
             graph,
             text_callable=text_callable,
             text_vspacing=text_vspacing,
             font=font,
+            reserve_all=reserve_labels,
         )
 
     components = _split_components(graph.nodes, graph.edges)
@@ -1670,6 +1683,7 @@ def _compute_external_text_padding(
     text_callable: Callable[[int, Any], Tuple[str, bool]],
     text_vspacing: int,
     font: Optional[ImageFont.ImageFont],
+    reserve_all: bool = True,
 ) -> Tuple[Dict[int, int], Dict[int, int]]:
     """Estimate vertical label extents for external text labels.
 
@@ -1679,6 +1693,7 @@ def _compute_external_text_padding(
     """
     text_top_padding: Dict[int, int] = {}
     text_bottom_padding: Dict[int, int] = {}
+    adjusted = False
     active_font = font or ImageFont.load_default()
     measure_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
 
@@ -1704,11 +1719,18 @@ def _compute_external_text_padding(
         bounds = _multiline_bbox(measure_draw, text_value, active_font, text_vspacing)
         # Preserve existing row spacing while reserving any missing glyph extent.
         extent = max(0, int(text_height) + 4, ceil(bounds[3]) + 4)
+        text_y, moved = _external_label_y(node, above, bounds, measure_draw, active_font)
+        adjusted |= moved
+        if moved:
+            extent = max(extent, ceil(node.y - text_y - bounds[1]) + 4 if above
+                         else ceil(text_y + bounds[3] - node.y - node.height) + 4)
         if above:
             text_top_padding[node.node_id] = extent
         else:
             text_bottom_padding[node.node_id] = extent
 
+    if not reserve_all and not adjusted:
+        return {}, {}
     return text_top_padding, text_bottom_padding
 
 
@@ -2204,6 +2226,78 @@ def _draw_collapse_badge(
     draw.text((badge_x1 + pad_x, badge_y1 + pad_y), label, font=font, fill=text_color)
 
 
+def _collapse_annotation_geometry(
+    draw, *, rect, label, position, line_width, head_size, offset, font, image_size=None,
+):
+    """Share arrow, count and occupied bounds between layout and painting."""
+    x1, y1, x2, y2 = rect
+    if x2 <= x1:
+        return
+
+    left = int(x1 + 8)
+    right = int(x2 - 8)
+    if right - left < 12:
+        left = x1 + 2
+        right = x2 - 2
+    if right - left < 8:
+        return
+
+    if position == "below":
+        line_y = y2 + offset
+    else:
+        line_y = y1 - offset
+    line_y = int(line_y)
+    if image_size is not None:
+        line_y = max(2, min(image_size[1] - 3, line_y))
+
+    head = max(3, head_size)
+    radius = max(head // 2, ceil(max(1, line_width) / 2))
+    top, bottom = line_y - radius, line_y + radius + 1
+    text_rect = None
+    if label:
+        text_w, text_h = _measure_text(draw, label, font)
+        text_x = int((left + right - text_w) / 2)
+        text_y = line_y + 4 if position == "below" else line_y - text_h - 4
+        if image_size is not None:
+            text_y = max(0, min(image_size[1] - max(1, text_h), text_y))
+        _, glyph_top, _, glyph_bottom = _multiline_bbox(draw, label, font, 4)
+        top = min(top, text_y - 1, text_y + glyph_top)
+        bottom = max(bottom, text_y + text_h + 2, text_y + glyph_bottom)
+        text_rect = (text_x, text_y, text_w, text_h)
+    return (left, line_y, right, line_y), text_rect, (top, bottom)
+
+
+def _external_label_y(node, above, bounds, draw, font):
+    """Move a caption outward only when it intersects its block annotation."""
+    y = node.y + node.de - max(0, ceil(bounds[3])) - 4 if above else node.y + node.height + 4
+    style = node.style or {}
+    position = str(style.get("collapse_annotation_position", "above") or "above").lower()
+    if position not in {"above", "below"}:
+        position = "above"
+    if (node.kind != "collapsed" or not style.get("collapsed", False)
+            or style.get("collapse_kind") != "block"
+            or not style.get("collapse_annotation_enabled", True)
+            or above != (position == "above")):
+        return y, False
+    annotation_font = _resolve_annotation_font(
+        style.get("collapse_annotation_font"), font,
+        int(style.get("collapse_annotation_font_size", 12) or 12),
+    )
+    geometry = _collapse_annotation_geometry(
+        draw, rect=(int(node.x), int(node.y), int(node.x + node.width), int(node.y + node.height)),
+        label=str(style.get("collapse_label", "")), position=position,
+        line_width=int(style.get("collapse_annotation_width", 2) or 2),
+        head_size=int(style.get("collapse_annotation_head_size", 6) or 6),
+        offset=int(style.get("collapse_annotation_offset", 10) or 10), font=annotation_font,
+    )
+    if geometry is None:
+        return y, False
+    top, bottom = geometry[2]
+    if y + bounds[3] + 4 <= top or y + bounds[1] >= bottom + 4:
+        return y, False
+    return (top - 4 - bounds[3] if above else bottom + 4 - bounds[1]), True
+
+
 def _draw_collapse_block_annotation(
     draw: ImageDraw.ImageDraw,
     *,
@@ -2231,24 +2325,13 @@ def _draw_collapse_block_annotation(
         font: Font used for annotation text.
         image_size: Destination image size used for clipping guards.
     """
-    x1, y1, x2, y2 = rect
-    if x2 <= x1:
+    geometry = _collapse_annotation_geometry(
+        draw, rect=rect, label=label, position=position, line_width=line_width,
+        head_size=head_size, offset=offset, font=font, image_size=image_size,
+    )
+    if geometry is None:
         return
-
-    left = int(x1 + 8)
-    right = int(x2 - 8)
-    if right - left < 12:
-        left = x1 + 2
-        right = x2 - 2
-    if right - left < 8:
-        return
-
-    if position == "below":
-        line_y = y2 + offset
-    else:
-        line_y = y1 - offset
-    line_y = max(2, min(image_size[1] - 3, int(line_y)))
-
+    (left, line_y, right, _), text_rect, _ = geometry
     draw.line((left, line_y, right, line_y), fill=color, width=max(1, line_width))
     head = max(3, head_size)
     draw.polygon(
@@ -2260,15 +2343,9 @@ def _draw_collapse_block_annotation(
         fill=color,
     )
 
-    if not label:
+    if text_rect is None:
         return
-    text_w, text_h = _measure_text(draw, label, font)
-    text_x = int((left + right - text_w) / 2)
-    if position == "below":
-        text_y = line_y + 4
-    else:
-        text_y = line_y - text_h - 4
-    text_y = max(0, min(image_size[1] - max(1, text_h), text_y))
+    text_x, text_y, text_w, text_h = text_rect
     bg = (255, 255, 255, 220)
     draw.rectangle(
         (text_x - 2, text_y - 1, text_x + text_w + 2, text_y + text_h + 1),
@@ -2488,7 +2565,7 @@ def _render_graph(
             text_value = "" if text is None else str(text)
             if not text_value:
                 continue
-            _, text_top, text_right, text_bottom = _multiline_bbox(
+            text_left, text_top, text_right, text_bottom = _multiline_bbox(
                 measure_draw, text_value, external_font, text_vspacing,
             )
             text_height = max(0, ceil(text_bottom))
@@ -2496,17 +2573,13 @@ def _render_graph(
 
             de = getattr(node, 'de', 0)
             real_width = node.width - de
-            real_height = node.height - de
-
             face_x = node.x
-            face_y = node.y + de
 
             text_x = face_x + real_width / 2 - text_width / 2
 
-            if above:
-                text_y = face_y - text_height - 4
-            else:
-                text_y = face_y + real_height + 4
+            text_y, _ = _external_label_y(
+                node, above, (text_left, text_top, text_right, text_bottom), measure_draw, external_font,
+            )
 
             external_labels.append(
                 {

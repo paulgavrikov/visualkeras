@@ -343,3 +343,108 @@ def test_collapsed_block_annotations_preserve_opaque_canvas():
         styles={object: {"box_size": (100, 80)}},
     )
     assert image.getextrema()[3] == (255, 255)
+
+
+@pytest.mark.parametrize("simple", [False, True])
+@pytest.mark.parametrize("caption_above", [False, True])
+@pytest.mark.parametrize("annotation_position", ["above", "below"])
+@pytest.mark.parametrize("padding", [0, 40])
+def test_collapsed_captions_and_annotations_have_separate_space(monkeypatch, simple, caption_above, annotation_position, padding):
+    from PIL import ImageDraw, ImageFont
+
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = inputs
+    for index in range(4):
+        outputs = tf.keras.layers.Dense(6, name=f"dense_{index}")(outputs)
+    model = tf.keras.Model(inputs, outputs)
+    font = ImageFont.truetype("DejaVuSansMono.ttf", 24)
+    annotation_font = ImageFont.truetype("DejaVuSans.ttf", 12)
+    text = "Caption\n6"
+    caption_origin = []
+    calls = []
+    original_text = ImageDraw.ImageDraw.multiline_text
+
+    def record_caption(draw, xy, value, **kwargs):
+        if value == text:
+            caption_origin.append(xy)
+        return original_text(draw, xy, value, **kwargs)
+
+    def caption(index, layer):
+        calls.append(layer.name)
+        return text if layer.name.startswith("collapsed_") else "", caption_above
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", record_caption)
+    image = visualkeras.functional_view(
+        model, simple_text_visualization=simple, draw_volume=False, padding=padding, min_xy=140,
+        font=font, font_color="magenta", collapse_enabled=True,
+        collapse_rules=[{"kind": "block", "selector": [tf.keras.layers.Dense, tf.keras.layers.Dense],
+                         "repeat_count": 2, "label": "2x", "annotation_position": annotation_position}],
+        styles={object: {"box_size": (140, 80), "box_text_enabled": False,
+                        "collapse_badge_enabled": False,
+                        "collapse_annotation_font": annotation_font, "collapse_annotation_color": "blue"}},
+        text_callable=caption,
+    )
+    reference = Image.new("RGBA", (200, 100), "white")
+    assert len(calls) == len(set(calls)) == 2
+    assert len(caption_origin) == 1
+    # Preserve fractional x rasterization while giving the reference ample margins.
+    reference_x = 10 + caption_origin[0][0] % 1
+    original_text(ImageDraw.Draw(reference), (reference_x, 10), text, font=font, fill="magenta")
+
+    def glyphs(im):
+        mask = Image.new("L", im.size)
+        mask.putdata([255 - g if r == b == 255 else 0 for r, g, b, a in im.getdata()])
+        return mask.crop(mask.getbbox())
+
+    actual, expected = glyphs(image), glyphs(reference)
+    assert actual.size == expected.size
+    assert actual.tobytes() == expected.tobytes()
+    caption_rows = [i // image.width for i, (r, g, b, a) in enumerate(image.getdata()) if r == b == 255 and g < 255]
+    annotation_rows = [i // image.width for i, (r, g, b, a) in enumerate(image.getdata()) if b == 255 and r == g < 255]
+    assert caption_rows and annotation_rows
+    assert max(caption_rows) + 4 <= min(annotation_rows) or max(annotation_rows) + 4 <= min(caption_rows)
+
+
+@pytest.mark.parametrize("simple", [False, True])
+@pytest.mark.parametrize("above", [False, True])
+def test_collapsed_caption_spacing_keeps_neighboring_rows_clear(monkeypatch, simple, above):
+    from PIL import ImageDraw, ImageFont
+
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = []
+    for branch in range(2):
+        value = inputs
+        for index in range(4):
+            value = tf.keras.layers.Dense(6, name=f"branch_{branch}_{index}")(value)
+        outputs.append(value)
+    model = tf.keras.Model(inputs, outputs)
+    rectangles, captions = [], []
+    original_annotations = functional._draw_collapsed_annotations
+    original_text = ImageDraw.ImageDraw.multiline_text
+
+    def record_nodes(image, nodes, **kwargs):
+        rectangles.extend(rect for node, rect in nodes)
+        return original_annotations(image, nodes, **kwargs)
+
+    def record_text(draw, xy, text, **kwargs):
+        if text == "Caption\n6":
+            captions.append(draw.multiline_textbbox(xy, text, font=kwargs["font"], spacing=kwargs["spacing"]))
+        return original_text(draw, xy, text, **kwargs)
+
+    monkeypatch.setattr(functional, "_draw_collapsed_annotations", record_nodes)
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", record_text)
+    image = visualkeras.functional_view(
+        model, simple_text_visualization=simple, draw_volume=False, padding=0, row_spacing=0, min_xy=140,
+        font=ImageFont.truetype("DejaVuSans.ttf", 24), collapse_enabled=True,
+        collapse_rules=[{"kind": "block", "selector": [tf.keras.layers.Dense, tf.keras.layers.Dense],
+                         "repeat_count": 2, "label": "2x", "annotation_position": "above" if above else "below"}],
+        styles={object: {"box_size": (140, 80), "box_text_enabled": False}},
+        text_callable=lambda i, layer: ("Caption\n6" if layer.name.startswith("collapsed_") else "", above),
+    )
+    assert len(rectangles) == len(captions) == 2
+    for left, top, right, bottom in captions:
+        assert 0 <= top < bottom <= image.height
+        for _, node_top, _, node_bottom in rectangles:
+            assert bottom + 4 <= node_top or top >= node_bottom + 4
+    first, second = sorted(captions, key=lambda rect: rect[1])
+    assert first[3] + 4 <= second[1]
