@@ -2592,6 +2592,8 @@ def _render_graph(
                 }
             )
 
+            min_left = min(min_left, text_x + text_left)
+            max_right = max(max_right, text_x + text_right)
             min_top = min(min_top, int(text_y) + text_top)
             max_bottom = max(max_bottom, int(text_y) + text_bottom)
 

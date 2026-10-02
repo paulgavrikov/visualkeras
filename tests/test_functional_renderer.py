@@ -448,3 +448,29 @@ def test_collapsed_caption_spacing_keeps_neighboring_rows_clear(monkeypatch, sim
             assert bottom + 4 <= node_top or top >= node_bottom + 4
     first, second = sorted(captions, key=lambda rect: rect[1])
     assert first[3] + 4 <= second[1]
+
+
+@pytest.mark.parametrize("above", [False, True])
+@pytest.mark.parametrize("target", ["in", "out"])
+@pytest.mark.parametrize("padding", [0, 20])
+def test_wide_external_captions_keep_complete_glyphs(above, target, padding):
+    from PIL import ImageFont
+
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = tf.keras.layers.Dense(6, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    settings = {
+        "font": ImageFont.truetype("DejaVuSansMono.ttf", 24), "font_color": "magenta",
+        "text_callable": lambda i, layer: ("Caption\n6" if layer.name == target else "", above),
+    }
+    image = visualkeras.functional_view(model, padding=padding, **settings)
+    reference = visualkeras.functional_view(model, padding=160, **settings)
+
+    def glyphs(im):
+        mask = Image.new("L", im.size)
+        mask.putdata([255 - g if r == b == 255 else 0 for r, g, b, a in im.getdata()])
+        return mask.crop(mask.getbbox())
+
+    actual, expected = glyphs(image), glyphs(reference)
+    assert actual.size == expected.size
+    assert actual.tobytes() == expected.tobytes()
