@@ -8,7 +8,7 @@ tf = pytest.importorskip("tensorflow")
 pytestmark = pytest.mark.integration
 
 
-@pytest.mark.parametrize("mode", ["layered"])
+@pytest.mark.parametrize("mode", ["layered", "functional"])
 @pytest.mark.parametrize("font_size", [None, 12])
 def test_group_font_does_not_replace_diagram_caption_font(monkeypatch, mode, font_size):
     inputs = tf.keras.Input((8,), name="in")

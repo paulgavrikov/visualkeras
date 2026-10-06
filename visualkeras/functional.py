@@ -2538,8 +2538,8 @@ def _render_graph(
             max_bottom = max(max_bottom, g_max_y + padding + stroke)
             caption = group.get("name", group.get("caption"))
             if caption:
-                font = _get_font(group)
-                text_w, text_h = _measure_text(dummy_draw, caption, font)
+                group_font = _get_font(group)
+                text_w, text_h = _measure_text(dummy_draw, caption, group_font)
                 
                 center_x = (g_min_x + g_max_x) / 2
                 text_x = center_x - text_w / 2
