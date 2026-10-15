@@ -2929,6 +2929,9 @@ def _get_group_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[Func
             if node.layer is layer_ref:
                 group_nodes.append(node)
                 break
+            if isinstance(layer_ref, type) and isinstance(node.layer, layer_ref):
+                group_nodes.append(node)
+                break
             node_layer_name = getattr(node.layer, 'name', '')
             if isinstance(layer_ref, str) and (node.name == layer_ref or node_layer_name == layer_ref):
                 group_nodes.append(node)
