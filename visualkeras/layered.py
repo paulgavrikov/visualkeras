@@ -87,6 +87,9 @@ def _get_group_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
             if layer is layer_ref:
                 group_boxes.append(box)
                 break
+            if isinstance(layer_ref, type) and isinstance(layer, layer_ref):
+                group_boxes.append(box)
+                break
             # Check name match
             layer_name = getattr(layer, 'name', '')
             if isinstance(layer_ref, str) and (layer_name == layer_ref):
@@ -867,6 +870,11 @@ def layered_view(model,
 
         for group in layered_groups:
             for ref in group.get("layers", []):
+                if isinstance(ref, type):
+                    for index, layer in enumerate(model.layers):
+                        if isinstance(layer, ref):
+                            layer_to_groups.setdefault(index, []).append(group)
+                    continue
                 idx = -1
                 if isinstance(ref, str):
                     idx = name_to_index.get(ref, -1)
