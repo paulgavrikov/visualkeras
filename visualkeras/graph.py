@@ -728,18 +728,15 @@ def _get_graph_group_nodes(id_to_node_list_map: Dict[int, List[Any]], group: Dic
             name_to_layer[name] = layer
             
     for ref in layers_ref:
-        layer = None
-        if isinstance(ref, str):
-            layer = name_to_layer.get(ref)
+        if isinstance(ref, type):
+            matches = [layer for layer in model.layers if isinstance(layer, ref)]
         else:
-            layer = ref
-            
-        if layer:
-            nodes = id_to_node_list_map.get(id(layer))
-            if nodes:
-                group_nodes.extend(nodes)
-                
-    return group_nodes
+            layer = name_to_layer.get(ref) if isinstance(ref, str) else ref
+            matches = [layer] if layer is not None else []
+        for layer in matches:
+            group_nodes.extend(id_to_node_list_map.get(id(layer), []))
+
+    return list({id(node): node for node in group_nodes}.values())
 
 def _draw_graph_group_boxes(draw, id_to_node_list_map, groups, model):
     for group in groups:

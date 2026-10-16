@@ -11,7 +11,7 @@ class CustomDense(tf.keras.layers.Dense):
     pass
 
 
-@pytest.mark.parametrize("mode", ["layered", "functional"])
+@pytest.mark.parametrize("mode", ["layered", "functional", "graph"])
 @pytest.mark.parametrize("overlap", [False, True])
 def test_group_classes_include_subclasses_without_duplicate_selection(mode, overlap):
     inputs = tf.keras.Input((8,), name="in")
