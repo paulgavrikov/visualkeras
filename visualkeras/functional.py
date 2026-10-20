@@ -2619,7 +2619,7 @@ def _render_graph(
             path = group.get("file")
             if not path: continue
             try:
-                logo_img = Image.open(path)
+                logo_img = _load_node_image(path)
             except:
                 continue
                 

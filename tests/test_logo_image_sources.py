@@ -8,7 +8,7 @@ tf = pytest.importorskip("tensorflow")
 pytestmark = pytest.mark.integration
 
 
-@pytest.mark.parametrize("mode", ["layered"])
+@pytest.mark.parametrize("mode", ["layered", "functional"])
 @pytest.mark.parametrize("image_mode", ["RGB", "RGBA"])
 def test_pil_node_logos_match_file_sources_without_mutation(tmp_path, mode, image_mode):
     inputs = tf.keras.Input((8,), name="in")
