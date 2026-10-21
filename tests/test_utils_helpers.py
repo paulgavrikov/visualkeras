@@ -475,3 +475,23 @@ def test_half_pixel_affine_strips_remain_straight(mode, origin, vertical):
     utils.apply_affine_transform(image, source, quad, "fill")
     points = {(i % image.width, i // image.width) for i, pixel in enumerate(image.getdata()) if pixel[:3] == (255, 0, 0)}
     assert points == expected
+
+
+@pytest.mark.parametrize("image_mode", ["RGB", "RGBA"])
+def test_logo_legend_accepts_pil_images_without_mutation(tmp_path, image_mode):
+    base = Image.new("RGBA", (180, 50), (10, 20, 30, 128))
+    before_base = base.tobytes()
+    logo = Image.new(image_mode, (16, 10), (210, 20, 40) if image_mode == "RGB" else (210, 20, 40, 128))
+    before_logo = logo.tobytes()
+    path = tmp_path / "legend-logo.png"
+    logo.save(path)
+    group = {"name": "Logo\nname", "file": logo}
+    font = ImageFont.truetype("DejaVuSans.ttf", 18)
+    image = utils.draw_logos_legend(base, [group], True, "white", font, "black")
+    reference = utils.draw_logos_legend(base, [{**group, "file": path}], True, "white", font, "black")
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+    assert image.height > base.height
+    assert logo.mode == image_mode
+    assert logo.tobytes() == before_logo
+    assert base.tobytes() == before_base

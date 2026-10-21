@@ -941,7 +941,7 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
         if not name or not path: continue
         
         try:
-            logo_img = Image.open(path)
+            logo_img = _load_node_image(path)
         except:
             continue
             
