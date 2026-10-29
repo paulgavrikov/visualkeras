@@ -25,6 +25,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .layer_utils import (
     _shape_from_tensor_output,
+    _iter_output_tensors,
     calculate_layer_dimensions,
     extract_primary_shape,
     find_output_layers,
@@ -1171,7 +1172,7 @@ def _attach_output_nodes(
     new_nodes = dict(nodes)
     new_edges = list(edges)
     outputs = list(find_output_layers(model))
-    output_tensors = list(getattr(model, "outputs", ()))
+    output_tensors = list(_iter_output_tensors(getattr(model, "outputs", ())))
 
     output_size = max(virtual_node_size * 2, 16)
 

@@ -9,6 +9,7 @@ import warnings
 from .utils import *
 from .utils import _multiline_bbox, _load_node_image
 from .layer_utils import *
+from .layer_utils import _iter_output_tensors
 from .options import GraphOptions, GRAPH_PRESETS
 from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 
@@ -370,6 +371,7 @@ def graph_view(model, to_file: str = None,
     layers = list()
     layer_y = list()
 
+    output_tensors = list(_iter_output_tensors(model.outputs))
     # Determine output names compatible with both Keras versions
     if hasattr(model, 'output_names'):
         # Older versions of Keras
@@ -377,7 +379,7 @@ def graph_view(model, to_file: str = None,
     else:
         # Newer versions of Keras
         output_names = []
-        for output in model.outputs:
+        for output in output_tensors:
             if hasattr(output, '_keras_history'):
                 # Get the layer that produced the output
                 layer = output._keras_history[0]
@@ -399,7 +401,7 @@ def graph_view(model, to_file: str = None,
         # Check if all output-producing layers are in the last hierarchy level
         last_level_layers = model_layers[-1] if model_layers else []
         layers_producing_outputs = []
-        for output_tensor in model.outputs:
+        for output_tensor in output_tensors:
             history = getattr(output_tensor, "_keras_history", None)
             if history is not None:
                 layers_producing_outputs.append(history[0])
@@ -415,7 +417,7 @@ def graph_view(model, to_file: str = None,
         )
     
     if should_add_dummy_outputs:
-        tensor_shapes = [getattr(output, "shape", None) for output in model.outputs]
+        tensor_shapes = [getattr(output, "shape", None) for output in output_tensors]
         if all(shape is not None for shape in tensor_shapes):
             output_shapes = tensor_shapes
         else:
@@ -432,7 +434,7 @@ def graph_view(model, to_file: str = None,
             _DummyLayer(
                 output_names[i], output_shape=output_shapes[i],
             )
-            for i in range(len(model.outputs))
+            for i in range(len(output_tensors))
         ])
         id_to_num_mapping, adj_matrix = augment_output_layers(model, model_layers[-1], id_to_num_mapping, adj_matrix)
 

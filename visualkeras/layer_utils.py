@@ -255,6 +255,17 @@ def find_input_layers(model, id_to_num_mapping=None, adj_matrix=None):
             yield find_layer_by_id(model, key)
 
 
+def _iter_output_tensors(outputs):
+    if isinstance(outputs, Mapping):
+        outputs = outputs.values()
+    elif not isinstance(outputs, (tuple, list)):
+        if outputs is not None:
+            yield outputs
+        return
+    for output in outputs:
+        yield from _iter_output_tensors(output)
+
+
 def find_output_layers(model):
     """Yield graph output layers for a model.
 
@@ -278,7 +289,7 @@ def find_output_layers(model):
             yield model.get_layer(name=name)
     else:
         # For newer Keras versions (>=3)
-        for output in model.outputs:
+        for output in _iter_output_tensors(model.outputs):
             if hasattr(output, '_keras_history'):
                 # Get the layer that produced the output
                 layer = output._keras_history[0]
