@@ -84,7 +84,7 @@ def test_spacing_layer_survives_model_save_and_load(tmp_path):
     model = tf.keras.Model(inputs, gap(inputs))
     path = tmp_path / "spacing.keras"
     model.save(path)
-    restored = tf.keras.models.load_model(path, custom_objects={"SpacingDummyLayer": lu.SpacingDummyLayer})
+    restored = tf.keras.models.load_model(path)
     restored_gap = restored.get_layer("saved_gap")
     assert restored_gap.spacing == 37
     assert restored_gap.trainable is False
@@ -447,3 +447,35 @@ def test_calculate_layer_dimensions_additional_branch_cases():
     # relative scaling with zero dimension exercises proportional floor branch
     rel_zero = lu.calculate_layer_dimensions((None, 0), one_dim_orientation="y", sizing_mode="relative", relative_base_size=3, **common)
     assert rel_zero == (7, 7, 5)
+
+
+def test_spacing_layer_imports_without_tensorflow_or_keras(tmp_path):
+    import os
+    import subprocess
+    from pathlib import Path
+
+    script = """
+import sys
+class NoFrameworks:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in {'tensorflow', 'keras'}:
+            raise ModuleNotFoundError(fullname)
+sys.meta_path.insert(0, NoFrameworks())
+import visualkeras
+print(visualkeras.SpacingDummyLayer(spacing=7).spacing)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=tmp_path, capture_output=True, text=True,
+        env={**os.environ, "PYTHONPATH": str(Path(lu.__file__).resolve().parents[1])}, check=True,
+    )
+    assert result.stdout.strip() == "7"
+
+
+def test_spacing_layer_registration_avoids_custom_object_name_collisions():
+    tf = pytest.importorskip("tensorflow")
+    config = tf.keras.layers.serialize(lu.SpacingDummyLayer(spacing=37, trainable=False))
+    with tf.keras.utils.custom_object_scope({"SpacingDummyLayer": tf.keras.layers.Dense}):
+        restored = tf.keras.layers.deserialize(config)
+    assert isinstance(restored, lu.SpacingDummyLayer)
+    assert restored.spacing == 37
+    assert restored.trainable is False

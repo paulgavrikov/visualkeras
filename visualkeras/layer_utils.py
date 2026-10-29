@@ -6,15 +6,21 @@ import warnings
 
 try:
     from tensorflow.keras.layers import Layer
+    from tensorflow.keras.utils import register_keras_serializable as _register_keras_serializable
 except ModuleNotFoundError:
     try:
         from keras.layers import Layer
+        from keras.utils import register_keras_serializable as _register_keras_serializable
     except ModuleNotFoundError:
         class Layer:  # type: ignore[no-redef]
             def __init__(self, *args, **kwargs):
                 super().__init__()
 
+        def _register_keras_serializable(**kwargs):
+            return lambda cls: cls
 
+
+@_register_keras_serializable(package="visualkeras")
 class SpacingDummyLayer(Layer):
     """Placeholder layer used only to create visual gaps in a diagram.
 
