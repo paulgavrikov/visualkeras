@@ -41,3 +41,17 @@ def test_structured_outputs_match_flat_output_nodes(mode, nested):
     assert image.size == reference.size
     assert image.tobytes() == reference.tobytes()
     assert list(find_output_layers(adapter)) == [model.get_layer("first"), model.get_layer("second")]
+
+
+@pytest.mark.parametrize("mode", ["graph", "functional"])
+@pytest.mark.parametrize("names", [None, [], ["first", "second"]])
+def test_unavailable_output_names_fall_back_to_tensor_provenance(mode, names):
+    model = build_model()
+    adapter = OutputAdapter(model, model.outputs)
+    adapter.output_names = names
+    kwargs = {"add_output_nodes": True} if mode == "functional" else {}
+    image = visualkeras.show(adapter, mode=mode, **kwargs)
+    reference = visualkeras.show(model, mode=mode, **kwargs)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+    assert list(find_output_layers(adapter)) == [model.get_layer("first"), model.get_layer("second")]

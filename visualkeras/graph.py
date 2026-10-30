@@ -372,12 +372,9 @@ def graph_view(model, to_file: str = None,
     layer_y = list()
 
     output_tensors = list(_iter_output_tensors(model.outputs))
-    # Determine output names compatible with both Keras versions
-    if hasattr(model, 'output_names'):
-        # Older versions of Keras
-        output_names = model.output_names
-    else:
-        # Newer versions of Keras
+    # Prefer supplied names, then discover names from tensor provenance.
+    output_names = getattr(model, 'output_names', None)
+    if not output_names:
         output_names = []
         for output in output_tensors:
             if hasattr(output, '_keras_history'):

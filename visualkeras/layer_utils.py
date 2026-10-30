@@ -283,12 +283,12 @@ def find_output_layers(model):
     Any
         Layers that produce model outputs.
     """
-    if hasattr(model, 'output_names'):
-        # For older Keras versions (<3)
-        for name in model.output_names:
+    output_names = getattr(model, 'output_names', None)
+    if output_names:
+        for name in output_names:
             yield model.get_layer(name=name)
     else:
-        # For newer Keras versions (>=3)
+        # Fall back to the tensors when explicit names are unavailable.
         for output in _iter_output_tensors(model.outputs):
             if hasattr(output, '_keras_history'):
                 # Get the layer that produced the output
