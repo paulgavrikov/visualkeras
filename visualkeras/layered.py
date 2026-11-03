@@ -4,7 +4,7 @@ import aggdraw
 from PIL import ImageFont
 from math import ceil
 from .utils import *
-from .utils import _multiline_bbox, _load_node_image
+from .utils import _multiline_bbox, _load_node_image, _clear_caption_y
 from .layer_utils import *
 from .layer_utils import _shape_from_tensor_output
 from .options import LayeredOptions, LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
@@ -191,7 +191,7 @@ def _draw_layered_group_boxes(draw, boxes, groups, draw_reversed):
         draw.rectangle([min_x, min_y, max_x, max_y], pen, brush)
 
 
-def _draw_layered_group_captions(img, boxes, groups, draw_reversed):
+def _draw_layered_group_captions(img, boxes, groups, draw_reversed, caption_positions=None):
     draw = ImageDraw.Draw(img)
     for group in groups:
         caption = group.get("name", group.get("caption"))
@@ -231,7 +231,7 @@ def _draw_layered_group_captions(img, boxes, groups, draw_reversed):
         
         center_x = (min_x + max_x) / 2
         text_x = center_x - text_w / 2
-        text_y = max_y + gap
+        text_y = caption_positions.get(id(group), max_y + gap) if caption_positions else max_y + gap
         left, top, _, _ = _multiline_bbox(draw, caption, font, 4)
         text_x -= left
         text_y -= top
@@ -1153,6 +1153,8 @@ def layered_view(model,
             min_scene_x = min(min_scene_x, x + dx, left)
             max_scene_x = max(max_scene_x, x + dx + text_w, right, box.x2 + dx)
 
+    group_caption_positions = {}
+    occupied_text = list(external_label_bounds)
     if layered_groups:
         dummy_img = Image.new("RGBA", (1, 1))
         dummy_draw = ImageDraw.Draw(dummy_img)
@@ -1217,7 +1219,12 @@ def layered_view(model,
                 text_x2 = center_x + text_w / 2
                 
                 gap = group.get("text_spacing", 5)
-                text_bottom = g_max_y + gap + text_h
+                text_top = _clear_caption_y(
+                    (text_x1, g_max_y + gap, text_x2, g_max_y + gap + text_h), occupied_text,
+                )
+                group_caption_positions[id(group)] = text_top
+                text_bottom = text_top + text_h
+                occupied_text.append((text_x1, text_top, text_x2, text_bottom))
                 
                 min_scene_x = min(min_scene_x, text_x1)
                 max_scene_x = max(max_scene_x, text_x2)
@@ -1516,7 +1523,10 @@ def layered_view(model,
         img = vertical_image_concat(img, legend_image, background_fill=background_fill)
 
     if layered_groups:
-        _draw_layered_group_captions(img, boxes, layered_groups, draw_reversed)
+        _draw_layered_group_captions(
+            img, boxes, layered_groups, draw_reversed,
+            caption_positions={key: y + center_y_pos for key, y in group_caption_positions.items()},
+        )
 
     if logos_legend:
         if font is None:

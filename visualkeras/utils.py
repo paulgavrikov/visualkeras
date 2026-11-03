@@ -869,6 +869,16 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
     apply_affine_transform(img, resized_logo, logo_quad, "fill")
 
 
+def _clear_caption_y(bounds, occupied, min_gap=4):
+    """Keep a caption's x position, moving it below intersecting text bounds."""
+    left, top, right, bottom = bounds
+    height = bottom - top
+    for other in sorted(occupied, key=lambda rect: rect[1]):
+        if left < other[2] and right > other[0] and top < other[3] and top + height > other[1]:
+            top = other[3] + min_gap
+    return top
+
+
 def _multiline_bbox(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, spacing: int) -> Tuple[int, int, int, int]:
     # Prefer PIL's bbox helper (handles glyph bearings correctly)
     if hasattr(draw, "multiline_textbbox"):
