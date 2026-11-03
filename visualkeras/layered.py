@@ -71,6 +71,22 @@ def _shape_to_tuple(shape: Any) -> Any:
         return tuple(shape)
     return shape
 
+def _external_label_geometry(box, text, above, font, spacing):
+    sizes = [font.getsize(line) if hasattr(font, "getsize") else font.getbbox(line)[2:]
+             for line in text.split("\n")]
+    width = max((size[0] for size in sizes), default=0)
+    height = sum(size[1] for size in sizes) + (len(sizes) - 1) * spacing
+    x = box.x1 + (box.x2 - box.x1) / 2 - width / 2 + (box.de if above else 0)
+    y = box.y1 - box.de - height if above else box.y2
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    if hasattr(draw, "multiline_textbbox"):
+        bounds = draw.multiline_textbbox((x, y), text, font=font, spacing=spacing, align="center", anchor="la")
+    else:
+        left, top, right, bottom = _multiline_bbox(draw, text, font, spacing)
+        bounds = (x + left, y + top, x + right, y + bottom)
+    return x, y, width, height, bounds
+
+
 def _get_group_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
     layers_ref = group.get("layers", [])
     if not layers_ref:
@@ -1095,55 +1111,47 @@ def layered_view(model,
         max_scene_x = max(max_scene_x, visual_x2)
 
     external_labels = []
+    external_label_bounds = []
     if text_callable is not None:
         if font is None:
             font = ImageFont.load_default()
 
         box_idx = -1
+        horizontal_shift = 0
         for index, layer in enumerate(model.layers):
             if type(layer) in type_ignore or isinstance(layer, SpacingDummyLayer) or index in index_ignore:
                 continue
             box_idx += 1
-
             box = boxes[box_idx]
+            box.x1 += horizontal_shift
+            box.x2 += horizontal_shift
             local_font = box.style.get('font', font)
             local_vspacing = box.style.get('text_vspacing', text_vspacing)
-
             text, above = text_callable(box_idx, layer)
             external_labels.append((text, above))
-
-            text_w = 0
-            text_h = 0
-            lines = text.split('\n')
-            for line in lines:
-                if hasattr(local_font, 'getsize'):
-                    line_w, line_h = local_font.getsize(line)
-                else:
-                    bbox = local_font.getbbox(line)
-                    line_w = bbox[2]
-                    line_h = bbox[3]
-                text_w = max(text_w, line_w)
-                text_h += line_h
-
-            text_h += (len(lines) - 1) * local_vspacing
-
-            width = box.x2 - box.x1
-            base_x = box.x1 + x_off
-            if draw_reversed:
-                base_x += box.de
-
+            x, y, text_w, text_h, bounds = _external_label_geometry(box, text, above, local_font, local_vspacing)
+            dx = x_off + (box.de if draw_reversed else 0)
+            dy = -layer_y[box_idx] / 2
+            left, top, right, bottom = (bounds[0] + dx, bounds[1] + dy, bounds[2] + dx, bounds[3] + dy)
+            clearance = max([previous[2] + 4 - left for previous in external_label_bounds
+                             if top < previous[3] and bottom > previous[1]
+                             and left < previous[2] and right > previous[0]] + [0]) if text else 0
+            if clearance > 0:
+                shift = ceil(clearance)
+                box.x1 += shift
+                box.x2 += shift
+                horizontal_shift += shift
+                x += shift
+                left += shift
+                right += shift
+            if text:
+                external_label_bounds.append((left, top, right, bottom))
             if above:
-                center_x = base_x + box.de + width / 2
-                max_top_extent = max(max_top_extent, (layer_y[box_idx] / 2) + text_h)
+                max_top_extent = max(max_top_extent, layer_y[box_idx] / 2 + text_h, -top)
             else:
-                center_x = base_x + width / 2
-                max_bottom_extent = max(max_bottom_extent, (layer_y[box_idx] / 2) + text_h)
-
-            t_x1 = center_x - text_w / 2
-            t_x2 = center_x + text_w / 2
-
-            min_scene_x = min(min_scene_x, t_x1)
-            max_scene_x = max(max_scene_x, t_x2)
+                max_bottom_extent = max(max_bottom_extent, layer_y[box_idx] / 2 + text_h, bottom)
+            min_scene_x = min(min_scene_x, x + dx, left)
+            max_scene_x = max(max_scene_x, x + dx + text_w, right, box.x2 + dx)
 
     if layered_groups:
         dummy_img = Image.new("RGBA", (1, 1))
@@ -1426,41 +1434,15 @@ def layered_view(model,
             local_vspacing = box.style.get('text_vspacing', text_vspacing)
 
             text, above = external_labels[i]
-            text_height = 0
-            text_x_adjust = []
-            for line in text.split('\n'):
-                # Use local_font for measurements
-                if hasattr(local_font, 'getsize'):
-                    line_height = local_font.getsize(line)[1]
-                    text_x_adjust.append(local_font.getsize(line)[0])
-                else:
-                    line_height = local_font.getbbox(line)[3]
-                    text_x_adjust.append(local_font.getbbox(line)[2])
-                
-                text_height += line_height
-
-            # Use local_vspacing
-            text_height += (len(text.split('\n')) - 1) * local_vspacing
-
-            text_x = box.x1 + (box.x2 - box.x1) / 2
-            text_y = box.y2
-            if above:
-                text_x = box.x1 + box.de + (box.x2 - box.x1) / 2
-                text_y = box.y1 - box.de - text_height
-            
-            # Use max width of the specific font
-            text_x -= max(text_x_adjust or [0]) / 2 
-            
-            anchor = 'la'
-            if above:
-                anchor = 'la'
-        
+            text_x, text_y, _, _, _ = _external_label_geometry(
+                box, text, above, local_font, local_vspacing,
+            )
             draw_text.multiline_text(
                 (text_x, text_y), 
                 text, 
                 font=local_font,
                 fill=local_font_color,
-                anchor=anchor, 
+                anchor='la',
                 align='center',
                 spacing=local_vspacing
             )
