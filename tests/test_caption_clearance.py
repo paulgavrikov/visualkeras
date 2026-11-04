@@ -43,7 +43,7 @@ def test_layered_external_captions_have_clear_horizontal_space(monkeypatch, abov
         assert 0 <= y1 < y2 <= image.height
 
 
-@pytest.mark.parametrize("mode", ["layered"])
+@pytest.mark.parametrize("mode", ["layered", "functional"])
 @pytest.mark.parametrize("above", [False, True])
 @pytest.mark.parametrize("group_padding", [0, 10, 60])
 def test_group_captions_clear_external_node_captions(monkeypatch, mode, above, group_padding):

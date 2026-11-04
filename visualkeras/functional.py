@@ -46,6 +46,7 @@ from .utils import (
     resolve_style,
     _multiline_bbox,
     _load_node_image,
+    _clear_caption_y,
 )
 
 
@@ -2513,6 +2514,7 @@ def _render_graph(
                 continue
             max_bottom = max(max_bottom, node.y + node.height + int(extra) + padding)
 
+    group_captions = []
     if layered_groups:
         dummy_img = Image.new("RGBA", (1, 1))
         dummy_draw = ImageDraw.Draw(dummy_img)
@@ -2551,6 +2553,7 @@ def _render_graph(
                 min_top = min(min_top, text_y)
                 max_right = max(max_right, text_x + text_w + padding)
                 max_bottom = max(max_bottom, text_y + text_h + padding)
+                group_captions.append((group, text_x, text_y, text_w, text_h))
 
     external_labels: List[Dict[str, Any]] = []
     if text_callable is not None:
@@ -2590,6 +2593,7 @@ def _render_graph(
                     "w": int(text_width),
                     "h": int(text_height),
                     "text": text_value,
+                    "bbox": (text_left, text_top, text_right, text_bottom),
                 }
             )
 
@@ -2613,6 +2617,21 @@ def _render_graph(
         label["x"] += shift_x
         label["x_pref"] += shift_x
         label["y"] = int(label["y"] + shift_y)
+
+    _resolve_external_label_x_collisions(
+        external_labels, image_width=ceil(max_right), edge_padding=padding, min_gap=8,
+    )
+    occupied_text = [(label["x"] + label["bbox"][0], label["y"] + label["bbox"][1],
+                      label["x"] + label["bbox"][2], label["y"] + label["bbox"][3])
+                     for label in external_labels]
+    group_caption_positions = {}
+    for group, x, y, width, height in group_captions:
+        x += shift_x
+        y += shift_y
+        top = _clear_caption_y((x, y, x + width, y + height), occupied_text)
+        group_caption_positions[id(group)] = top
+        occupied_text.append((x, top, x + width, top + height))
+        max_bottom = max(max_bottom, top + height + padding)
 
     node_logos = {} # node_id -> list of (group, image)
     if logo_groups:
@@ -2790,12 +2809,6 @@ def _render_graph(
     if text_callable is not None:
         font = external_font
         draw_text = ImageDraw.Draw(img)
-        _resolve_external_label_x_collisions(
-            external_labels,
-            image_width=img.size[0],
-            edge_padding=padding,
-            min_gap=8,
-        )
 
         for label in external_labels:
             draw_text.multiline_text(
@@ -2816,7 +2829,7 @@ def _render_graph(
         )
 
     if layered_groups:
-        _draw_group_captions(img, graph, layered_groups)
+        _draw_group_captions(img, graph, layered_groups, caption_positions=group_caption_positions)
 
     if logos_legend:
         if font is None:
@@ -2985,6 +2998,7 @@ def _draw_group_captions(
     img: Image.Image,
     graph: FunctionalGraph,
     groups: Sequence[Dict[str, Any]],
+    caption_positions: Optional[Mapping[int, float]] = None,
 ) -> None:
     """Draw text captions for configured layer groups.
 
@@ -3023,7 +3037,7 @@ def _draw_group_captions(
 
         center_x = (box_min_x + box_max_x) / 2
         text_x = center_x - text_w / 2
-        text_y = box_max_y + gap
+        text_y = caption_positions.get(id(group), box_max_y + gap) if caption_positions else box_max_y + gap
         
         left, top, _, _ = _multiline_bbox(draw, caption, font, 4)
         text_x -= left
