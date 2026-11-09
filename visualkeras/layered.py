@@ -1133,10 +1133,12 @@ def layered_view(model,
             dx = x_off + (box.de if draw_reversed else 0)
             dy = -layer_y[box_idx] / 2
             left, top, right, bottom = (bounds[0] + dx, bounds[1] + dy, bounds[2] + dx, bounds[3] + dy)
-            clearance = max([previous[2] + 4 - left for previous in external_label_bounds
-                             if top < previous[3] and bottom > previous[1]
-                             and left < previous[2] and right > previous[0]] + [0]) if text else 0
-            if clearance > 0:
+            while text:
+                clearance = max([previous[2] + 4 - left for previous in external_label_bounds
+                                 if top < previous[3] and bottom > previous[1]
+                                 and left < previous[2] and right > previous[0]] + [0])
+                if clearance <= 0:
+                    break
                 shift = ceil(clearance)
                 box.x1 += shift
                 box.x2 += shift

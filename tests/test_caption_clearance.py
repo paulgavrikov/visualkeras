@@ -77,3 +77,30 @@ def test_group_captions_clear_external_node_captions(monkeypatch, mode, above, g
         for left, top, right, bottom in bounds:
             assert 0 <= left < right <= image.width
             assert 0 <= top < bottom <= image.height
+
+
+@pytest.mark.parametrize("reversed_view", [False, True])
+def test_layered_caption_reflow_clears_every_neighbor_with_varied_depth(monkeypatch, reversed_view):
+    inputs = tf.keras.Input((240, 170, 1), name="first")
+    middle = tf.keras.layers.Resizing(120, 210, name="mid")(inputs)
+    outputs = tf.keras.layers.Resizing(5, 248, name="last")(middle)
+    model = tf.keras.Model(inputs, outputs)
+    labels = ["First", "Mid", "Long caption"]
+    rectangles = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def record(draw, xy, text, **kwargs):
+        rectangles.append(draw.multiline_textbbox(xy, text, **{
+            key: kwargs[key] for key in ["font", "spacing", "align", "anchor"] if key in kwargs
+        }))
+        return original(draw, xy, text, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", record)
+    image = visualkeras.layered_view(
+        model, draw_reversed=reversed_view, font=ImageFont.truetype("DejaVuSans.ttf", 20),
+        text_callable=lambda i, layer: (labels[i], True),
+    )
+    assert len(rectangles) == 3
+    ordered = sorted(rectangles)
+    assert all(a[2] + 4 <= b[0] for a, b in zip(ordered, ordered[1:]))
+    assert image.width > 0
