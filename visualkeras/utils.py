@@ -44,6 +44,34 @@ def resolve_style(
     return final_style
 
 
+class _PremultipliedDraw:
+    """Adapt aggdraw's premultiplied buffer to Pillow's straight RGBA pixels."""
+
+    def __init__(self, image):
+        self._image = image
+        self._buffer = Image.frombytes("RGBA", image.size, image.convert("RGBa").tobytes())
+        self._previous = self._buffer.copy()
+        self._draw = aggdraw.Draw(self._buffer)
+
+    def __getattr__(self, name):
+        return getattr(self._draw, name)
+
+    def flush(self):
+        self._draw.flush()
+        changed = np.any(np.asarray(self._buffer) != np.asarray(self._previous), axis=2)
+        if changed.any():
+            straight = Image.frombytes("RGBa", self._buffer.size, self._buffer.tobytes()).convert("RGBA")
+            self._image.paste(straight, (0, 0), Image.fromarray(changed.astype("uint8") * 255))
+            self._previous = self._buffer.copy()
+
+
+def _aggdraw_context(image):
+    # Opaque canvases keep the native path and its exact rasterization.
+    if image.mode != "RGBA" or image.getextrema()[3][0] == 255:
+        return aggdraw.Draw(image)
+    return _PremultipliedDraw(image)
+
+
 class RectShape:
     """Base rectangle-like drawing primitive used by multiple renderers.
 

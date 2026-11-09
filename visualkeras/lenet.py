@@ -26,7 +26,7 @@ from .layer_utils import get_layers, extract_primary_shape
 from .layer_utils import _shape_from_tensor_output
 from .options import LenetOptions, LENET_PRESETS
 from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
-from .utils import get_rgba_tuple, fade_color, resolve_style
+from .utils import get_rgba_tuple, fade_color, resolve_style, _aggdraw_context
 
 
 # ---------------------------------------------------------------------------
@@ -1624,7 +1624,7 @@ def lenet_view(
     img = Image.new("RGBA", (img_w, img_h), get_rgba_tuple(background_fill))
 
     # Pass 1: draw stacks (geometry + outlines)
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
     for obj in stacks:
         obj["stack"].draw(draw)
     draw.flush()
@@ -1633,7 +1633,7 @@ def lenet_view(
     _apply_face_images(img, stacks)
 
     # Pass 2: draw connections (polygons + patch boxes) over the faces
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
     for conn in connections:
         conn.draw(draw)
     draw.flush()
