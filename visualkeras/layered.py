@@ -4,7 +4,7 @@ import aggdraw
 from PIL import ImageFont
 from math import ceil
 from .utils import *
-from .utils import _multiline_bbox, _load_node_image, _clear_caption_y
+from .utils import _multiline_bbox, _load_node_image, _clear_caption_y, _aggdraw_context
 from .layer_utils import *
 from .layer_utils import _shape_from_tensor_output
 from .options import LayeredOptions, LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
@@ -1249,7 +1249,7 @@ def layered_view(model,
         node.x1 += x_shift + x_off
         node.x2 += x_shift + x_off
 
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
 
     # Prepare logos
     box_logos = {}
@@ -1317,7 +1317,7 @@ def layered_view(model,
                 draw.flush()
                 for group, logo_img in box_logos[id(box)]:
                     draw_node_logo(img, box, logo_img, group, draw_volume, draw_reversed=True)
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             if getattr(box, 'image', None):
                 draw.flush()
@@ -1349,7 +1349,7 @@ def layered_view(model,
                     p4 = (x1 - de, y2 - de)
                     apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
                 
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             last_box = box
 
@@ -1375,7 +1375,7 @@ def layered_view(model,
                 draw.flush()
                 for group, logo_img in box_logos[id(box)]:
                     draw_node_logo(img, box, logo_img, group, draw_volume, draw_reversed=False)
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             if getattr(box, 'image', None):
                 draw.flush()
@@ -1420,7 +1420,7 @@ def layered_view(model,
                     p4 = (x2, y2)
                     apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
                 
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             last_box = box
 
@@ -1495,7 +1495,7 @@ def layered_view(model,
 
             img_box = Image.new('RGBA', label_patch_size, background_fill)
             img_text = Image.new('RGBA', label_patch_size, (0, 0, 0, 0))
-            draw_box = aggdraw.Draw(img_box)
+            draw_box = _aggdraw_context(img_box)
             draw_text = ImageDraw.Draw(img_text)
 
             box = Box()

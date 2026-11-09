@@ -7,7 +7,7 @@ from PIL import Image
 from visualkeras import utils
 
 
-@pytest.mark.parametrize("mode", ["lenet"])
+@pytest.mark.parametrize("mode", ["lenet", "layered"])
 @pytest.mark.parametrize("background", [(0, 0, 0, 0), (37, 53, 97, 0)])
 def test_public_translucent_fills_keep_straight_alpha_colors(mode, background):
     tf = pytest.importorskip("tensorflow")
@@ -60,3 +60,36 @@ def test_opaque_alpha_context_matches_native_aggdraw_exactly(mode):
         draw.line((2, 25, 35, 4), aggdraw.Pen((100, 210, 40, 90), 3))
         draw.flush()
     assert image.tobytes() == reference.tobytes()
+
+
+def test_layered_translucent_legend_keeps_straight_alpha_colors():
+    tf = pytest.importorskip("tensorflow")
+    import visualkeras
+
+    inputs = tf.keras.Input((4,), name="in")
+    model = tf.keras.Model(inputs, tf.keras.layers.Dense(4, name="out")(inputs))
+    settings = {"background_fill": (0, 0, 0, 0), "draw_volume": False, "draw_funnel": False,
+                "styles": {object: {"fill": (0, 0, 255, 128), "outline": (0, 0, 255, 128)}}}
+    base = visualkeras.layered_view(model, **settings)
+    image = visualkeras.layered_view(model, legend=True, **settings)
+    legend = image.crop((0, base.height, image.width, image.height))
+    blue = [pixel for pixel in legend.getdata() if pixel[0] == pixel[1] == 0 and pixel[2] > 0 and pixel[3] > 0]
+    assert blue
+    assert Counter(blue).most_common(1)[0][0][:3] == (0, 0, 255)
+
+
+def test_alpha_context_blends_over_partially_transparent_destination():
+    image = Image.new("RGBA", (40, 32), (0, 128, 0, 128))
+    mask = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    native = aggdraw.Draw(mask)
+    native.rectangle((8, 8, 24, 24), None, aggdraw.Brush((255, 255, 255, 128)))
+    native.flush()
+    foreground = Image.new("RGBA", image.size, "blue")
+    foreground.putalpha(mask.getchannel("A"))
+    expected = Image.alpha_composite(image, foreground)
+    draw = utils._aggdraw_context(image)
+    draw.rectangle((8, 8, 24, 24), None, aggdraw.Brush((0, 0, 255, 128)))
+    draw.flush()
+    # An 8-bit premultiplied buffer can round a color channel by one unit.
+    assert all(abs(a - b) <= 1 for a, b in zip(image.getpixel((16, 16)), expected.getpixel((16, 16))))
+    assert image.getpixel((0, 0)) == (0, 128, 0, 128)
