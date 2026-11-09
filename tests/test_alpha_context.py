@@ -7,7 +7,7 @@ from PIL import Image
 from visualkeras import utils
 
 
-@pytest.mark.parametrize("mode", ["lenet", "layered"])
+@pytest.mark.parametrize("mode", ["lenet", "layered", "graph", "functional"])
 @pytest.mark.parametrize("background", [(0, 0, 0, 0), (37, 53, 97, 0)])
 def test_public_translucent_fills_keep_straight_alpha_colors(mode, background):
     tf = pytest.importorskip("tensorflow")

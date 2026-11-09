@@ -7,7 +7,7 @@ from math import ceil, prod as _shape_product
 from operator import index as _dimension_index
 import warnings
 from .utils import *
-from .utils import _multiline_bbox, _load_node_image
+from .utils import _multiline_bbox, _load_node_image, _aggdraw_context
 from .layer_utils import *
 from .layer_utils import _iter_output_tensors
 from .options import GraphOptions, GRAPH_PRESETS
@@ -619,7 +619,7 @@ def graph_view(model, to_file: str = None,
     final_height = max_y - min_y
     
     img = Image.new('RGBA', (int(ceil(final_width)), int(ceil(final_height))), background_fill)
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
     
     # Shift nodes if needed
     shift_x = -min_x
@@ -678,7 +678,7 @@ def graph_view(model, to_file: str = None,
                     resized.putalpha(_ImageChops.multiply(resized.getchannel("A"), mask))
 
                 img.alpha_composite(resized, (int(node.x1), int(node.y1)))
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
                 
                 # Draw the node outline on top (transparent fill)
                 # We access _fill directly to avoid the setter logic which might fail on None

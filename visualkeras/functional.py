@@ -47,6 +47,7 @@ from .utils import (
     _multiline_bbox,
     _load_node_image,
     _clear_caption_y,
+    _aggdraw_context,
 )
 
 
@@ -2650,7 +2651,7 @@ def _render_graph(
                 node_logos[node.node_id].append((group, logo_img))
 
     img = Image.new("RGBA", (ceil(max_right), ceil(max_bottom)), background_fill)
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
     color_wheel = ColorWheel()
 
     if layered_groups:
@@ -2710,7 +2711,7 @@ def _render_graph(
                     apply_affine_transform(img, node.image, quad, fit_mode)
                 except Exception:
                     pass
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             if node.node_id in node_logos:
                 draw.flush()
@@ -2724,7 +2725,7 @@ def _render_graph(
                 box_tmp.y2 = y2
                 for group, logo_img in node_logos[node.node_id]:
                     draw_node_logo(img, box_tmp, logo_img, group, draw_volume=False)
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             if node.kind != "virtual" and bool(node.style.get("box_text_enabled", True)):
                 pending_simple_text.append((node, (x1, y1, x2, y2)))
@@ -2778,13 +2779,13 @@ def _render_graph(
             if quad:
                 apply_affine_transform(img, node.image, quad, fit_mode)
 
-            draw = aggdraw.Draw(img)
+            draw = _aggdraw_context(img)
 
         if node.node_id in node_logos:
             draw.flush()
             for group, logo_img in node_logos[node.node_id]:
                 draw_node_logo(img, box, logo_img, group, draw_volume)
-            draw = aggdraw.Draw(img)
+            draw = _aggdraw_context(img)
 
         if node.kind == "collapsed":
             pending_collapsed_annotations.append(
