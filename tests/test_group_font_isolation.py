@@ -33,4 +33,6 @@ def test_group_font_does_not_replace_diagram_caption_font(monkeypatch, mode, fon
     )
     assert image.width > 0 and image.height > 0
     assert len(used_fonts) == 2
-    assert all(used.getbbox(text) == expected_font.getbbox(text) for used in used_fonts)
+    draw = ImageDraw.Draw(image)
+    expected_bounds = draw.multiline_textbbox((0, 0), text, font=expected_font)
+    assert all(draw.multiline_textbbox((0, 0), text, font=used) == expected_bounds for used in used_fonts)
