@@ -869,10 +869,12 @@ def functional_view(
             node_style = node.style or {}
             if node.kind == "virtual" or not bool(node_style.get("box_text_enabled", True)):
                 continue
+            label = _resolve_box_label(node)
+            node.style = dict(node_style, box_text=label)
             if isinstance(node_style.get("box_size"), (tuple, list)):
                 continue
             need_w, need_h = _box_text_required_size(
-                _resolve_box_label(node), node_style, font, text_vspacing,
+                label, node_style, font, text_vspacing,
             )
             # Round up to even sizes so box centers land on whole pixels and
             # straight connectors between neighbouring boxes stay straight.
@@ -2670,6 +2672,7 @@ def _render_graph(
                      for label in external_labels]
     # Final group rectangles use the settled label positions so each group
     # encloses its members' captions instead of cutting through them.
+    min_left = 0
     group_rects: Dict[int, Tuple[float, float, float, float]] = {}
     if layered_groups:
         label_rects = _external_label_rects(external_labels)
@@ -2680,6 +2683,7 @@ def _render_graph(
             rect = _group_rect(group_nodes, group, label_rects)
             group_rects[id(group)] = rect
             stroke = float(group.get("width", 1)) / 2
+            min_left = min(min_left, rect[0] - stroke)
             max_right = max(max_right, rect[2] + padding + stroke)
             max_bottom = max(max_bottom, rect[3] + padding + stroke)
 
@@ -2691,7 +2695,24 @@ def _render_graph(
         top = _clear_caption_y((x, y, x + width, y + height), occupied_text)
         group_caption_positions[id(group)] = top
         occupied_text.append((x, top, x + width, top + height))
+        min_left = min(min_left, x)
+        max_right = max(max_right, x + width + padding)
         max_bottom = max(max_bottom, top + height + padding)
+
+    # Caption settlement can extend a group's left edge beyond the canvas.
+    shift_x = ceil(-min_left)
+    if shift_x:
+        graph = FunctionalGraph(
+            nodes={node_id: replace(node, x=node.x + shift_x)
+                   for node_id, node in graph.nodes.items()},
+            edges=graph.edges, inputs=graph.inputs, outputs=graph.outputs,
+        )
+        for label in external_labels:
+            label["x"] += shift_x
+            label["x_pref"] += shift_x
+        group_rects = {key: (left + shift_x, top, right + shift_x, bottom)
+                       for key, (left, top, right, bottom) in group_rects.items()}
+        max_right += shift_x
 
     node_logos = {} # node_id -> list of (group, image)
     if logo_groups:

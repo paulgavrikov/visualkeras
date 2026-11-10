@@ -176,3 +176,65 @@ def test_default_palette_matches_v020():
         "#ffd166", "#ef476f", "#118ab2", "#073b4c", "#842da1",
         "#ffbad4", "#fe9775", "#83d483", "#06d6a0", "#0cb0a9",
     ]
+
+
+@pytest.mark.parametrize("box_size", [None, (60, 60), "first"])
+def test_functional_inside_label_callback_runs_once(monkeypatch, box_size):
+    model = _multi_io_model()
+    calls, labels, order = {}, [], []
+
+    def caption(layer):
+        order.append(layer.name)
+        calls[layer.name] = calls.get(layer.name, 0) + 1
+        return "A" if calls[layer.name] == 1 else "LABEL CHANGED AFTER SIZING"
+
+    style = {"box_text_callable": caption}
+    if box_size is not None and box_size != "first":
+        style["box_size"] = box_size
+    styles = {tf.keras.layers.Layer: style}
+    if box_size == "first":
+        styles[model.layers[0].name] = {"box_size": (60, 60)}
+    original = functional._draw_box_text_in_rect
+
+    def record(base, rect, text, **kwargs):
+        labels.append(text)
+        return original(base, rect, text, **kwargs)
+
+    monkeypatch.setattr(functional, "_draw_box_text_in_rect", record)
+    visualkeras.functional_view(
+        model, simple_text_visualization=True, simple_text_label_mode="inside",
+        styles=styles,
+    )
+
+    assert calls == {layer.name: 1 for layer in model.layers}
+    assert order == [layer.name for layer in model.layers]
+    assert labels == ["A"] * len(model.layers)
+    assert "box_text" not in style
+
+
+@pytest.mark.parametrize("padding", [0, 20])
+@pytest.mark.parametrize("group_padding", [10, 60])
+def test_functional_settled_group_stays_inside_canvas(monkeypatch, font_dir, padding, group_padding):
+    from PIL import ImageFont
+
+    inputs = tf.keras.Input((8,), name="input")
+    model = tf.keras.Model(inputs, tf.keras.layers.Dense(2, name="output")(inputs))
+    group = {"name": "Encoder", "layers": ["input"], "padding": group_padding}
+    rectangles = []
+    original = functional._draw_group_boxes
+
+    def record(draw, graph, groups, group_rects=None):
+        rectangles.append(group_rects[id(group)])
+        return original(draw, graph, groups, group_rects=group_rects)
+
+    monkeypatch.setattr(functional, "_draw_group_boxes", record)
+    image = visualkeras.functional_view(
+        model, padding=padding, font=ImageFont.truetype(str(font_dir / "DejaVuSans.ttf"), 18),
+        text_callable=lambda i, layer: (layer.name + "_descriptive_label_for_review", False),
+        layered_groups=[group],
+    )
+
+    assert len(rectangles) == 1
+    left, top, right, bottom = rectangles[0]
+    assert 0.5 <= left <= right <= image.width - 0.5
+    assert 0.5 <= top <= bottom <= image.height - 0.5
