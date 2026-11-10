@@ -40,6 +40,50 @@ def _build_reference_model():
     return model
 
 
+@pytest.mark.parametrize("via_show", [False, True])
+@pytest.mark.parametrize(
+    "shape, batch_size, expected_neurons",
+    [((3,), None, 3), ((3,), 4, 3), ((2, 2, 3), None, 12)],
+)
+def test_graph_input_neurons_support_modern_keras(shape, batch_size, expected_neurons, via_show):
+    inputs = tf.keras.layers.Input(shape=shape, batch_size=batch_size, name="neuron_input")
+    flattened = tf.keras.layers.Flatten(name="neuron_flatten")(inputs)
+    outputs = tf.keras.layers.Dense(2, name="neuron_output")(flattened)
+    model = tf.keras.Model(inputs, outputs, name="input_neuron_model")
+    settings = {
+        "inout_as_tensor": False,
+        "node_size": 12,
+        "node_spacing": 5,
+        "layer_spacing": 30,
+        "padding": 8,
+        "ellipsize_after": 0,
+        "styles": {"neuron_input": {"fill": "magenta", "outline": "magenta"}},
+    }
+    image = visualkeras.show(model, mode="graph", **settings) if via_show else visualkeras.graph_view(model, **settings)
+    column = [image.getpixel((14, y))[:3] == (255, 0, 255) for y in range(image.height)]
+    runs = sum(value and (index == 0 or not column[index - 1]) for index, value in enumerate(column))
+    assert runs == expected_neurons
+
+
+@pytest.mark.parametrize("via_show", [False, True])
+def test_fixed_batch_outputs_count_neurons_per_example(via_show):
+    inputs = tf.keras.Input((3,), batch_size=4, name="batch_input")
+    early = tf.keras.layers.Dense(3, name="early")(inputs)
+    late = tf.keras.layers.Dense(2, name="late")(early)
+    model = tf.keras.Model(inputs, [early, late])
+    settings = {
+        "inout_as_tensor": False, "ellipsize_after": 0, "node_size": 12,
+        "node_spacing": 5, "layer_spacing": 30, "padding": 8,
+        "styles": {"early": {"fill": "red", "outline": "red"},
+                   "late": {"fill": "blue", "outline": "blue"}},
+    }
+    image = visualkeras.show(model, mode="graph", **settings) if via_show else visualkeras.graph_view(model, **settings)
+    x = image.width - 8 - 6
+    for color, count in [((255, 0, 0), 3), ((0, 0, 255), 2)]:
+        column = [image.getpixel((x, y))[:3] == color for y in range(image.height)]
+        assert sum(value and (i == 0 or not column[i - 1]) for i, value in enumerate(column)) == count
+
+
 def _downsample_metrics(image: Image.Image) -> dict[str, float]:
     resized = image.resize((32, 32), Image.LANCZOS)
     arr = np.asarray(resized, dtype=np.float64)
@@ -52,6 +96,52 @@ def _downsample_metrics(image: Image.Image) -> dict[str, float]:
             "31-31": [int(v) for v in arr[31, 31]],
         },
     }
+
+
+@pytest.mark.parametrize("mode", ["graph", "functional"])
+def test_reused_layer_renders_only_current_model_connections(mode):
+    first = tf.keras.Input((3,), name="foreign_input")
+    shared = tf.keras.layers.Dense(2, name="reused_dense")
+    tf.keras.Model(first, shared(first))
+    inputs = tf.keras.Input((3,), name="current_input")
+    model = tf.keras.Model(inputs, shared(inputs))
+    image = visualkeras.show(model, mode=mode, draw_volume=False) if mode == "functional" else visualkeras.show(model, mode=mode, show_neurons=False)
+    assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("mode", ["graph", "functional"])
+@pytest.mark.filterwarnings("error:Functional graph contains cycles")
+def test_sequential_reused_layers_do_not_create_false_cycles(mode):
+    old_input = tf.keras.Input((3,), name="old_chain")
+    a = tf.keras.layers.Dense(3, name="chain_a")
+    b = tf.keras.layers.Dense(3, name="chain_b")
+    tf.keras.Model(old_input, a(b(old_input)))
+    model = tf.keras.Sequential([tf.keras.Input((3,), name="active_chain"), a, b])
+    image = visualkeras.show(model, mode=mode)
+    assert image.width > 0 and image.height > 0
+
+
+def test_skip_merge_connectors_always_point_to_a_later_column(monkeypatch):
+    import visualkeras.graph as graph
+
+    inputs = tf.keras.Input((3,), name="skip_input")
+    first = tf.keras.layers.Dense(3, name="long_first")(inputs)
+    short = tf.keras.layers.Dense(3, name="short_branch")(inputs)
+    second = tf.keras.layers.Dense(3, name="long_second")(first)
+    outputs = tf.keras.layers.Add(name="skip_merge")([short, second])
+    model = tf.keras.Model(inputs, outputs)
+    connections = []
+    original = graph._draw_connector
+
+    def record(draw, start, end, *args, **kwargs):
+        connections.append((start.x2, end.x1))
+        return original(draw, start, end, *args, **kwargs)
+
+    monkeypatch.setattr(graph, "_draw_connector", record)
+    image = visualkeras.graph_view(model, show_neurons=False, layer_spacing=50)
+    assert len(connections) == 6
+    assert all(start < end for start, end in connections)
+    assert image.width > 0
 
 
 def _assert_metrics_close(actual: dict, expected: dict):
@@ -106,3 +196,113 @@ def test_graph_renderer_variants(metric_key, renderer):
 
     actual = _downsample_metrics(image)
     _assert_metrics_close(actual, expected)
+
+
+def test_graph_keeps_early_outputs_from_a_structured_layer():
+    inputs = tf.keras.Input((8,), name="split_input")
+    early, branch = tf.keras.layers.Lambda(
+        lambda x: (x[:, :3], x[:, 3:]), name="split",
+    )(inputs)
+    late = tf.keras.layers.Dense(2, name="late")(branch)
+    model = tf.keras.Model(inputs, [early, late])
+    image = visualkeras.graph_view(
+        model, inout_as_tensor=False, ellipsize_after=0, node_size=12,
+        node_spacing=5, layer_spacing=30, padding=8,
+        styles={"split": {"fill": "red", "outline": "red"},
+                "late": {"fill": "blue", "outline": "blue"}},
+    )
+    x = image.width - 8 - 6
+    for color, count in [((255, 0, 0), 3), ((0, 0, 255), 2)]:
+        column = [image.getpixel((x, y))[:3] == color for y in range(image.height)]
+        assert sum(value and (i == 0 or not column[i - 1]) for i, value in enumerate(column)) == count
+
+
+@pytest.mark.parametrize("shape_container", [tuple, list])
+def test_graph_accepts_structured_output_shape_metadata(shape_container):
+    class ShapeAdapter:
+        def __init__(self, model):
+            self.layers = model.layers
+            self.outputs = model.outputs
+            self.output_names = model.output_names
+            self.output_shape = shape_container(model.output_shape)
+            self._model = model
+
+        def get_layer(self, name):
+            return self._model.get_layer(name=name)
+
+    inputs = tf.keras.Input((3,), name="shape_input")
+    early = tf.keras.layers.Dense(3, name="shape_early")(inputs)
+    late = tf.keras.layers.Dense(2, name="shape_late")(early)
+    model = tf.keras.Model(inputs, [early, late])
+    reference = visualkeras.graph_view(model, inout_as_tensor=False)
+    image = visualkeras.graph_view(ShapeAdapter(model), inout_as_tensor=False)
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("per_layer", [False, True])
+def test_graph_symbolic_outputs_can_be_boxes(per_layer):
+    inputs = tf.keras.Input((None, 3), name="sequence_input")
+    early = tf.keras.layers.Activation("linear", name="sequence")(inputs)
+    pooled = tf.keras.layers.GlobalAveragePooling1D(name="pool")(early)
+    late = tf.keras.layers.Dense(2, name="summary")(pooled)
+    model = tf.keras.Model(inputs, [early, late])
+    styles = {name: {"show_neurons": False} for name in ["sequence_input", "sequence"]} if per_layer else {}
+    image = visualkeras.graph_view(
+        model, inout_as_tensor=False, show_neurons=per_layer, styles=styles,
+        node_size=20, layer_spacing=40,
+    )
+    assert image.width > 0 and image.height > 0
+
+
+def test_graph_explicit_symbolic_output_neurons_still_require_dimensions():
+    inputs = tf.keras.Input((None, 3), name="sequence_input")
+    early = tf.keras.layers.Activation("linear", name="sequence")(inputs)
+    late = tf.keras.layers.Dense(2, name="summary")(tf.keras.layers.GlobalAveragePooling1D()(early))
+    model = tf.keras.Model(inputs, [early, late])
+    with pytest.raises(RuntimeError, match="not supported output shape"):
+        visualkeras.graph_view(
+            model, inout_as_tensor=False, show_neurons=False,
+            styles={"sequence": {"show_neurons": True}},
+        )
+
+
+@pytest.mark.parametrize("kind", ["split", "duplicate"])
+@pytest.mark.parametrize("show_neurons", [False, True])
+def test_graph_keeps_distinct_output_slots_from_one_terminal_layer(kind, show_neurons):
+    inputs = tf.keras.Input((8,), name="in")
+    if kind == "split":
+        outputs = tf.keras.layers.Lambda(lambda x: (x[:, :3], x[:, 3:]), name="out")(inputs)
+        neuron_count = 8
+    else:
+        output = tf.keras.layers.Dense(3, name="out")(inputs)
+        outputs = [output, output]
+        neuron_count = 6
+    model = tf.keras.Model(inputs, outputs)
+    image = visualkeras.graph_view(
+        model, inout_as_tensor=False, show_neurons=show_neurons, node_size=12, node_spacing=5,
+        layer_spacing=30, padding=8, ellipsize_after=0,
+        styles={"out": {"fill": "red", "outline": "red"}},
+    )
+    x = image.width - 8 - 6
+    column = [image.getpixel((x, y))[:3] == (255, 0, 0) for y in range(image.height)]
+    count = sum(value and (index == 0 or not column[index - 1]) for index, value in enumerate(column))
+    assert count == (neuron_count if show_neurons else 2)
+
+
+@pytest.mark.parametrize("metadata", [None, {"main": (None, 6), "aux": (None, 2)}])
+def test_graph_output_neurons_use_actual_tensor_shapes(metadata):
+    class MetadataModel(tf.keras.Model):
+        @property
+        def output_shape(self):
+            return metadata
+
+    inputs = tf.keras.Input((8,), name="in")
+    outputs = tf.keras.layers.Lambda(lambda x: (x[:, :6], x[:, 6:]), name="out")(inputs)
+    model = MetadataModel(inputs, outputs)
+    image = visualkeras.graph_view(model, inout_as_tensor=False, show_neurons=True, node_size=12,
+                                   node_spacing=5, layer_spacing=30, padding=8, ellipsize_after=0,
+                                   styles={"out": {"fill": "red", "outline": "red"}})
+    x = image.width - 8 - 6
+    pixels = [image.getpixel((x, y))[:3] == (255, 0, 0) for y in range(image.height)]
+    assert sum(value and (i == 0 or not pixels[i - 1]) for i, value in enumerate(pixels)) == 8

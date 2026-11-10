@@ -1,10 +1,14 @@
 from typing import Any, Callable, Mapping, Optional, Union, List, Dict, Sequence, Tuple
+from os import PathLike as _PathLike, fspath as _fspath
 import aggdraw
 from PIL import ImageFont
 from math import ceil
 from .utils import *
+from .utils import _multiline_bbox, _load_node_image, _clear_caption_y, _aggdraw_context
 from .layer_utils import *
+from .layer_utils import _shape_from_tensor_output
 from .options import LayeredOptions, LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
+from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 import warnings
 
 try:
@@ -37,7 +41,7 @@ def _resolve_layer_output_shape(layer) -> Any:
         return _shape_to_tuple(shape)
 
     output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
+    tensor_shape = _shape_from_tensor_output(output)
     if tensor_shape is not None:
         return _shape_to_tuple(tensor_shape)
 
@@ -54,7 +58,7 @@ def _resolve_layer_output_shape(layer) -> Any:
 
 
 def _shape_to_tuple(shape: Any) -> Any:
-    if shape is None:
+    if shape is None or (hasattr(shape, "rank") and shape.rank is None):
         return None
     if isinstance(shape, tuple):
         return shape
@@ -66,6 +70,22 @@ def _shape_to_tuple(shape: Any) -> Any:
     if isinstance(shape, list):
         return tuple(shape)
     return shape
+
+def _external_label_geometry(box, text, above, font, spacing):
+    sizes = [font.getsize(line) if hasattr(font, "getsize") else font.getbbox(line)[2:]
+             for line in text.split("\n")]
+    width = max((size[0] for size in sizes), default=0)
+    height = sum(size[1] for size in sizes) + (len(sizes) - 1) * spacing
+    x = box.x1 + (box.x2 - box.x1) / 2 - width / 2 + (box.de if above else 0)
+    y = box.y1 - box.de - height if above else box.y2
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    if hasattr(draw, "multiline_textbbox"):
+        bounds = draw.multiline_textbbox((x, y), text, font=font, spacing=spacing, align="center", anchor="la")
+    else:
+        left, top, right, bottom = _multiline_bbox(draw, text, font, spacing)
+        bounds = (x + left, y + top, x + right, y + bottom)
+    return x, y, width, height, bounds
+
 
 def _get_group_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
     layers_ref = group.get("layers", [])
@@ -81,6 +101,9 @@ def _get_group_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
         # Check if node matches any layer in the group
         for layer_ref in layers_ref:
             if layer is layer_ref:
+                group_boxes.append(box)
+                break
+            if isinstance(layer_ref, type) and isinstance(layer, layer_ref):
                 group_boxes.append(box)
                 break
             # Check name match
@@ -121,10 +144,13 @@ def _get_logo_boxes(boxes: List[Box], group: Dict[str, Any]) -> List[Box]:
             if ref in name_to_boxes:
                 target_boxes.extend(name_to_boxes[ref])
         elif isinstance(ref, type):
-            if ref in type_to_boxes:
-                target_boxes.extend(type_to_boxes[ref])
+            for layer_type, matches in type_to_boxes.items():
+                if issubclass(layer_type, ref):
+                    target_boxes.extend(matches)
+        elif ref is not None:
+            target_boxes.extend(box for box in boxes if getattr(box, "layer", None) is ref)
                 
-    return target_boxes
+    return list({id(item): item for item in target_boxes}.values())
 
 
 def _draw_layered_group_boxes(draw, boxes, groups, draw_reversed):
@@ -165,7 +191,7 @@ def _draw_layered_group_boxes(draw, boxes, groups, draw_reversed):
         draw.rectangle([min_x, min_y, max_x, max_y], pen, brush)
 
 
-def _draw_layered_group_captions(img, boxes, groups, draw_reversed):
+def _draw_layered_group_captions(img, boxes, groups, draw_reversed, caption_positions=None):
     draw = ImageDraw.Draw(img)
     for group in groups:
         caption = group.get("name", group.get("caption"))
@@ -205,9 +231,12 @@ def _draw_layered_group_captions(img, boxes, groups, draw_reversed):
         
         center_x = (min_x + max_x) / 2
         text_x = center_x - text_w / 2
-        text_y = max_y + gap
+        text_y = caption_positions.get(id(group), max_y + gap) if caption_positions else max_y + gap
+        left, top, _, _ = _multiline_bbox(draw, caption, font, 4)
+        text_x -= left
+        text_y -= top
         
-        draw.text((text_x, text_y), caption, fill=color, font=font)
+        draw.multiline_text((text_x, text_y), caption, fill=color, font=font)
 
 
 
@@ -220,25 +249,23 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
             return ImageFont.truetype("arial.ttf", font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, str):
+    elif isinstance(font_src, (str, _PathLike)):
          try:
-            return ImageFont.truetype(font_src, font_size)
+            return ImageFont.truetype(_fspath(font_src), font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, ImageFont.ImageFont):
+    elif isinstance(font_src, (ImageFont.ImageFont, ImageFont.FreeTypeFont)):
         return font_src
     else:
         return ImageFont.load_default()
 
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
-    if hasattr(font, "getbbox"):
-        left, top, right, bottom = font.getbbox(text)
-        return right - left, bottom - top
-    else:
-        return draw.textsize(text, font=font)
+    left, top, right, bottom = _multiline_bbox(draw, text, font, 4)
+    return right - left, bottom - top
 
 
+@_track_explicit_arguments
 def layered_view(model, 
                  to_file: str = None, 
                  min_z: int = 20, 
@@ -646,7 +673,7 @@ def layered_view(model,
                 "layered_view received many custom keyword arguments. "
                 "Consider using visualkeras.show(..., preset=...) for a simpler workflow.",
                 UserWarning,
-                stacklevel=2,
+                stacklevel=3,
             )
 
     if preset is not None or options is not None:
@@ -681,6 +708,7 @@ def layered_view(model,
                 raise TypeError(
                     "options must be a LayeredOptions instance or a mapping of keyword arguments."
                 )
+            _validate_option_keys(option_values, defaults, "layered")
             resolved.update(option_values)
 
         explicit_values = {
@@ -715,14 +743,18 @@ def layered_view(model,
             "relative_base_size": relative_base_size,
             "connector_fill": connector_fill,
             "connector_width": connector_width,
+            "image_fit": image_fit,
+            "image_axis": image_axis,
             "layered_groups": layered_groups,
+            "logo_groups": logo_groups,
+            "logos_legend": logos_legend,
             "styles": styles,
         }
 
         for key, value in explicit_values.items():
             if key not in defaults:
                 continue
-            if value != defaults[key]:
+            if _is_explicit(key):
                 resolved[key] = value
         
         to_file = resolved["to_file"]
@@ -759,6 +791,8 @@ def layered_view(model,
         image_fit = resolved["image_fit"]
         image_axis = resolved["image_axis"]
         layered_groups = resolved["layered_groups"]
+        logo_groups = resolved["logo_groups"]
+        logos_legend = resolved["logos_legend"]
         styles = resolved["styles"]
 
     if styles is not None and not isinstance(styles, dict):
@@ -812,7 +846,7 @@ def layered_view(model,
             "Custom text_callable detected. Built-in caption templates are available "
             "via visualkeras.show(..., text_callable='name').",
             UserWarning,
-            stacklevel=2,
+            stacklevel=3,
         )
 
     # Deprecation warning for legend_text_spacing_offset
@@ -852,6 +886,11 @@ def layered_view(model,
 
         for group in layered_groups:
             for ref in group.get("layers", []):
+                if isinstance(ref, type):
+                    for index, layer in enumerate(model.layers):
+                        if isinstance(layer, ref):
+                            layer_to_groups.setdefault(index, []).append(group)
+                    continue
                 idx = -1
                 if isinstance(ref, str):
                     idx = name_to_index.get(ref, -1)
@@ -874,7 +913,7 @@ def layered_view(model,
             continue
 
         # Do not render the SpacingDummyLayer, just increase the pointer
-        if type(layer) == SpacingDummyLayer:
+        if isinstance(layer, SpacingDummyLayer):
             current_z += layer.spacing
             continue
         
@@ -936,7 +975,7 @@ def layered_view(model,
         
         if image_path:
             try:
-                node_image = Image.open(image_path).convert("RGBA")
+                node_image = _load_node_image(image_path)
                 fit_mode = style.get("image_fit", image_fit)
                 axis = style.get("image_axis", image_axis)
                 
@@ -1071,55 +1110,53 @@ def layered_view(model,
         min_scene_x = min(min_scene_x, visual_x1)
         max_scene_x = max(max_scene_x, visual_x2)
 
+    external_labels = []
+    external_label_bounds = []
     if text_callable is not None:
         if font is None:
             font = ImageFont.load_default()
 
         box_idx = -1
+        horizontal_shift = 0
         for index, layer in enumerate(model.layers):
-            if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
+            if type(layer) in type_ignore or isinstance(layer, SpacingDummyLayer) or index in index_ignore:
                 continue
             box_idx += 1
-
             box = boxes[box_idx]
+            box.x1 += horizontal_shift
+            box.x2 += horizontal_shift
             local_font = box.style.get('font', font)
             local_vspacing = box.style.get('text_vspacing', text_vspacing)
-
             text, above = text_callable(box_idx, layer)
-
-            text_w = 0
-            text_h = 0
-            lines = text.split('\n')
-            for line in lines:
-                if hasattr(local_font, 'getsize'):
-                    line_w, line_h = local_font.getsize(line)
-                else:
-                    bbox = local_font.getbbox(line)
-                    line_w = bbox[2]
-                    line_h = bbox[3]
-                text_w = max(text_w, line_w)
-                text_h += line_h
-
-            text_h += (len(lines) - 1) * local_vspacing
-
-            width = box.x2 - box.x1
-            base_x = box.x1 + x_off
-            if draw_reversed:
-                base_x += box.de
-
+            external_labels.append((text, above))
+            x, y, text_w, text_h, bounds = _external_label_geometry(box, text, above, local_font, local_vspacing)
+            dx = x_off + (box.de if draw_reversed else 0)
+            dy = -layer_y[box_idx] / 2
+            left, top, right, bottom = (bounds[0] + dx, bounds[1] + dy, bounds[2] + dx, bounds[3] + dy)
+            while text:
+                clearance = max([previous[2] + 4 - left for previous in external_label_bounds
+                                 if top < previous[3] and bottom > previous[1]
+                                 and left < previous[2] and right > previous[0]] + [0])
+                if clearance <= 0:
+                    break
+                shift = ceil(clearance)
+                box.x1 += shift
+                box.x2 += shift
+                horizontal_shift += shift
+                x += shift
+                left += shift
+                right += shift
+            if text:
+                external_label_bounds.append((left, top, right, bottom))
             if above:
-                center_x = base_x + box.de + width / 2
-                max_top_extent = max(max_top_extent, (layer_y[box_idx] / 2) + text_h)
+                max_top_extent = max(max_top_extent, layer_y[box_idx] / 2 + text_h, -top)
             else:
-                center_x = base_x + width / 2
-                max_bottom_extent = max(max_bottom_extent, (layer_y[box_idx] / 2) + text_h)
+                max_bottom_extent = max(max_bottom_extent, layer_y[box_idx] / 2 + text_h, bottom)
+            min_scene_x = min(min_scene_x, x + dx, left)
+            max_scene_x = max(max_scene_x, x + dx + text_w, right, box.x2 + dx)
 
-            t_x1 = center_x - text_w / 2
-            t_x2 = center_x + text_w / 2
-
-            min_scene_x = min(min_scene_x, t_x1)
-            max_scene_x = max(max_scene_x, t_x2)
-
+    group_caption_positions = {}
+    occupied_text = list(external_label_bounds)
     if layered_groups:
         dummy_img = Image.new("RGBA", (1, 1))
         dummy_draw = ImageDraw.Draw(dummy_img)
@@ -1176,15 +1213,20 @@ def layered_view(model,
             # Caption
             caption = group.get("name", group.get("caption"))
             if caption:
-                font = _get_font(group)
-                text_w, text_h = _measure_text(dummy_draw, caption, font)
+                group_font = _get_font(group)
+                text_w, text_h = _measure_text(dummy_draw, caption, group_font)
                 
                 center_x = (g_min_x + g_max_x) / 2
                 text_x1 = center_x - text_w / 2
                 text_x2 = center_x + text_w / 2
                 
                 gap = group.get("text_spacing", 5)
-                text_bottom = g_max_y + gap + text_h
+                text_top = _clear_caption_y(
+                    (text_x1, g_max_y + gap, text_x2, g_max_y + gap + text_h), occupied_text,
+                )
+                group_caption_positions[id(group)] = text_top
+                text_bottom = text_top + text_h
+                occupied_text.append((text_x1, text_top, text_x2, text_bottom))
                 
                 min_scene_x = min(min_scene_x, text_x1)
                 max_scene_x = max(max_scene_x, text_x2)
@@ -1209,7 +1251,7 @@ def layered_view(model,
         node.x1 += x_shift + x_off
         node.x2 += x_shift + x_off
 
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
 
     # Prepare logos
     box_logos = {}
@@ -1218,7 +1260,7 @@ def layered_view(model,
             path = group.get("file")
             if not path: continue
             try:
-                logo_img = Image.open(path)
+                logo_img = _load_node_image(path)
             except:
                 continue
             
@@ -1277,7 +1319,7 @@ def layered_view(model,
                 draw.flush()
                 for group, logo_img in box_logos[id(box)]:
                     draw_node_logo(img, box, logo_img, group, draw_volume, draw_reversed=True)
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             if getattr(box, 'image', None):
                 draw.flush()
@@ -1291,7 +1333,7 @@ def layered_view(model,
                     w = x2 - x1
                     h = y2 - y1
                     resized = resize_image_to_fit(image, int(w), int(h), fit)
-                    img.paste(resized, (int(x1), int(y1)), resized)
+                    img.alpha_composite(resized, (int(x1), int(y1)))
                     
                 elif axis == 'y': # Top
                     # Reversed Top Face: TL(x1-de, y1-de), TR(x2-de, y1-de), BR(x2, y1), BL(x1, y1)
@@ -1309,7 +1351,7 @@ def layered_view(model,
                     p4 = (x1 - de, y2 - de)
                     apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
                 
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             last_box = box
 
@@ -1335,7 +1377,7 @@ def layered_view(model,
                 draw.flush()
                 for group, logo_img in box_logos[id(box)]:
                     draw_node_logo(img, box, logo_img, group, draw_volume, draw_reversed=False)
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             if getattr(box, 'image', None):
                 draw.flush()
@@ -1349,7 +1391,7 @@ def layered_view(model,
                     w = x2 - x1
                     h = y2 - y1
                     resized = resize_image_to_fit(image, int(w), int(h), fit)
-                    img.paste(resized, (int(x1), int(y1)), resized)
+                    img.alpha_composite(resized, (int(x1), int(y1)))
                     
                 elif axis == 'y': # Top
                     # Normal Top Face: TL(x1, y1), TR(x2, y1), BR(x2+de, y1-de), BL(x1+de, y1-de)
@@ -1380,7 +1422,7 @@ def layered_view(model,
                     p4 = (x2, y2)
                     apply_affine_transform(img, image, [p1, p2, p3, p4], fit)
                 
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             last_box = box
 
@@ -1390,7 +1432,7 @@ def layered_view(model,
         draw_text = ImageDraw.Draw(img)
         i = -1
         for index, layer in enumerate(model.layers):
-            if type(layer) in type_ignore or type(layer) == SpacingDummyLayer or index in index_ignore:
+            if type(layer) in type_ignore or isinstance(layer, SpacingDummyLayer) or index in index_ignore:
                 continue
             i += 1
             
@@ -1400,42 +1442,16 @@ def layered_view(model,
             local_font_color = box.style.get('font_color', font_color)
             local_vspacing = box.style.get('text_vspacing', text_vspacing)
 
-            text, above = text_callable(i, layer)
-            text_height = 0
-            text_x_adjust = []
-            for line in text.split('\n'):
-                # Use local_font for measurements
-                if hasattr(local_font, 'getsize'):
-                    line_height = local_font.getsize(line)[1]
-                    text_x_adjust.append(local_font.getsize(line)[0])
-                else:
-                    line_height = local_font.getbbox(line)[3]
-                    text_x_adjust.append(local_font.getbbox(line)[2])
-                
-                text_height += line_height
-
-            # Use local_vspacing
-            text_height += (len(text.split('\n')) - 1) * local_vspacing
-
-            text_x = box.x1 + (box.x2 - box.x1) / 2
-            text_y = box.y2
-            if above:
-                text_x = box.x1 + box.de + (box.x2 - box.x1) / 2
-                text_y = box.y1 - box.de - text_height
-            
-            # Use max width of the specific font
-            text_x -= max(text_x_adjust or [0]) / 2 
-            
-            anchor = 'la'
-            if above:
-                anchor = 'la'
-        
+            text, above = external_labels[i]
+            text_x, text_y, _, _, _ = _external_label_geometry(
+                box, text, above, local_font, local_vspacing,
+            )
             draw_text.multiline_text(
                 (text_x, text_y), 
                 text, 
                 font=local_font,
                 fill=local_font_color,
-                anchor=anchor, 
+                anchor='la',
                 align='center',
                 spacing=local_vspacing
             )
@@ -1481,7 +1497,7 @@ def layered_view(model,
 
             img_box = Image.new('RGBA', label_patch_size, background_fill)
             img_text = Image.new('RGBA', label_patch_size, (0, 0, 0, 0))
-            draw_box = aggdraw.Draw(img_box)
+            draw_box = _aggdraw_context(img_box)
             draw_text = ImageDraw.Draw(img_text)
 
             box = Box()
@@ -1500,7 +1516,7 @@ def layered_view(model,
             draw_text.text((text_x, text_y), label, font=font, fill=font_color)
 
             draw_box.flush()
-            img_box.paste(img_text, mask=img_text)
+            img_box.alpha_composite(img_text)
             patches.append(img_box)
 
         legend_image = linear_layout(patches, max_width=img.width, max_height=img.height, padding=padding,
@@ -1509,7 +1525,10 @@ def layered_view(model,
         img = vertical_image_concat(img, legend_image, background_fill=background_fill)
 
     if layered_groups:
-        _draw_layered_group_captions(img, boxes, layered_groups, draw_reversed)
+        _draw_layered_group_captions(
+            img, boxes, layered_groups, draw_reversed,
+            caption_positions={key: y + center_y_pos for key, y in group_caption_positions.items()},
+        )
 
     if logos_legend:
         if font is None:

@@ -11,17 +11,21 @@ output structures. The pipeline is:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 from collections import deque
+from math import ceil
 import warnings
 import re
 
+from os import PathLike as _PathLike, fspath as _fspath
 import aggdraw
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .layer_utils import (
+    _shape_from_tensor_output,
+    _iter_output_tensors,
     calculate_layer_dimensions,
     extract_primary_shape,
     find_output_layers,
@@ -29,6 +33,7 @@ from .layer_utils import (
     get_layers,
 )
 from .options import FunctionalOptions, FUNCTIONAL_PRESETS, LAYERED_TEXT_CALLABLES
+from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 from .utils import (
     Box, 
     ColorWheel, 
@@ -37,7 +42,12 @@ from .utils import (
     resize_image_to_fit, 
     apply_affine_transform,
     draw_node_logo,
-    draw_logos_legend
+    draw_logos_legend,
+    resolve_style,
+    _multiline_bbox,
+    _load_node_image,
+    _clear_caption_y,
+    _aggdraw_context,
 )
 
 
@@ -201,6 +211,7 @@ def _validate_and_normalize_collapse_rules(
     return normalized_rules
 
 
+@_track_explicit_arguments
 def functional_view(
     model,
     to_file: Optional[str] = None,
@@ -588,7 +599,7 @@ def functional_view(
                 "Consider using visualkeras.show(..., mode='functional', preset=...) "
                 "and the FunctionalOptions dataclass for a simpler workflow.",
                 UserWarning,
-                stacklevel=2,
+                stacklevel=3,
             )
 
     if preset is not None or options is not None:
@@ -624,6 +635,7 @@ def functional_view(
                 raise TypeError(
                     "options must be a FunctionalOptions instance or a mapping of keyword arguments."
                 )
+            _validate_option_keys(option_values, defaults, "functional")
             resolved.update(option_values)
 
         explicit_values = {
@@ -675,7 +687,7 @@ def functional_view(
         for key, value in explicit_values.items():
             if key not in defaults:
                 continue
-            if value != defaults[key]:
+            if _is_explicit(key):
                 resolved[key] = value
 
         to_file = resolved["to_file"]
@@ -750,7 +762,7 @@ def functional_view(
     if color_map is None:
         color_map = {}
 
-    if styles is not None and not isinstance(styles, dict):
+    if styles is not None:
         styles = dict(styles)
 
     if styles is None:
@@ -846,7 +858,7 @@ def functional_view(
                 warnings.warn(
                     f"collapse_rules[{rule_index}] did not match any collapsible linear chain.",
                     UserWarning,
-                    stacklevel=2,
+                    stacklevel=3,
                 )
 
     ranks = _assign_ranks(graph.nodes, graph.edges)
@@ -857,12 +869,25 @@ def functional_view(
 
     text_top_padding: Dict[int, int] = {}
     text_bottom_padding: Dict[int, int] = {}
-    if simple_text_visualization and simple_text_label_mode == "below" and text_callable is not None:
+    reserve_labels = simple_text_visualization and simple_text_label_mode == "below"
+    has_block_annotations = any(
+        node.kind == "collapsed" and node.style.get("collapse_kind") == "block"
+        and node.style.get("collapse_annotation_enabled", True)
+        for node in graph.nodes.values()
+    )
+    if text_callable is not None and has_block_annotations:
+        # Measure and paint the same captions without invoking user callbacks twice.
+        captions = [text_callable(i, node.layer) for i, node in enumerate(
+            sorted((n for n in graph.nodes.values() if n.kind != "virtual"), key=lambda n: n.order)
+        )]
+        text_callable = lambda i, layer: captions[i]
+    if text_callable is not None and (reserve_labels or has_block_annotations):
         text_top_padding, text_bottom_padding = _compute_external_text_padding(
             graph,
             text_callable=text_callable,
             text_vspacing=text_vspacing,
             font=font,
+            reserve_all=reserve_labels,
         )
 
     components = _split_components(graph.nodes, graph.edges)
@@ -988,15 +1013,6 @@ def _build_graph(
         A ``FunctionalGraph`` containing nodes, edges, and inferred input/output ids.
     """
     
-    def resolve_style(layer, name) -> Dict[str, Any]:
-        final_style = global_defaults.copy()
-        for cls in type(layer).__mro__:
-            if cls in styles:
-                final_style.update(styles[cls])
-        if name in styles:
-            final_style.update(styles[name])
-        return final_style
-    
     layers = list(get_layers(model))
     order_map = {id(layer): index for index, layer in enumerate(layers)}
     nodes: Dict[int, FunctionalNode] = {}
@@ -1004,7 +1020,7 @@ def _build_graph(
     for layer in layers:
         node_id = id(layer)
         name = getattr(layer, "name", None) or f"layer_{order_map[node_id]}"
-        node_style = resolve_style(layer, name)
+        node_style = resolve_style(layer, name, styles, global_defaults)
 
         if simple_text_visualization:
             node_style = dict(node_style)
@@ -1054,7 +1070,7 @@ def _build_graph(
 
         if image_path:
             try:
-                node_image = Image.open(image_path).convert("RGBA")
+                node_image = _load_node_image(image_path)
                 fit_mode = node_style.get("image_fit", image_fit)
                 axis = ("z" if simple_text_visualization else node_style.get("image_axis", image_axis))
                 if fit_mode == "match_aspect":
@@ -1119,20 +1135,24 @@ def _build_graph(
             image=node_image
         )
 
-    edges = _collect_edges(nodes)
+    edges = _collect_edges(nodes, model=model)
 
     if add_output_nodes:
         nodes, edges = _attach_output_nodes(model, nodes, edges, virtual_node_size)
+        for node in nodes.values():
+            if node.kind == "output":
+                node.style = resolve_style(node.layer, node.name, styles, global_defaults)
 
     inputs, outputs = _find_inputs_outputs(nodes, edges)
     return FunctionalGraph(nodes=nodes, edges=edges, inputs=inputs, outputs=outputs)
 
 
-def _collect_edges(nodes: Dict[int, FunctionalNode]) -> List[FunctionalEdge]:
+def _collect_edges(nodes: Dict[int, FunctionalNode], model=None) -> List[FunctionalEdge]:
     edges: List[FunctionalEdge] = []
     seen = set()
     for node in nodes.values():
-        for inbound in get_incoming_layers(node.layer):
+        incoming = get_incoming_layers(node.layer, model=model)
+        for inbound in incoming:
             inbound_id = id(inbound)
             if inbound_id not in nodes:
                 continue
@@ -1154,12 +1174,16 @@ def _attach_output_nodes(
     new_nodes = dict(nodes)
     new_edges = list(edges)
     outputs = list(find_output_layers(model))
+    output_tensors = list(_iter_output_tensors(getattr(model, "outputs", ())))
 
     output_size = max(virtual_node_size * 2, 16)
 
     for index, layer in enumerate(outputs):
         name = f"output_{index}"
-        synthetic = _SyntheticLayer(name=name, output_shape=getattr(layer, "output_shape", None))
+        shape = getattr(output_tensors[index], "shape", None) if index < len(output_tensors) else None
+        if shape is None:
+            shape = _resolve_layer_output_shape(layer)
+        synthetic = _SyntheticLayer(name=name, output_shape=_shape_to_tuple(shape))
         node_id = id(synthetic)
         new_nodes[node_id] = FunctionalNode(
             layer=synthetic,
@@ -1324,15 +1348,18 @@ def _collapse_node_sequence(
     collapse_label = str(rule.get("label", f"{rule['repeat_count']}x"))
     collapse_kind = str(rule["kind"])
     synthetic_name = f"collapsed_{first_node.name}_{collapse_label}"
+    output_shape = last_node.shape
+    if output_shape is None:
+        output_shape = _resolve_layer_output_shape(last_node.layer)
     synthetic_layer = _SyntheticLayer(
         name=synthetic_name,
-        output_shape=getattr(last_node.layer, "output_shape", None),
+        output_shape=output_shape,
     )
     collapsed_node_id = id(synthetic_layer)
     while collapsed_node_id in old_nodes:
         synthetic_layer = _SyntheticLayer(
             name=f"{synthetic_name}_{collapsed_node_id}",
-            output_shape=getattr(last_node.layer, "output_shape", None),
+            output_shape=output_shape,
         )
         collapsed_node_id = id(synthetic_layer)
 
@@ -1659,6 +1686,7 @@ def _compute_external_text_padding(
     text_callable: Callable[[int, Any], Tuple[str, bool]],
     text_vspacing: int,
     font: Optional[ImageFont.ImageFont],
+    reserve_all: bool = True,
 ) -> Tuple[Dict[int, int], Dict[int, int]]:
     """Estimate vertical label extents for external text labels.
 
@@ -1668,7 +1696,9 @@ def _compute_external_text_padding(
     """
     text_top_padding: Dict[int, int] = {}
     text_bottom_padding: Dict[int, int] = {}
+    adjusted = False
     active_font = font or ImageFont.load_default()
+    measure_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
 
     visible_nodes = [
         node
@@ -1689,12 +1719,21 @@ def _compute_external_text_padding(
                 text_height += active_font.getbbox(line)[3]
         text_height += (len(text_value.split("\n")) - 1) * text_vspacing
 
-        extent = max(0, int(text_height) + 4)
+        bounds = _multiline_bbox(measure_draw, text_value, active_font, text_vspacing)
+        # Preserve existing row spacing while reserving any missing glyph extent.
+        extent = max(0, int(text_height) + 4, ceil(bounds[3]) + 4)
+        text_y, moved = _external_label_y(node, above, bounds, measure_draw, active_font)
+        adjusted |= moved
+        if moved:
+            extent = max(extent, ceil(node.y - text_y - bounds[1]) + 4 if above
+                         else ceil(text_y + bounds[3] - node.y - node.height) + 4)
         if above:
             text_top_padding[node.node_id] = extent
         else:
             text_bottom_padding[node.node_id] = extent
 
+    if not reserve_all and not adjusted:
+        return {}, {}
     return text_top_padding, text_bottom_padding
 
 
@@ -1756,15 +1795,9 @@ def _resolve_external_label_x_collisions(
             for i in range(1, len(xs)):
                 xs[i] = max(xs[i], xs[i - 1] + widths[i - 1] + min_gap)
 
-            overflow = (xs[-1] + widths[-1]) - right_bound
-            if overflow > 0:
-                xs = [x - overflow for x in xs]
-
-            if xs[0] < left_bound:
-                x_cursor = left_bound
-                for i in range(len(xs)):
-                    xs[i] = x_cursor
-                    x_cursor += widths[i] + min_gap
+            xs[-1] = min(xs[-1], right_bound - widths[-1])
+            for i in range(len(xs) - 2, -1, -1):
+                xs[i] = min(xs[i], xs[i + 1] - widths[i] - min_gap)
 
         for i, idx in enumerate(ordered):
             labels[idx]["x"] = int(round(xs[i]))
@@ -1867,23 +1900,20 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
             return ImageFont.truetype("arial.ttf", font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, str):
+    elif isinstance(font_src, (str, _PathLike)):
          try:
-            return ImageFont.truetype(font_src, font_size)
+            return ImageFont.truetype(_fspath(font_src), font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, ImageFont.ImageFont):
+    elif isinstance(font_src, (ImageFont.ImageFont, ImageFont.FreeTypeFont)):
         return font_src
     else:
         return ImageFont.load_default()
 
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
-    if hasattr(font, "getbbox"):
-        left, top, right, bottom = font.getbbox(text)
-        return right - left, bottom - top
-    else:
-        return draw.textsize(text, font=font)
+    left, top, right, bottom = _multiline_bbox(draw, text, font, 4)
+    return right - left, bottom - top
 
 
 
@@ -1931,7 +1961,8 @@ def _resolve_box_font(style: Mapping[str, Any], fallback: Optional[Any]) -> Tupl
     src = style.get("box_text_font")
     if _is_font_like(src):
         return src, None, size
-    if isinstance(src, str):
+    if isinstance(src, (str, _PathLike)):
+        src = _fspath(src)
         f = _try_load_font(src, size)
         if f is not None:
             return f, src, size
@@ -1944,33 +1975,16 @@ def _resolve_box_font(style: Mapping[str, Any], fallback: Optional[Any]) -> Tupl
     return ImageFont.load_default(), None, size
 
 
-def _multiline_bbox(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, spacing: int) -> Tuple[int, int, int, int]:
-    # Prefer PIL's bbox helper (handles glyph bearings correctly)
-    if hasattr(draw, "multiline_textbbox"):
-        return draw.multiline_textbbox((0, 0), text, font=font, spacing=spacing, align="left")
-    # Fallback: union per-line bbox
-    lefts, tops, rights, bottoms = [], [], [], []
-    y = 0
-    for line in text.split("\n"):
-        if hasattr(draw, "textbbox"):
-            l, t, r, b = draw.textbbox((0, y), line, font=font)
-        else:
-            w, h = draw.textsize(line, font=font)
-            l, t, r, b = 0, y, w, y + h
-        lefts.append(l); tops.append(t); rights.append(r); bottoms.append(b)
-        y += (b - t) + spacing
-    if not lefts:
-        return (0, 0, 0, 0)
-    return (min(lefts), min(tops), max(rights), max(bottoms))
-
-
 def _render_text_image_bbox(text: str, font: ImageFont.ImageFont, color: Any, spacing: int, margin: int = 2) -> Image.Image:
     # IMPORTANT: account for negative bearings by offsetting by -left/-top
     dummy = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     d = ImageDraw.Draw(dummy)
-    l, t, r, b = _multiline_bbox(d, text, font, spacing)
-    w = max(1, int(r - l))
-    h = max(1, int(b - t))
+    if hasattr(d, "multiline_textbbox"):
+        l, t, r, b = d.multiline_textbbox((0, 0), text, font=font, spacing=spacing, align="center")
+    else:
+        l, t, r, b = _multiline_bbox(d, text, font, spacing)
+    w = max(1, ceil(r - l))
+    h = max(1, ceil(b - t))
     img = Image.new("RGBA", (w + 2 * margin, h + 2 * margin), (0, 0, 0, 0))
     d2 = ImageDraw.Draw(img)
     d2.multiline_text((margin - l, margin - t), text, font=font, fill=color, spacing=spacing, align="center")
@@ -1979,25 +1993,29 @@ def _render_text_image_bbox(text: str, font: ImageFont.ImageFont, color: Any, sp
 
 def _wrap_text_to_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int, mode: str, max_lines: Optional[int]) -> str:
     mode = (mode or "words").lower()
+    if max_lines is not None and max_lines <= 0:
+        return ""
     if mode == "none" or max_width <= 0:
-        return text
+        return text if max_lines is None else "\n".join(text.split("\n")[:max_lines])
     if mode not in {"words", "chars"}:
         mode = "words"
-    tokens = text.split() if mode == "words" else list(text)
     lines = []
-    cur = ""
-    for tok in tokens:
-        cand = tok if not cur else (cur + (" " if mode == "words" else "") + tok)
-        l, t, r, b = _multiline_bbox(draw, cand, font, 0)
-        if (r - l) <= max_width or not cur:
-            cur = cand
-        else:
-            lines.append(cur)
-            cur = tok
-            if max_lines is not None and len(lines) >= max_lines:
-                break
-    if cur and (max_lines is None or len(lines) < max_lines):
+    for paragraph in text.split("\n"):
+        tokens = paragraph.split() if mode == "words" else list(paragraph)
+        cur = ""
+        for tok in tokens:
+            cand = tok if not cur else (cur + (" " if mode == "words" else "") + tok)
+            l, t, r, b = _multiline_bbox(draw, cand, font, 0)
+            if (r - l) <= max_width or not cur:
+                cur = cand
+            else:
+                lines.append(cur)
+                cur = tok
+                if max_lines is not None and len(lines) >= max_lines:
+                    return "\n".join(lines[:max_lines])
         lines.append(cur)
+        if max_lines is not None and len(lines) >= max_lines:
+            break
     if max_lines is not None:
         lines = lines[:max_lines]
     return "\n".join(lines)
@@ -2057,7 +2075,8 @@ def _draw_box_text_in_rect(
     # For 90/270, swap fit constraints pre-rotation
     pre_w, pre_h = (avail_h, avail_w) if rot in (90, 270) else (avail_w, avail_h)
 
-    spacing = int(style.get("box_text_line_spacing", fallback_spacing) or fallback_spacing)
+    spacing = style.get("box_text_line_spacing", fallback_spacing)
+    spacing = int(fallback_spacing if spacing is None else spacing)
     color = style.get("box_text_color", fallback_color)
 
     wrap_mode = str(style.get("box_text_wrap", "words") or "words").lower()
@@ -2083,17 +2102,24 @@ def _draw_box_text_in_rect(
         return wrapped, tw, th, (tw <= pre_w and th <= pre_h)
 
     wrapped, tw, th, ok = measure_fit(font)
-    if autoshrink and not ok and font_path:
-        cur = size0
+    font_variant = getattr(font, "font_variant", None)
+    if autoshrink and not ok and (font_path or callable(font_variant)):
+        cur = size0 if font_path else getattr(font, "size", size0)
         while cur > min_size:
             cur -= 1
-            f2 = _try_load_font(font_path, cur)
+            if font_path:
+                f2 = _try_load_font(font_path, cur)
+            else:
+                try:
+                    f2 = font_variant(size=cur)
+                except Exception:
+                    break
             if f2 is None:
                 break
             wrapped2, tw2, th2, ok2 = measure_fit(f2)
+            font = f2
+            wrapped, tw, th, ok = wrapped2, tw2, th2, ok2
             if ok2:
-                font = f2
-                wrapped, tw, th, ok = wrapped2, tw2, th2, ok2
                 break
 
     txt_img = _render_text_image_bbox(wrapped, font, color, spacing, margin=2)
@@ -2129,8 +2155,8 @@ def _resolve_annotation_font(
 ) -> Any:
     if _is_font_like(style_font):
         return style_font
-    if isinstance(style_font, str):
-        resolved = _try_load_font(style_font, size)
+    if isinstance(style_font, (str, _PathLike)):
+        resolved = _try_load_font(_fspath(style_font), size)
         if resolved is not None:
             return resolved
     if _is_font_like(fallback_font):
@@ -2203,6 +2229,78 @@ def _draw_collapse_badge(
     draw.text((badge_x1 + pad_x, badge_y1 + pad_y), label, font=font, fill=text_color)
 
 
+def _collapse_annotation_geometry(
+    draw, *, rect, label, position, line_width, head_size, offset, font, image_size=None,
+):
+    """Share arrow, count and occupied bounds between layout and painting."""
+    x1, y1, x2, y2 = rect
+    if x2 <= x1:
+        return
+
+    left = int(x1 + 8)
+    right = int(x2 - 8)
+    if right - left < 12:
+        left = x1 + 2
+        right = x2 - 2
+    if right - left < 8:
+        return
+
+    if position == "below":
+        line_y = y2 + offset
+    else:
+        line_y = y1 - offset
+    line_y = int(line_y)
+    if image_size is not None:
+        line_y = max(2, min(image_size[1] - 3, line_y))
+
+    head = max(3, head_size)
+    radius = max(head // 2, ceil(max(1, line_width) / 2))
+    top, bottom = line_y - radius, line_y + radius + 1
+    text_rect = None
+    if label:
+        text_w, text_h = _measure_text(draw, label, font)
+        text_x = int((left + right - text_w) / 2)
+        text_y = line_y + 4 if position == "below" else line_y - text_h - 4
+        if image_size is not None:
+            text_y = max(0, min(image_size[1] - max(1, text_h), text_y))
+        _, glyph_top, _, glyph_bottom = _multiline_bbox(draw, label, font, 4)
+        top = min(top, text_y - 1, text_y + glyph_top)
+        bottom = max(bottom, text_y + text_h + 2, text_y + glyph_bottom)
+        text_rect = (text_x, text_y, text_w, text_h)
+    return (left, line_y, right, line_y), text_rect, (top, bottom)
+
+
+def _external_label_y(node, above, bounds, draw, font):
+    """Move a caption outward only when it intersects its block annotation."""
+    y = node.y + node.de - max(0, ceil(bounds[3])) - 4 if above else node.y + node.height + 4
+    style = node.style or {}
+    position = str(style.get("collapse_annotation_position", "above") or "above").lower()
+    if position not in {"above", "below"}:
+        position = "above"
+    if (node.kind != "collapsed" or not style.get("collapsed", False)
+            or style.get("collapse_kind") != "block"
+            or not style.get("collapse_annotation_enabled", True)
+            or above != (position == "above")):
+        return y, False
+    annotation_font = _resolve_annotation_font(
+        style.get("collapse_annotation_font"), font,
+        int(style.get("collapse_annotation_font_size", 12) or 12),
+    )
+    geometry = _collapse_annotation_geometry(
+        draw, rect=(int(node.x), int(node.y), int(node.x + node.width), int(node.y + node.height)),
+        label=str(style.get("collapse_label", "")), position=position,
+        line_width=int(style.get("collapse_annotation_width", 2) or 2),
+        head_size=int(style.get("collapse_annotation_head_size", 6) or 6),
+        offset=int(style.get("collapse_annotation_offset", 10) or 10), font=annotation_font,
+    )
+    if geometry is None:
+        return y, False
+    top, bottom = geometry[2]
+    if y + bounds[3] + 4 <= top or y + bounds[1] >= bottom + 4:
+        return y, False
+    return (top - 4 - bounds[3] if above else bottom + 4 - bounds[1]), True
+
+
 def _draw_collapse_block_annotation(
     draw: ImageDraw.ImageDraw,
     *,
@@ -2230,24 +2328,13 @@ def _draw_collapse_block_annotation(
         font: Font used for annotation text.
         image_size: Destination image size used for clipping guards.
     """
-    x1, y1, x2, y2 = rect
-    if x2 <= x1:
+    geometry = _collapse_annotation_geometry(
+        draw, rect=rect, label=label, position=position, line_width=line_width,
+        head_size=head_size, offset=offset, font=font, image_size=image_size,
+    )
+    if geometry is None:
         return
-
-    left = int(x1 + 8)
-    right = int(x2 - 8)
-    if right - left < 12:
-        left = x1 + 2
-        right = x2 - 2
-    if right - left < 8:
-        return
-
-    if position == "below":
-        line_y = y2 + offset
-    else:
-        line_y = y1 - offset
-    line_y = max(2, min(image_size[1] - 3, int(line_y)))
-
+    (left, line_y, right, _), text_rect, _ = geometry
     draw.line((left, line_y, right, line_y), fill=color, width=max(1, line_width))
     head = max(3, head_size)
     draw.polygon(
@@ -2259,15 +2346,9 @@ def _draw_collapse_block_annotation(
         fill=color,
     )
 
-    if not label:
+    if text_rect is None:
         return
-    text_w, text_h = _measure_text(draw, label, font)
-    text_x = int((left + right - text_w) / 2)
-    if position == "below":
-        text_y = line_y + 4
-    else:
-        text_y = line_y - text_h - 4
-    text_y = max(0, min(image_size[1] - max(1, text_h), text_y))
+    text_x, text_y, text_w, text_h = text_rect
     bg = (255, 255, 255, 220)
     draw.rectangle(
         (text_x - 2, text_y - 1, text_x + text_w + 2, text_y + text_h + 1),
@@ -2300,7 +2381,8 @@ def _draw_collapsed_annotations(
     if not collapsed_nodes:
         return
 
-    draw = ImageDraw.Draw(img)
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
     for node, rect in collapsed_nodes:
         style = node.style or {}
         if not bool(style.get("collapsed", False)):
@@ -2350,6 +2432,8 @@ def _draw_collapsed_annotations(
                 font=annotation_font,
                 image_size=img.size,
             )
+
+    img.alpha_composite(overlay)
 
 
 def _render_graph(
@@ -2410,6 +2494,8 @@ def _render_graph(
     """
     max_right = padding
     max_bottom = padding
+    min_left = 0
+    min_top = 0
     for node in graph.nodes.values():
         max_right = max(max_right, node.x + node.width + padding)
         max_bottom = max(max_bottom, node.y + node.height + padding)
@@ -2429,6 +2515,7 @@ def _render_graph(
                 continue
             max_bottom = max(max_bottom, node.y + node.height + int(extra) + padding)
 
+    group_captions = []
     if layered_groups:
         dummy_img = Image.new("RGBA", (1, 1))
         dummy_draw = ImageDraw.Draw(dummy_img)
@@ -2448,20 +2535,104 @@ def _render_graph(
             g_min_y -= g_padding
             g_max_y += g_padding
             
-            max_right = max(max_right, g_max_x + padding)
-            max_bottom = max(max_bottom, g_max_y + padding)
+            stroke = float(group.get("width", 1)) / 2
+            min_left = min(min_left, g_min_x - stroke)
+            min_top = min(min_top, g_min_y - stroke)
+            max_right = max(max_right, g_max_x + padding + stroke)
+            max_bottom = max(max_bottom, g_max_y + padding + stroke)
             caption = group.get("name", group.get("caption"))
             if caption:
-                font = _get_font(group)
-                text_w, text_h = _measure_text(dummy_draw, caption, font)
+                group_font = _get_font(group)
+                text_w, text_h = _measure_text(dummy_draw, caption, group_font)
                 
                 center_x = (g_min_x + g_max_x) / 2
                 text_x = center_x - text_w / 2
                 gap = group.get("text_spacing", 5)
                 text_y = g_max_y + gap
                 
+                min_left = min(min_left, text_x)
+                min_top = min(min_top, text_y)
                 max_right = max(max_right, text_x + text_w + padding)
                 max_bottom = max(max_bottom, text_y + text_h + padding)
+                group_captions.append((group, text_x, text_y, text_w, text_h))
+
+    external_labels: List[Dict[str, Any]] = []
+    if text_callable is not None:
+        external_font = font or ImageFont.load_default()
+        measure_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        visible_nodes = [
+            node
+            for node in sorted(graph.nodes.values(), key=lambda n: n.order)
+            if node.kind != "virtual"
+        ]
+        for index, node in enumerate(visible_nodes):
+            text, above = text_callable(index, node.layer)
+            text_value = "" if text is None else str(text)
+            if not text_value:
+                continue
+            text_left, text_top, text_right, text_bottom = _multiline_bbox(
+                measure_draw, text_value, external_font, text_vspacing,
+            )
+            text_height = max(0, ceil(text_bottom))
+            text_width = max(0, ceil(text_right))
+
+            de = getattr(node, 'de', 0)
+            real_width = node.width - de
+            face_x = node.x
+
+            text_x = face_x + real_width / 2 - text_width / 2
+
+            text_y, _ = _external_label_y(
+                node, above, (text_left, text_top, text_right, text_bottom), measure_draw, external_font,
+            )
+
+            external_labels.append(
+                {
+                    "x": float(text_x),
+                    "x_pref": float(text_x),
+                    "y": float(text_y),
+                    "w": int(text_width),
+                    "h": int(text_height),
+                    "text": text_value,
+                    "bbox": (text_left, text_top, text_right, text_bottom),
+                }
+            )
+
+            min_left = min(min_left, text_x + text_left)
+            max_right = max(max_right, text_x + text_right)
+            min_top = min(min_top, int(text_y) + text_top)
+            max_bottom = max(max_bottom, int(text_y) + text_bottom)
+
+    shift_x = ceil(-min_left)
+    shift_y = ceil(-min_top)
+    if shift_x or shift_y:
+        graph = FunctionalGraph(
+            nodes={node_id: replace(node, x=node.x + shift_x, y=node.y + shift_y)
+                   for node_id, node in graph.nodes.items()},
+            edges=graph.edges, inputs=graph.inputs, outputs=graph.outputs,
+        )
+        max_right += shift_x
+        max_bottom += shift_y
+
+    for label in external_labels:
+        label["x"] += shift_x
+        label["x_pref"] += shift_x
+        label["y"] = int(label["y"] + shift_y)
+
+    _resolve_external_label_x_collisions(
+        external_labels, image_width=ceil(max_right), edge_padding=padding, min_gap=8,
+    )
+    occupied_text = [(label["x"] + label["bbox"][0], label["y"] + label["bbox"][1],
+                      label["x"] + label["bbox"][2], label["y"] + label["bbox"][3])
+                     for label in external_labels]
+    group_caption_positions = {}
+    for group, x, y, width, height in group_captions:
+        x += shift_x
+        y += shift_y
+        top = _clear_caption_y((x, y, x + width, y + height), occupied_text)
+        group_caption_positions[id(group)] = top
+        occupied_text.append((x, top, x + width, top + height))
+        max_bottom = max(max_bottom, top + height + padding)
 
     node_logos = {} # node_id -> list of (group, image)
     if logo_groups:
@@ -2469,7 +2640,7 @@ def _render_graph(
             path = group.get("file")
             if not path: continue
             try:
-                logo_img = Image.open(path)
+                logo_img = _load_node_image(path)
             except:
                 continue
                 
@@ -2479,8 +2650,8 @@ def _render_graph(
                     node_logos[node.node_id] = []
                 node_logos[node.node_id].append((group, logo_img))
 
-    img = Image.new("RGBA", (int(max_right), int(max_bottom)), background_fill)
-    draw = aggdraw.Draw(img)
+    img = Image.new("RGBA", (ceil(max_right), ceil(max_bottom)), background_fill)
+    draw = _aggdraw_context(img)
     color_wheel = ColorWheel()
 
     if layered_groups:
@@ -2540,7 +2711,7 @@ def _render_graph(
                     apply_affine_transform(img, node.image, quad, fit_mode)
                 except Exception:
                     pass
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             if node.node_id in node_logos:
                 draw.flush()
@@ -2554,7 +2725,7 @@ def _render_graph(
                 box_tmp.y2 = y2
                 for group, logo_img in node_logos[node.node_id]:
                     draw_node_logo(img, box_tmp, logo_img, group, draw_volume=False)
-                draw = aggdraw.Draw(img)
+                draw = _aggdraw_context(img)
 
             if node.kind != "virtual" and bool(node.style.get("box_text_enabled", True)):
                 pending_simple_text.append((node, (x1, y1, x2, y2)))
@@ -2608,13 +2779,13 @@ def _render_graph(
             if quad:
                 apply_affine_transform(img, node.image, quad, fit_mode)
 
-            draw = aggdraw.Draw(img)
+            draw = _aggdraw_context(img)
 
         if node.node_id in node_logos:
             draw.flush()
             for group, logo_img in node_logos[node.node_id]:
                 draw_node_logo(img, box, logo_img, group, draw_volume)
-            draw = aggdraw.Draw(img)
+            draw = _aggdraw_context(img)
 
         if node.kind == "collapsed":
             pending_collapsed_annotations.append(
@@ -2637,64 +2808,8 @@ def _render_graph(
             )
 
     if text_callable is not None:
-        if font is None:
-            font = ImageFont.load_default()
+        font = external_font
         draw_text = ImageDraw.Draw(img)
-        external_labels: List[Dict[str, Any]] = []
-        visible_nodes = [
-            node
-            for node in sorted(graph.nodes.values(), key=lambda n: n.order)
-            if node.kind != "virtual"
-        ]
-        for index, node in enumerate(visible_nodes):
-            text, above = text_callable(index, node.layer)
-            text_value = "" if text is None else str(text)
-            if not text_value:
-                continue
-            text_height = 0
-            text_widths = []
-            for line in text_value.split("\n"):
-                if hasattr(font, "getsize"):
-                    text_widths.append(font.getsize(line)[0])
-                    text_height += font.getsize(line)[1]
-                else:
-                    bbox = font.getbbox(line)
-                    text_widths.append(bbox[2])
-                    text_height += bbox[3]
-            text_height += (len(text_value.split("\n")) - 1) * text_vspacing
-
-            de = getattr(node, 'de', 0)
-            real_width = node.width - de
-            real_height = node.height - de
-
-            face_x = node.x
-            face_y = node.y + de
-
-            text_x = face_x + real_width / 2 - max(text_widths or [0]) / 2
-
-            if above:
-                text_y = face_y - text_height - 4
-            else:
-                text_y = face_y + real_height + 4
-
-            text_width = max(text_widths or [0])
-            external_labels.append(
-                {
-                    "x": float(text_x),
-                    "x_pref": float(text_x),
-                    "y": int(text_y),
-                    "w": int(text_width),
-                    "h": int(text_height),
-                    "text": text_value,
-                }
-            )
-
-        _resolve_external_label_x_collisions(
-            external_labels,
-            image_width=img.size[0],
-            edge_padding=padding,
-            min_gap=8,
-        )
 
         for label in external_labels:
             draw_text.multiline_text(
@@ -2715,7 +2830,7 @@ def _render_graph(
         )
 
     if layered_groups:
-        _draw_group_captions(img, graph, layered_groups)
+        _draw_group_captions(img, graph, layered_groups, caption_positions=group_caption_positions)
 
     if logos_legend:
         if font is None:
@@ -2829,6 +2944,9 @@ def _get_group_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[Func
             if node.layer is layer_ref:
                 group_nodes.append(node)
                 break
+            if isinstance(layer_ref, type) and isinstance(node.layer, layer_ref):
+                group_nodes.append(node)
+                break
             node_layer_name = getattr(node.layer, 'name', '')
             if isinstance(layer_ref, str) and (node.name == layer_ref or node_layer_name == layer_ref):
                 group_nodes.append(node)
@@ -2881,6 +2999,7 @@ def _draw_group_captions(
     img: Image.Image,
     graph: FunctionalGraph,
     groups: Sequence[Dict[str, Any]],
+    caption_positions: Optional[Mapping[int, float]] = None,
 ) -> None:
     """Draw text captions for configured layer groups.
 
@@ -2919,9 +3038,13 @@ def _draw_group_captions(
 
         center_x = (box_min_x + box_max_x) / 2
         text_x = center_x - text_w / 2
-        text_y = box_max_y + gap
+        text_y = caption_positions.get(id(group), box_max_y + gap) if caption_positions else box_max_y + gap
         
-        draw.text((text_x, text_y), caption, fill=color, font=font)
+        left, top, _, _ = _multiline_bbox(draw, caption, font, 4)
+        text_x -= left
+        text_y -= top
+
+        draw.multiline_text((text_x, text_y), caption, fill=color, font=font)
 
 
 def _draw_connectors(
@@ -3166,14 +3289,11 @@ def _resolve_layer_output_shape(layer: Any) -> Optional[Any]:
         return _shape_to_tuple(shape)
 
     output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
+    tensor_shape = _shape_from_tensor_output(output)
     if tensor_shape is not None:
         return _shape_to_tuple(tensor_shape)
 
     input_shape = getattr(layer, "input_shape", None)
-    if input_shape is not None:
-        return _shape_to_tuple(input_shape)
-
     compute_output_shape = getattr(layer, "compute_output_shape", None)
     if callable(compute_output_shape):
         if input_shape is not None:
@@ -3182,11 +3302,11 @@ def _resolve_layer_output_shape(layer: Any) -> Optional[Any]:
             except Exception:  # noqa: BLE001
                 pass
 
-    return None
+    return _shape_to_tuple(input_shape)
 
 
 def _shape_to_tuple(shape: Any) -> Any:
-    if shape is None:
+    if shape is None or (hasattr(shape, "rank") and shape.rank is None):
         return None
     if isinstance(shape, tuple):
         return shape
@@ -3232,7 +3352,10 @@ def _get_logo_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[Funct
             if ref in name_to_nodes:
                 target_nodes.extend(name_to_nodes[ref])
         elif isinstance(ref, type):
-            if ref in type_to_nodes:
-                target_nodes.extend(type_to_nodes[ref])
+            for layer_type, matches in type_to_nodes.items():
+                if issubclass(layer_type, ref):
+                    target_nodes.extend(matches)
+        elif ref is not None:
+            target_nodes.extend(node for node in graph.nodes.values() if getattr(node, "layer", None) is ref)
                 
-    return target_nodes
+    return list({id(item): item for item in target_nodes}.values())

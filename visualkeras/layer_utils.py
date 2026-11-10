@@ -1,19 +1,26 @@
 import numpy as np
 from .utils import get_keys_by_value
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from numbers import Integral as _Integral
 import warnings
 
 try:
     from tensorflow.keras.layers import Layer
+    from tensorflow.keras.utils import register_keras_serializable as _register_keras_serializable
 except ModuleNotFoundError:
     try:
         from keras.layers import Layer
+        from keras.utils import register_keras_serializable as _register_keras_serializable
     except ModuleNotFoundError:
         class Layer:  # type: ignore[no-redef]
             def __init__(self, *args, **kwargs):
                 super().__init__()
 
+        def _register_keras_serializable(**kwargs):
+            return lambda cls: cls
 
+
+@_register_keras_serializable(package="visualkeras")
 class SpacingDummyLayer(Layer):
     """Placeholder layer used only to create visual gaps in a diagram.
 
@@ -31,9 +38,17 @@ class SpacingDummyLayer(Layer):
         is not used during model training or inference.
     """
 
-    def __init__(self, spacing: int = 50):
-        super().__init__()
+    def __init__(self, spacing: int = 50, **kwargs):
+        kwargs.setdefault("autocast", False)
+        super().__init__(**kwargs)
         self.spacing = spacing
+        self.supports_masking = True
+
+    def call(self, inputs):
+        return inputs
+
+    def get_config(self):
+        return {**super().get_config(), "spacing": self.spacing}
 
 
 def get_layers(model):
@@ -58,14 +73,14 @@ def get_layers(model):
     RuntimeError
         If the model does not expose a supported internal layer container.
     """
-    if hasattr(model, '_layers'):
-        return model._layers
-    if hasattr(model, '_self_tracked_trackables'):
-        return model._self_tracked_trackables
-    raise RuntimeError('Model does not expose _layers or _self_tracked_trackables')
+    for attribute in ('_layers', '_self_tracked_trackables', 'layers'):
+        layers = getattr(model, attribute, None)
+        if layers is not None:
+            return layers
+    raise RuntimeError('Model does not expose a supported layer container')
 
 
-def get_incoming_layers(layer):
+def get_incoming_layers(layer, model=None):
     """Yield the layers that feed directly into ``layer``.
 
     This helper abstracts over the legacy and modern Keras node APIs so the
@@ -81,7 +96,13 @@ def get_incoming_layers(layer):
     Any
         Layer objects that connect directly into ``layer``.
     """
-    for i, node in enumerate(layer._inbound_nodes):
+    graph_nodes = getattr(model, '_nodes_by_depth', None)
+    if graph_nodes is None:
+        graph_nodes = getattr(getattr(model, '_functional', None), '_nodes_by_depth', None)
+    node_ids = {id(node) for level in graph_nodes.values() for node in level} if graph_nodes is not None else None
+    for node in layer._inbound_nodes:
+        if node_ids is not None and id(node) not in node_ids:
+            continue
         if hasattr(node, 'inbound_layers'):
             # Old Node class (TF 2.15 & Keras 2.15 and under)
             if isinstance(node.inbound_layers, Iterable):
@@ -112,8 +133,11 @@ def get_outgoing_layers(layer):
     Any
         Layer objects that consume the output of ``layer``.
     """
-    for i, node in enumerate(layer._outbound_nodes):
-        yield node.outbound_layer
+    for node in layer._outbound_nodes:
+        if hasattr(node, 'outbound_layer'):
+            yield node.outbound_layer
+        else:
+            yield node.operation
 
 
 def model_to_adj_matrix(model):
@@ -143,18 +167,15 @@ def model_to_adj_matrix(model):
     layers = get_layers(model)
 
     adj_matrix = np.zeros((len(layers), len(layers)))
-    id_to_num_mapping = dict()
+    id_to_num_mapping = {id(layer): index for index, layer in enumerate(layers)}
 
     for layer in layers:
         layer_id = id(layer)
-        if layer_id not in id_to_num_mapping:
-            id_to_num_mapping[layer_id] = len(id_to_num_mapping.keys())
-
-        for inbound_layer in get_incoming_layers(layer):
+        for inbound_layer in get_incoming_layers(layer, model=model):
             inbound_layer_id = id(inbound_layer)
 
             if inbound_layer_id not in id_to_num_mapping:
-                id_to_num_mapping[inbound_layer_id] = len(id_to_num_mapping.keys())
+                continue
 
             src = id_to_num_mapping[inbound_layer_id]
             tgt = id_to_num_mapping[layer_id]
@@ -234,6 +255,17 @@ def find_input_layers(model, id_to_num_mapping=None, adj_matrix=None):
             yield find_layer_by_id(model, key)
 
 
+def _iter_output_tensors(outputs):
+    if isinstance(outputs, Mapping):
+        outputs = outputs.values()
+    elif not isinstance(outputs, (tuple, list)):
+        if outputs is not None:
+            yield outputs
+        return
+    for output in outputs:
+        yield from _iter_output_tensors(output)
+
+
 def find_output_layers(model):
     """Yield graph output layers for a model.
 
@@ -251,13 +283,13 @@ def find_output_layers(model):
     Any
         Layers that produce model outputs.
     """
-    if hasattr(model, 'output_names'):
-        # For older Keras versions (<3)
-        for name in model.output_names:
+    output_names = getattr(model, 'output_names', None)
+    if output_names:
+        for name in output_names:
             yield model.get_layer(name=name)
     else:
-        # For newer Keras versions (>=3)
-        for output in model.outputs:
+        # Fall back to the tensors when explicit names are unavailable.
+        for output in _iter_output_tensors(model.outputs):
             if hasattr(output, '_keras_history'):
                 # Get the layer that produced the output
                 layer = output._keras_history[0]
@@ -287,28 +319,26 @@ def model_to_hierarchy_lists(model, id_to_num_mapping=None, adj_matrix=None):
     """
     if adj_matrix is None:
         id_to_num_mapping, adj_matrix = model_to_adj_matrix(model)
-    hierarchy = [set(find_input_layers(model, id_to_num_mapping, adj_matrix))]
-    prev_layers = set(hierarchy[0])
-    finished = False
+    layers_by_index = {id_to_num_mapping[id(layer)]: layer for layer in get_layers(model)}
+    connected = adj_matrix > 0
+    indegrees = np.count_nonzero(connected, axis=0)
+    ready = list(np.flatnonzero(indegrees == 0))
+    hierarchy = []
+    visited = 0
 
-    while not finished:
-        layer = list()
-        finished = True
-        for start_layer in hierarchy[-1]:
-            start_layer_idx = id_to_num_mapping[id(start_layer)]
-            for end_layer_idx in np.where(adj_matrix[start_layer_idx] > 0)[0]:
-                finished = False
-                for end_layer_id in get_keys_by_value(id_to_num_mapping, end_layer_idx):
-                    end_layer = find_layer_by_id(model, end_layer_id)
-                    incoming_to_end_layer = set(get_incoming_layers(end_layer))
-                    intersection = set(incoming_to_end_layer).intersection(prev_layers)
-                    if len(intersection) == len(incoming_to_end_layer):
-                        if end_layer not in layer:
-                            layer.append(end_layer)
-                            prev_layers.add(end_layer)
-        if not finished:
-            hierarchy.append(layer)
+    while ready:
+        hierarchy.append([layers_by_index[index] for index in ready])
+        visited += len(ready)
+        next_level = []
+        for source in ready:
+            for target in np.flatnonzero(connected[source]):
+                indegrees[target] -= 1
+                if indegrees[target] == 0:
+                    next_level.append(target)
+        ready = sorted(next_level)
 
+    if visited != len(indegrees):
+        raise ValueError("Cycle detected in layer graph; cannot build a complete hierarchy")
     return hierarchy
 
 
@@ -416,6 +446,15 @@ def is_internal_input(layer):
 
     return False
 
+def _shape_from_tensor_output(output):
+    if isinstance(output, Mapping):
+        output = list(output.values())
+    if isinstance(output, (tuple, list)):
+        shapes = [_shape_from_tensor_output(tensor) for tensor in output]
+        return shapes if shapes and all(shape is not None for shape in shapes) else None
+    return getattr(output, "shape", None)
+
+
 def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
     """Return the primary output shape for visualization.
 
@@ -441,67 +480,48 @@ def extract_primary_shape(layer_output_shape, layer_name: str = None) -> tuple:
     RuntimeError
         If the shape uses an unsupported container format.
     """
-    # Handle None or empty cases
     layer_info = f" (layer: {layer_name})" if layer_name else ""
-    
-    # Handle None case - warn and use default
+    if isinstance(layer_output_shape, Mapping):
+        layer_output_shape = list(layer_output_shape.values())
+    if hasattr(layer_output_shape, "as_list"):
+        try:
+            layer_output_shape = tuple(layer_output_shape.as_list())
+        except (TypeError, ValueError):
+            warnings.warn(
+                f"Layer output shape has unknown rank{layer_info}. Using default shape (None, 1) for visualization.",
+                UserWarning, stacklevel=3,
+            )
+            return (None, 1)
     if layer_output_shape is None:
         warnings.warn(
             f"Layer output shape is None{layer_info}. This may indicate an unbuilt model "
             f"or invalid layer configuration. Using default shape (None, 1) for visualization.",
-            UserWarning,
-            stacklevel=3
+            UserWarning, stacklevel=3,
         )
         return (None, 1)
-    
-    # Handle tuple case
-    if isinstance(layer_output_shape, tuple):
-        # Check if this is a multi-output scenario (tuple of tuples)
-        if len(layer_output_shape) > 0 and isinstance(layer_output_shape[0], (tuple, list)):
-            # Multi-output case
-            warnings.warn(
-                f"Multi-output layer detected{layer_info}. "
-                f"Using primary output shape {layer_output_shape[0]} for visualization. "
-                f"Secondary outputs {layer_output_shape[1:]} will be ignored.",
-                UserWarning,
-                stacklevel=3
-            )
-            return layer_output_shape[0]
-        else:
-            # Single output tuple
-            return layer_output_shape
-    
-    # Handle list case
-    elif isinstance(layer_output_shape, list):
-        if len(layer_output_shape) == 1:
-            # Single output
-            return layer_output_shape[0]
-        elif len(layer_output_shape) > 1:
-            # Multi-output list
-            warnings.warn(
-                f"Multi-output layer detected{layer_info}. "
-                f"Using primary output shape {layer_output_shape[0]} for visualization. "
-                f"Secondary outputs {layer_output_shape[1:]} will be ignored.",
-                UserWarning,
-                stacklevel=3
-            )
-            return layer_output_shape[0]
-        else:
-            # Empty list
-            warnings.warn(
-                f"Layer output shape is an empty list{layer_info}. This indicates an invalid "
-                f"layer configuration. Using default shape (None, 1) for visualization.",
-                UserWarning,
-                stacklevel=3
-            )
-            return (None, 1)
-    
-    # Unsupported format
-    else:
-        raise RuntimeError(
-            f"Unsupported tensor shape format: {type(layer_output_shape).__name__} = {layer_output_shape}{layer_info}. "
-            f"Expected tuple or list, but got {type(layer_output_shape).__name__}."
+    if isinstance(layer_output_shape, list) and not layer_output_shape:
+        warnings.warn(
+            f"Layer output shape is an empty list{layer_info}. This indicates an invalid "
+            f"layer configuration. Using default shape (None, 1) for visualization.",
+            UserWarning, stacklevel=3,
         )
+        return (None, 1)
+    if isinstance(layer_output_shape, (tuple, list)):
+        if layer_output_shape and (isinstance(layer_output_shape[0], (tuple, list)) or hasattr(layer_output_shape[0], "as_list")):
+            if len(layer_output_shape) > 1:
+                warnings.warn(
+                    f"Multi-output layer detected{layer_info}. "
+                    f"Using primary output shape {layer_output_shape[0]} for visualization. "
+                    f"Secondary outputs {layer_output_shape[1:]} will be ignored.",
+                    UserWarning, stacklevel=3,
+                )
+            return extract_primary_shape(layer_output_shape[0], layer_name)
+        return tuple(layer_output_shape)
+    raise RuntimeError(
+        f"Unsupported tensor shape format: {type(layer_output_shape).__name__} = {layer_output_shape}{layer_info}. "
+        f"Expected tuple or list, but got {type(layer_output_shape).__name__}."
+    )
+
 
 def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, min_xy,
                                one_dim_orientation='y', sizing_mode='accurate',
@@ -555,8 +575,8 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
     import math
     from .utils import self_multiply
 
-    # Extract numeric dims (skip batch dim)
-    dims = [d for d in shape[1:] if isinstance(d, int) and d is not None]
+    # Keep symbolic axes in place with one-unit placeholders (skip batch dim).
+    dims = [1 if d is None else int(d) for d in shape[1:] if d is None or isinstance(d, _Integral)]
 
     # Default fallback
     if not dims:
@@ -626,6 +646,11 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
             y = max(min(dims[1] * scale_xy, sequence_cap), min_xy)
             z = max(min(dims[2] * scale_z if len(dims)>2 else min_z, channel_cap), min_z)
             return (x, y, z)
+        else:
+            x = max(min(dims[0] * scale_xy, sequence_cap), min_xy)
+            y = max(min(dims[1] * scale_xy, sequence_cap), min_xy)
+            z = max(min(self_multiply(dims[2:]) * scale_z, channel_cap), min_z)
+            return (x, y, z)
 
     # Balanced mode
     elif sizing_mode == 'balanced':
@@ -639,7 +664,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
         else:
             x = smart_scale(dims[0], scale_xy, min_xy, sequence_cap)
             y = smart_scale(dims[1], scale_xy, min_xy, sequence_cap)
-            z = smart_scale(dims[2] if len(dims)>2 else 1, scale_z, min_z, channel_cap)
+            z = smart_scale(self_multiply(dims[2:]) if len(dims)>2 else 1, scale_z, min_z, channel_cap)
             return (int(x), int(y), int(z))
     
     # Logarithmic mode
@@ -654,7 +679,7 @@ def calculate_layer_dimensions(shape, scale_z, scale_xy, max_z, max_xy, min_z, m
         else:
             x = log_scale(dims[0], scale_xy, min_xy, sequence_cap)
             y = log_scale(dims[1], scale_xy, min_xy, sequence_cap)
-            z = log_scale(dims[2] if len(dims)>2 else 1, scale_z, min_z, channel_cap)
+            z = log_scale(self_multiply(dims[2:]) if len(dims)>2 else 1, scale_z, min_z, channel_cap)
             return (int(x), int(y), int(z))
 
     # Relative mode - True proportional scaling where each layer's size is directly proportional to its dimension

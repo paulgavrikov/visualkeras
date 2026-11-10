@@ -174,6 +174,38 @@ def test_show_invalid_mode():
         show("model", mode="unknown")
 
 
+@pytest.mark.parametrize("mode", [None, 0, 1, False, True, [], {}, object()])
+def test_show_rejects_non_string_modes_before_dispatch(monkeypatch, mode):
+    def unexpected(*args, **kwargs):
+        pytest.fail("Invalid mode reached a renderer")
+
+    for name in ["layered_view", "graph_view", "functional_view", "lenet_view"]:
+        monkeypatch.setattr(show_module, name, unexpected)
+    with pytest.raises(TypeError, match="mode must be a string.*got"):
+        show(object(), mode=mode)
+
+
+@pytest.mark.parametrize(
+    "mode, renderer_name",
+    [
+        (" LAYERED ", "layered_view"),
+        (" layers ", "layered_view"),
+        (" GRAPH ", "graph_view"),
+        (" graph_view ", "graph_view"),
+        (" FUNCTIONAL ", "functional_view"),
+        (" func ", "functional_view"),
+        (" LENET ", "lenet_view"),
+        (" lenet_style ", "lenet_view"),
+    ],
+)
+def test_show_normalizes_string_modes(monkeypatch, mode, renderer_name):
+    calls = []
+    monkeypatch.setattr(show_module, renderer_name, lambda *args, **kwargs: calls.append(args))
+    model = object()
+    show(model, mode=mode)
+    assert calls == [(model,)]
+
+
 def test_show_invalid_layered_preset():
     with pytest.raises(ValueError):
         show("model", preset="does-not-exist", options=LayeredOptions())

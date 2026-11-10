@@ -14,6 +14,53 @@ from visualkeras.options import (
 import visualkeras.options as options_mod
 
 
+def test_explicit_argument_tracking_preserves_signature_and_nested_context():
+    from inspect import signature
+
+    @options_mod._track_explicit_arguments
+    def inner(value=None):
+        return options_mod._is_explicit("value")
+
+    @options_mod._track_explicit_arguments
+    def outer(value=None):
+        assert inner() is False
+        assert inner(None) is True
+        return options_mod._is_explicit("value")
+
+    assert str(signature(inner)) == "(value=None)"
+    assert outer() is False
+    assert outer(None) is True
+    assert options_mod._is_explicit("value") is False
+
+
+def test_explicit_argument_tracking_resets_after_errors():
+    @options_mod._track_explicit_arguments
+    def broken(value=None):
+        raise RuntimeError("intentional")
+
+    with pytest.raises(RuntimeError, match="intentional"):
+        broken(None)
+    assert options_mod._is_explicit("value") is False
+
+
+def test_explicit_argument_tracking_is_isolated_between_threads():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    barrier = Barrier(2)
+
+    @options_mod._track_explicit_arguments
+    def read(value=None):
+        barrier.wait(timeout=5)
+        return options_mod._is_explicit("value")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        omitted = pool.submit(read)
+        supplied = pool.submit(read, None)
+        assert omitted.result() is False
+        assert supplied.result() is True
+
+
 def test_layered_options_default_keys():
     opts = LayeredOptions()
     kwargs = opts.to_kwargs()
@@ -314,5 +361,65 @@ def test_additional_shape_formatting_edge_cases():
             return "as-list-raises"
 
     assert options_mod._format_shape(AsListRaises()) == "as-list-raises"
-    # Rank-1-like tuple should produce '?' (no displayable dims).
-    assert options_mod._format_shape((None,)) == "?"
+    assert options_mod._format_shape((None,)) == "scalar"
+
+
+@pytest.mark.parametrize(
+    "shape, expected",
+    [
+        ((None, None, 32), "? x 32"),
+        ((None, 8, None), "8 x ?"),
+        ((None, None, None), "? x ?"),
+        ((None, 0, 32), "0 x 32"),
+        ((), "scalar"),
+        (None, "?"),
+    ],
+)
+def test_shape_labels_preserve_dynamic_axes_and_identify_scalars(shape, expected):
+    assert options_mod._format_shape(shape) == expected
+
+
+@pytest.mark.parametrize("container", [list, tuple, dict])
+def test_shape_caption_discovers_structured_tensor_outputs(container):
+    from types import SimpleNamespace
+    from visualkeras.options import LAYERED_TEXT_CALLABLES
+
+    outputs = [SimpleNamespace(shape=(None, 6)), SimpleNamespace(shape=(None, 2))]
+    output = {"first": outputs[0], "second": outputs[1]} if container is dict else container(outputs)
+    layer = SimpleNamespace(output=output, name="split")
+    assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == ("6", False)
+    assert LAYERED_TEXT_CALLABLES["name_shape"](0, layer) == ("split\n6", False)
+
+
+@pytest.mark.parametrize("container", [list, tuple])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("unknown", [False, True])
+def test_shape_caption_selects_primary_tensor_shape(container, nested, unknown):
+    tf = pytest.importorskip("tensorflow")
+    from types import SimpleNamespace
+
+    shapes = [tf.TensorShape(None if unknown else (None, 6)), tf.TensorShape((None, 2))]
+    layer = SimpleNamespace(output_shape=container([shapes] if nested else shapes))
+    expected = "?" if unknown else "6"
+    assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == (expected, False)
+
+
+def test_shape_caption_can_iterate_when_as_list_is_unavailable():
+    from types import SimpleNamespace
+
+    class LegacyShape:
+        def as_list(self):
+            raise RuntimeError("as_list unavailable")
+
+        def __iter__(self):
+            return iter((None, 6))
+
+    layer = SimpleNamespace(output=SimpleNamespace(shape=LegacyShape()))
+    assert LAYERED_TEXT_CALLABLES["shape"](0, layer) == ("6", False)
+
+
+@pytest.mark.parametrize("shape, expected", [({}, "?"), ({"main": (None, 6), "aux": (None, 2)}, "6")])
+def test_dictionary_shape_captions_use_primary_metadata(shape, expected):
+    from types import SimpleNamespace
+
+    assert LAYERED_TEXT_CALLABLES["shape"](0, SimpleNamespace(output_shape=shape)) == (expected, False)

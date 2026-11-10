@@ -68,6 +68,21 @@ def _assert_metrics_close(actual: dict, expected: dict):
         assert max(diffs) <= 30, f"Pixel {key} differs too much: {actual_pixel} vs {expected_pixel}"
 
 
+def test_layered_dynamic_shape_caption_preserves_sequence_axis():
+    model = tf.keras.Sequential([
+        tf.keras.layers.Input(shape=(None, 8), name="sequence_input"),
+        tf.keras.layers.Dense(32, name="sequence_dense"),
+    ])
+    image = visualkeras.layered_view(
+        model,
+        text_callable="shape",
+        draw_volume=False,
+        legend_text_spacing_offset=0,
+    )
+    assert visualkeras.LAYERED_TEXT_CALLABLES["shape"](0, model.layers[0]) == ("? x 32", False)
+    assert image.width > 0 and image.height > 0
+
+
 SCENARIOS = [
     (
         "layered_reference",
@@ -189,3 +204,57 @@ def test_layered_renderer_variants(metric_key, renderer):
 
     actual = _downsample_metrics(image)
     _assert_metrics_close(actual, expected)
+
+
+def test_layered_structured_output_caption_matches_primary_shape():
+    inputs = tf.keras.Input((8,), name="split_input")
+    split = tf.keras.layers.Lambda(lambda x: (x[:, :6], x[:, 6:]), name="split")
+    model = tf.keras.Model(inputs, split(inputs))
+    assert visualkeras.LAYERED_TEXT_CALLABLES["name_shape"](1, split) == ("split\n6", False)
+    image = visualkeras.layered_view(model, text_callable="name_shape", draw_volume=False, spacing=40)
+    assert image.width > 0 and image.height > 0
+
+
+def test_layered_tensor_shape_caption_matches_primary_geometry():
+    class LegacySplit(tf.keras.layers.Layer):
+        def call(self, inputs):
+            return inputs[:, :6], inputs[:, 6:]
+
+        @property
+        def output_shape(self):
+            return [tf.TensorShape((None, 6)), tf.TensorShape((None, 2))]
+
+    inputs = tf.keras.Input((8,), name="in")
+    split = LegacySplit(name="split")
+    model = tf.keras.Model(inputs, split(inputs))
+    image = visualkeras.layered_view(
+        model, text_callable="name_shape", draw_volume=False, spacing=40,
+        legend_text_spacing_offset=0,
+    )
+    assert visualkeras.LAYERED_TEXT_CALLABLES["shape"](1, split) == ("6", False)
+    assert image.width > 0 and image.height > 0
+
+
+@pytest.mark.parametrize("background", ["white", (0, 0, 0, 0)])
+@pytest.mark.parametrize("draw_volume", [False, True])
+def test_layered_legend_text_composites_font_alpha_once(background, draw_volume):
+    from PIL import ImageDraw, ImageFont
+
+    def glyph_crop(image):
+        mask = Image.new("L", image.size)
+        mask.putdata([255 if r == b == 255 and g < 255 and a > 0 else 0
+                      for r, g, b, a in image.getdata()])
+        return image.crop(mask.getbbox())
+
+    model = tf.keras.Sequential([tf.keras.Input((3,)), tf.keras.layers.Dense(2)])
+    font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    image = visualkeras.layered_view(
+        model, legend=True, font=font, font_color="magenta", background_fill=background,
+        draw_volume=draw_volume, legend_text_spacing_offset=0,
+    )
+    reference = Image.new("RGBA", (160, 60), background)
+    ImageDraw.Draw(reference).text((4, 4), "Dense", font=font, fill="magenta")
+    actual_glyph = glyph_crop(image)
+    reference_glyph = glyph_crop(reference)
+    assert actual_glyph.size == reference_glyph.size
+    assert actual_glyph.tobytes() == reference_glyph.tobytes()

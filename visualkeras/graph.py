@@ -1,20 +1,64 @@
 from typing import Any, Dict, Mapping, Optional, Union, List, Sequence, Tuple
+from os import PathLike as _PathLike, fspath as _fspath
 import aggdraw
 from PIL import Image, ImageDraw, ImageFont
-from math import ceil
+from PIL import ImageChops as _ImageChops
+from math import ceil, prod as _shape_product
+from operator import index as _dimension_index
 import warnings
 from .utils import *
+from .utils import _multiline_bbox, _load_node_image, _aggdraw_context
 from .layer_utils import *
+from .layer_utils import _iter_output_tensors
 from .options import GraphOptions, GRAPH_PRESETS
+from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
 
 class _DummyLayer:
 
-    def __init__(self, name, units=None):
+    def __init__(self, name, units=None, output_shape=None):
         if units:
             self.units = units
         self.name = name
+        self.output_shape = output_shape
 
 
+def _input_layer_neuron_count(layer):
+    shape = getattr(layer, "input_shape", None)
+    if shape is None:
+        shape = getattr(layer, "batch_shape", None)
+    if shape is None:
+        shape = getattr(layer, "batch_input_shape", None)
+    if shape is None:
+        shape = getattr(getattr(layer, "output", None), "shape", None)
+    return _tensor_neuron_count(shape, "input")
+
+
+def _tensor_neuron_count(shape, kind):
+    error = (
+        f"not supported {kind} shape {shape!r}: neuron rendering requires known "
+        "positive non-batch dimensions. Use inout_as_tensor=True for symbolic shapes."
+    )
+    if hasattr(shape, "as_list"):
+        try:
+            shape = shape.as_list()
+        except (TypeError, ValueError):
+            raise RuntimeError(error) from None
+    if isinstance(shape, list) and shape and isinstance(shape[0], (list, tuple)):
+        if len(shape) != 1:
+            raise RuntimeError(error)
+        shape = shape[0]
+    if not isinstance(shape, (tuple, list)):
+        raise RuntimeError(error)
+    try:
+        dimensions = [_dimension_index(dimension) for dimension in shape[1:]]
+    except TypeError:
+        raise RuntimeError(error) from None
+    if any(dimension <= 0 for dimension in dimensions):
+        raise RuntimeError(error)
+    return _shape_product(dimensions)
+
+
+@_track_explicit_arguments
 def graph_view(model, to_file: str = None,
                color_map: dict = None, node_size: int = 50,
                background_fill: Any = 'white', padding: int = 10,
@@ -221,7 +265,7 @@ def graph_view(model, to_file: str = None,
                 "graph_view received many custom keyword arguments. "
                 "Consider using visualkeras.show(..., mode='graph', preset=...) and the GraphOptions dataclass for a simpler workflow.",
                 UserWarning,
-                stacklevel=2,
+                stacklevel=3,
             )
 
     if preset is not None or options is not None:
@@ -250,6 +294,7 @@ def graph_view(model, to_file: str = None,
                 raise TypeError(
                     "options must be a GraphOptions instance or a mapping of keyword arguments."
                 )
+            _validate_option_keys(option_values, defaults, "graph")
             resolved.update(option_values)
 
         explicit_values = {
@@ -274,7 +319,7 @@ def graph_view(model, to_file: str = None,
         for key, value in explicit_values.items():
             if key not in defaults:
                 continue
-            if value != defaults[key]:
+            if _is_explicit(key):
                 resolved[key] = value
 
         to_file = resolved["to_file"]
@@ -326,14 +371,12 @@ def graph_view(model, to_file: str = None,
     layers = list()
     layer_y = list()
 
-    # Determine output names compatible with both Keras versions
-    if hasattr(model, 'output_names'):
-        # Older versions of Keras
-        output_names = model.output_names
-    else:
-        # Newer versions of Keras
+    output_tensors = list(_iter_output_tensors(model.outputs))
+    # Prefer supplied names, then discover names from tensor provenance.
+    output_names = getattr(model, 'output_names', None)
+    if not output_names:
         output_names = []
-        for output in model.outputs:
+        for output in output_tensors:
             if hasattr(output, '_keras_history'):
                 # Get the layer that produced the output
                 layer = output._keras_history[0]
@@ -355,31 +398,40 @@ def graph_view(model, to_file: str = None,
         # Check if all output-producing layers are in the last hierarchy level
         last_level_layers = model_layers[-1] if model_layers else []
         layers_producing_outputs = []
-        
-        for output_tensor in model.outputs:
+        for output_tensor in output_tensors:
+            history = getattr(output_tensor, "_keras_history", None)
+            if history is not None:
+                layers_producing_outputs.append(history[0])
+                continue
             for layer in model.layers:
-                if hasattr(layer, 'output') and layer.output is output_tensor:
+                if getattr(layer, "output", None) is output_tensor:
                     layers_producing_outputs.append(layer)
                     break
-        
-        # Only add dummy outputs if some output-producing layers are NOT in the last level
-        should_add_dummy_outputs = not all(layer in last_level_layers for layer in layers_producing_outputs)
+
+        shared_output_layer = len({id(layer) for layer in layers_producing_outputs}) < len(layers_producing_outputs)
+        should_add_dummy_outputs = shared_output_layer or not all(
+            layer in last_level_layers for layer in layers_producing_outputs
+        )
     
     if should_add_dummy_outputs:
-        # Normalize output_shape to always be a list of tuples
-        if isinstance(model.output_shape, tuple):
-            # Single output model: output_shape is a tuple, convert to list of tuples
-            output_shapes = [model.output_shape]
+        tensor_shapes = [getattr(output, "shape", None) for output in output_tensors]
+        if all(shape is not None for shape in tensor_shapes):
+            output_shapes = tensor_shapes
         else:
-            # Multi-output model: output_shape is already a list of tuples
             output_shapes = model.output_shape
-        
+            structured = (
+                isinstance(output_shapes, (list, tuple)) and output_shapes
+                and (isinstance(output_shapes[0], (list, tuple))
+                     or hasattr(output_shapes[0], "as_list"))
+            )
+            if not structured:
+                output_shapes = [output_shapes]
+
         model_layers.append([
             _DummyLayer(
-                output_names[i],
-                None if inout_as_tensor else self_multiply(output_shapes[i])
+                output_names[i], output_shape=output_shapes[i],
             )
-            for i in range(len(model.outputs))
+            for i in range(len(output_tensors))
         ])
         id_to_num_mapping, adj_matrix = augment_output_layers(model, model_layers[-1], id_to_num_mapping, adj_matrix)
 
@@ -415,7 +467,7 @@ def graph_view(model, to_file: str = None,
             node_image = None
             if image_path:
                 try:
-                    node_image = Image.open(image_path).convert("RGBA")
+                    node_image = _load_node_image(image_path)
                 except Exception as e:
                     warnings.warn(f"Could not load image {image_path} for layer {layer_name}: {e}")
 
@@ -444,17 +496,12 @@ def graph_view(model, to_file: str = None,
                 elif hasattr(layer, 'filters'):
                     is_box = False
                     units = layer.filters
+                elif isinstance(layer, _DummyLayer) and not inout_as_tensor:
+                    is_box = False
+                    units = _tensor_neuron_count(layer.output_shape, "output")
                 elif is_internal_input(layer) and not inout_as_tensor:
                     is_box = False
-                    # Normalize input_shape to handle both tuple and list formats
-                    input_shape = layer.input_shape
-                    if isinstance(input_shape, tuple):
-                        shape = input_shape
-                    elif isinstance(input_shape, list) and len(input_shape) == 1:
-                        shape = input_shape[0]
-                    else:
-                        raise RuntimeError(f"not supported input shape {input_shape}")
-                    units = self_multiply(shape)
+                    units = _input_layer_neuron_count(layer)
 
             if local_ellipsize_after is None or local_ellipsize_after <= 0:
                 n = units
@@ -572,7 +619,7 @@ def graph_view(model, to_file: str = None,
     final_height = max_y - min_y
     
     img = Image.new('RGBA', (int(ceil(final_width)), int(ceil(final_height))), background_fill)
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
     
     # Shift nodes if needed
     shift_x = -min_x
@@ -628,15 +675,10 @@ def graph_view(model, to_file: str = None,
                     mask = mask.resize((int(w), int(h)), Image.LANCZOS)
                     
                     # Apply mask to the resized image
-                    if resized.mode == 'RGBA':
-                        cropped = Image.new("RGBA", (int(w), int(h)), (0, 0, 0, 0))
-                        cropped.paste(resized, (0, 0), mask=mask)
-                        resized = cropped
-                    else:
-                        resized.putalpha(mask)
+                    resized.putalpha(_ImageChops.multiply(resized.getchannel("A"), mask))
 
-                img.paste(resized, (int(node.x1), int(node.y1)), resized)
-                draw = aggdraw.Draw(img)
+                img.alpha_composite(resized, (int(node.x1), int(node.y1)))
+                draw = _aggdraw_context(img)
                 
                 # Draw the node outline on top (transparent fill)
                 # We access _fill directly to avoid the setter logic which might fail on None
@@ -685,18 +727,15 @@ def _get_graph_group_nodes(id_to_node_list_map: Dict[int, List[Any]], group: Dic
             name_to_layer[name] = layer
             
     for ref in layers_ref:
-        layer = None
-        if isinstance(ref, str):
-            layer = name_to_layer.get(ref)
+        if isinstance(ref, type):
+            matches = [layer for layer in model.layers if isinstance(layer, ref)]
         else:
-            layer = ref
-            
-        if layer:
-            nodes = id_to_node_list_map.get(id(layer))
-            if nodes:
-                group_nodes.extend(nodes)
-                
-    return group_nodes
+            layer = name_to_layer.get(ref) if isinstance(ref, str) else ref
+            matches = [layer] if layer is not None else []
+        for layer in matches:
+            group_nodes.extend(id_to_node_list_map.get(id(layer), []))
+
+    return list({id(node): node for node in group_nodes}.values())
 
 def _draw_graph_group_boxes(draw, id_to_node_list_map, groups, model):
     for group in groups:
@@ -765,7 +804,11 @@ def _draw_graph_group_captions(img, id_to_node_list_map, groups, model):
         text_x = center_x - text_w / 2
         text_y = max_y + gap
         
-        draw.text((text_x, text_y), caption, fill=color, font=font)
+        left, top, _, _ = _multiline_bbox(draw, caption, font, 4)
+        text_x -= left
+        text_y -= top
+
+        draw.multiline_text((text_x, text_y), caption, fill=color, font=font)
 
 def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
     font_src = group.get("font", None)
@@ -776,19 +819,16 @@ def _get_font(group: Dict[str, Any]) -> ImageFont.ImageFont:
             return ImageFont.truetype("arial.ttf", font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, str):
+    elif isinstance(font_src, (str, _PathLike)):
          try:
-            return ImageFont.truetype(font_src, font_size)
+            return ImageFont.truetype(_fspath(font_src), font_size)
          except IOError:
             return ImageFont.load_default()
-    elif isinstance(font_src, ImageFont.ImageFont):
+    elif isinstance(font_src, (ImageFont.ImageFont, ImageFont.FreeTypeFont)):
         return font_src
     else:
         return ImageFont.load_default()
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: Any) -> Tuple[int, int]:
-    if hasattr(font, "getbbox"):
-        left, top, right, bottom = font.getbbox(text)
-        return right - left, bottom - top
-    else:
-        return draw.textsize(text, font=font)
+    left, top, right, bottom = _multiline_bbox(draw, text, font, 4)
+    return right - left, bottom - top

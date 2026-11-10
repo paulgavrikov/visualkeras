@@ -460,6 +460,31 @@ def test_external_text_padding_and_collision_helpers():
     assert labels[1]["x"] >= labels[0]["x"]
 
 
+def test_external_labels_near_both_edges_stay_with_their_nodes():
+    labels = [
+        {"x_pref": 18, "x": 18, "y": 40, "w": 24, "h": 20},
+        {"x_pref": 220, "x": 220, "y": 40, "w": 20, "h": 20},
+        {"x_pref": 316, "x": 316, "y": 40, "w": 34, "h": 20},
+    ]
+    functional._resolve_external_label_x_collisions(labels, image_width=364, edge_padding=20)
+    assert labels[0]["x"] == 20
+    assert labels[1]["x"] == 220
+    assert labels[2]["x"] == 310
+    assert labels[-1]["x"] + labels[-1]["w"] <= 344
+
+
+def test_external_labels_resolve_overlap_without_packing_unrelated_labels():
+    labels = [
+        {"x_pref": 20, "x": 20, "y": 40, "w": 30, "h": 20},
+        {"x_pref": 40, "x": 40, "y": 40, "w": 30, "h": 20},
+        {"x_pref": 310, "x": 310, "y": 40, "w": 40, "h": 20},
+    ]
+    functional._resolve_external_label_x_collisions(labels, image_width=364, edge_padding=20)
+    assert labels[0]["x"] == 20
+    assert labels[1]["x"] >= labels[0]["x"] + labels[0]["w"] + 8
+    assert labels[2]["x"] == 304
+
+
 def test_assign_component_positions_layout():
     n1 = _node(1, x=0, y=0, w=20, h=10)
     n2 = _node(2, x=0, y=0, w=20, h=10)
@@ -540,7 +565,7 @@ def test_collect_edges_and_attach_outputs(monkeypatch):
     n2 = _node(id(lb), name="b", layer=lb)
     nodes = {n1.node_id: n1, n2.node_id: n2}
 
-    def fake_incoming(layer):
+    def fake_incoming(layer, model=None):
         if layer is lb:
             return [la, la]  # duplicate on purpose
         return []
@@ -1015,7 +1040,7 @@ def test_build_graph_image_axis_and_scale_branches(monkeypatch, tmp_path):
     model = SimpleNamespace()
 
     monkeypatch.setattr(functional, "get_layers", lambda m: [l0, l1, l2])
-    monkeypatch.setattr(functional, "get_incoming_layers", lambda layer: [] if layer is l0 else [l0])
+    monkeypatch.setattr(functional, "get_incoming_layers", lambda layer, model=None: [] if layer is l0 else [l0])
     monkeypatch.setattr(functional, "find_output_layers", lambda m: [])
     monkeypatch.setattr(functional, "calculate_layer_dimensions", lambda *args, **kwargs: (9, 30, 45))
 
@@ -1310,3 +1335,168 @@ def test_get_logo_nodes_empty_and_name_type_maps():
     assert functional._get_logo_nodes(graph_obj, {"layers": []}) == []
     names = functional._get_logo_nodes(graph_obj, {"layers": ["a", "missing", A, int]})
     assert na in names
+
+
+@pytest.mark.parametrize("font_size", [18, 26])
+def test_box_text_keeps_smallest_font_when_no_size_fits(font_size, font_dir):
+    image = Image.new("RGBA", (64, 32), "white")
+    expected = Image.new("RGBA", image.size, "white")
+    style = {
+        "box_text_font": str(font_dir / "DejaVuSans.ttf"), "box_text_font_size": font_size,
+        "box_text_min_font_size": 8, "box_text_padding": 1,
+        "box_text_wrap": "none", "box_text_rotation": 0,
+    }
+    functional._draw_box_text_in_rect(
+        image, (16, 6, 48, 26), "UNBREAKABLE_LONG_LABEL", style=style,
+        fallback_font=None, fallback_color="black", fallback_spacing=2,
+    )
+    functional._draw_box_text_in_rect(
+        expected, (16, 6, 48, 26), "UNBREAKABLE_LONG_LABEL",
+        style={**style, "box_text_font_size": 8, "box_text_autoshrink": False},
+        fallback_font=None, fallback_color="black", fallback_spacing=2,
+    )
+    assert image.tobytes() == expected.tobytes()
+
+
+def test_box_text_zero_line_spacing_overrides_global_spacing(monkeypatch):
+    image = Image.new("RGBA", (80, 64), "white")
+    seen = []
+    render_text = functional._render_text_image_bbox
+
+    def record_text(text, font, color, spacing, **kwargs):
+        seen.append(spacing)
+        return render_text(text, font, color, spacing, **kwargs)
+
+    monkeypatch.setattr(functional, "_render_text_image_bbox", record_text)
+    functional._draw_box_text_in_rect(
+        image, (0, 0, 80, 64), "First\nSecond",
+        style={"box_text_line_spacing": 0, "box_text_rotation": 0, "box_text_wrap": "none"},
+        fallback_font=None, fallback_color="black", fallback_spacing=9,
+    )
+    assert seen == [0]
+
+
+@pytest.mark.parametrize("mode", ["words", "chars", "unknown"])
+@pytest.mark.parametrize("text, max_lines, expected", [
+    ("First\nSecond", None, "First\nSecond"),
+    ("First\n\nSecond", None, "First\n\nSecond"),
+    ("First\n\nSecond", 2, "First\n"),
+])
+def test_box_wrapping_preserves_explicit_paragraphs(mode, text, max_lines, expected):
+    draw = ImageDraw.Draw(Image.new("RGBA", (200, 80), "white"))
+    font = ImageFont.load_default()
+    assert functional._wrap_text_to_width(draw, text, font, 200, mode, max_lines) == expected
+
+
+@pytest.mark.parametrize("in_memory", [False, True])
+@pytest.mark.parametrize("as_fallback", [False, True])
+def test_box_autoshrink_accepts_font_objects(in_memory, as_fallback, font_dir):
+    font = ImageFont.load_default(size=26) if in_memory else ImageFont.truetype(str(font_dir / "DejaVuSans.ttf"), 26)
+    image = Image.new("RGBA", (360, 80), "white")
+    reference = Image.new("RGBA", image.size, "white")
+    style = {"box_text_rotation": 0, "box_text_padding": 0, "box_text_wrap": "none",
+             "box_text_min_font_size": 8}
+    if not as_fallback:
+        style["box_text_font"] = font
+    functional._draw_box_text_in_rect(
+        image, (170, 24, 190, 56), "THIS_UNBREAKABLE_LABEL_NEEDS_MINIMUM",
+        style=style, fallback_font=font if as_fallback else None,
+        fallback_color="black", fallback_spacing=2,
+    )
+    functional._draw_box_text_in_rect(
+        reference, (170, 24, 190, 56), "THIS_UNBREAKABLE_LABEL_NEEDS_MINIMUM",
+        style={**style, "box_text_font": font.font_variant(size=8), "box_text_autoshrink": False},
+        fallback_font=None, fallback_color="black", fallback_spacing=2,
+    )
+    assert image.tobytes() == reference.tobytes()
+    assert font.size == 26
+
+
+@pytest.mark.parametrize("resolver", ["box", "annotation"])
+def test_font_path_objects_preserve_requested_family(resolver, font_dir):
+    from pathlib import Path
+
+    requested = ImageFont.truetype(str(font_dir / "DejaVuSansMono.ttf"), 24)
+    path = Path(requested.path)
+    if resolver == "box":
+        font, _, _ = functional._resolve_box_font({"box_text_font": path, "box_text_font_size": 24}, None)
+    else:
+        font = functional._resolve_annotation_font(path, None, 24)
+    assert font.getname() == requested.getname()
+    assert font.size == 24
+
+
+@pytest.mark.parametrize("kind", ["single", "split", "scalar"])
+def test_synthetic_outputs_retain_actual_tensor_shapes(kind):
+    tf = pytest.importorskip("tensorflow")
+    inputs = tf.keras.Input((8,), batch_size=4, name="in")
+    if kind == "split":
+        outputs = tf.keras.layers.Lambda(lambda x: (x[:, :6], x[:, 6:]), name="split")(inputs)
+    elif kind == "scalar":
+        outputs = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=1), name="scalar")(inputs)
+    else:
+        outputs = tf.keras.layers.Dense(3, name="out")(inputs)
+    model = tf.keras.Model(inputs, outputs)
+    nodes = {id(layer): _node(id(layer), layer=layer) for layer in model.layers}
+    attached, edges = functional._attach_output_nodes(model, nodes, [], virtual_node_size=8)
+    synthetic = sorted((node for key, node in attached.items() if key not in nodes), key=lambda node: node.order)
+    assert [node.shape for node in synthetic] == [tuple(tensor.shape) for tensor in model.outputs]
+    assert [node.layer.output_shape for node in synthetic] == [tuple(tensor.shape) for tensor in model.outputs]
+    assert len(edges) == len(model.outputs)
+
+
+def test_collapsed_layer_metadata_retains_last_output_shape():
+    first = _node(1, name="first")
+    last = _node(2, name="last")
+    first.shape = (None, 8)
+    last.shape = (None, 3)
+    graph = functional.FunctionalGraph(
+        nodes={1: first, 2: last}, edges=[functional.FunctionalEdge(1, 2)], inputs=[1], outputs=[2],
+    )
+    result = functional._collapse_node_sequence(
+        graph, [1, 2], rule={"kind": "layer", "repeat_count": 2}, collapse_annotations=False,
+    )
+    node = next(iter(result.nodes.values()))
+    assert node.shape == (None, 3)
+    assert node.layer.output_shape == (None, 3)
+
+
+@pytest.mark.parametrize("mode, width", [("none", 200), ("words", 0), ("chars", 0)])
+@pytest.mark.parametrize("limit, expected", [(0, ""), (1, "First"), (2, "First\nSecond")])
+def test_box_line_limits_apply_without_automatic_wrapping(mode, width, limit, expected):
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    font = ImageFont.load_default()
+    assert functional._wrap_text_to_width(draw, "First\nSecond\nThird", font, width, mode, limit) == expected
+
+
+@pytest.mark.parametrize("text", ["j\nMMMMMM", "ffff\nj", "W\njjjjj"])
+@pytest.mark.parametrize("margin", [0, 2])
+def test_centered_text_image_uses_alignment_aware_bounds(text, margin, font_dir):
+    import math
+
+    font = ImageFont.truetype(str(font_dir / "DejaVuSans-Oblique.ttf"), 36)
+    image = functional._render_text_image_bbox(text, font, "black", 2, margin=margin)
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    left, top, right, bottom = draw.multiline_textbbox((0, 0), text, font=font, spacing=2, align="center")
+    reference = Image.new("RGBA", (math.ceil(right - left) + 2 * margin, math.ceil(bottom - top) + 2 * margin))
+    ImageDraw.Draw(reference).multiline_text(
+        (margin - left, margin - top), text, font=font, fill="black", spacing=2, align="center",
+    )
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+
+
+@pytest.mark.parametrize("background", [(255, 255, 255, 255), (10, 20, 30, 128), (0, 0, 0, 0)])
+def test_collapsed_annotation_background_uses_source_over(background):
+    image = Image.new("RGBA", (120, 100), background)
+    font = ImageFont.load_default()
+    node = _node(1, kind="collapsed", style={"collapsed": True, "collapse_kind": "block",
+                 "collapse_label": "2x", "collapse_badge_enabled": False,
+                 "collapse_annotation_position": "below", "collapse_annotation_font": font})
+    functional._draw_collapsed_annotations(image, [(node, (10, 10, 90, 40))],
+        fallback_font=font, fallback_font_color="black", default_annotation_color="gray")
+    left, top, right, bottom = ImageDraw.Draw(Image.new("RGBA", (1, 1))).textbbox((0, 0), "2x", font=font)
+    text_x = int((100 - (right - left)) / 2)
+    expected = Image.alpha_composite(Image.new("RGBA", (1, 1), background), Image.new("RGBA", (1, 1), (255, 255, 255, 220)))
+    assert image.getpixel((text_x - 2, 53)) == expected.getpixel((0, 0))
+    assert image.getpixel((0, 0)) == background

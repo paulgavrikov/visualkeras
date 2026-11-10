@@ -1,13 +1,23 @@
 import setuptools
+from pathlib import Path
+from runpy import run_path
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+ROOT = Path(__file__).resolve().parent
+long_description = (ROOT / "README.md").read_text(encoding="utf-8")
+development_requires = [
+    line.strip()
+    for line in (ROOT / "requirements-dev.txt").read_text(encoding="utf-8").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+]
 
 setuptools.setup(
     name="visualkeras",
-    version="0.2.0",
-    author="Paul Gavrikov",
-    author_email="paul.gavrikov@hs-offenburg.de",
+    version=run_path(str(ROOT / "visualkeras" / "_version.py"))["__version__"],
+    author="Paul Gavrikov, Santosh Patapati",
+    author_email=(
+        "Paul Gavrikov <paul.gavrikov@hs-offenburg.de>, "
+        "Santosh Patapati <santosh.patapati@stonybrook.edu>"
+    ),
     description="Architecture visualization of Keras models",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -29,5 +39,6 @@ setuptools.setup(
         'numpy>=1.18.1',
         'aggdraw>=1.3.11'
     ],
+    extras_require={"dev": development_requires},
     python_requires='>=3.9',
 )

@@ -11,11 +11,54 @@ presets are an opt-in convenience layer.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from contextvars import ContextVar
+from functools import wraps
+from inspect import signature
+from difflib import get_close_matches
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 
 StyleMap = Mapping[Union[str, type], Mapping[str, Any]]
 TextCallable = Callable[[int, Any], Tuple[str, bool]]
+
+_EXPLICIT_ARGUMENTS = ContextVar("visualkeras_explicit_arguments", default=frozenset())
+
+
+def _track_explicit_arguments(renderer):
+    renderer_signature = signature(renderer)
+
+    @wraps(renderer)
+    def wrapped(*args, **kwargs):
+        arguments = renderer_signature.bind(*args, **kwargs).arguments
+        token = _EXPLICIT_ARGUMENTS.set(frozenset(arguments))
+        try:
+            return renderer(*args, **kwargs)
+        finally:
+            _EXPLICIT_ARGUMENTS.reset(token)
+
+    return wrapped
+
+
+def _is_explicit(name):
+    return name in _EXPLICIT_ARGUMENTS.get()
+
+
+def _validate_option_keys(values, valid_keys, renderer_name):
+    unknown = sorted(set(values) - set(valid_keys), key=str)
+    if not unknown:
+        return
+    message = "Unknown {} option(s): {}.".format(
+        renderer_name, ", ".join(repr(key) for key in unknown)
+    )
+    suggestions = []
+    for key in unknown:
+        if isinstance(key, str):
+            matches = get_close_matches(key, valid_keys, n=1)
+            if matches:
+                suggestions.append("{!r} -> {!r}".format(key, matches[0]))
+    if suggestions:
+        message += " Did you mean {}?".format(", ".join(suggestions))
+    raise ValueError(message)
 
 
 # ---------------------------------------------------------------------------
@@ -26,37 +69,34 @@ def _safe_shape(layer: Any) -> Any:
     shape = getattr(layer, "output_shape", None)
     if shape is not None:
         return shape
-    output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
-    if tensor_shape is not None:
-        try:
-            return tuple(tensor_shape.as_list())  # TF TensorShape
-        except Exception:  # noqa: BLE001
-            try:
-                return tuple(tensor_shape)
-            except Exception:  # noqa: BLE001
-                return tensor_shape
-    return None
+    from .layer_utils import _shape_from_tensor_output
+
+    return _shape_from_tensor_output(getattr(layer, "output", None))
 
 
 def _format_shape(shape: Any) -> str:
-    if shape is None:
+    if isinstance(shape, Mapping):
+        return _format_shape(next(iter(shape.values()))) if shape else "?"
+    if shape is None or (hasattr(shape, "rank") and shape.rank is None):
         return "?"
     # Multi-output shapes: pick first (best effort).
-    if isinstance(shape, (list, tuple)) and shape and isinstance(shape[0], (list, tuple)):
-        shape = shape[0]
+    if isinstance(shape, (list, tuple)) and shape and (
+        isinstance(shape[0], (list, tuple)) or hasattr(shape[0], "as_list")
+    ):
+        return _format_shape(shape[0])
     if hasattr(shape, "as_list"):
         try:
             shape = tuple(shape.as_list())
         except Exception:  # noqa: BLE001
-            pass
+            try:
+                shape = tuple(shape)
+            except Exception:  # noqa: BLE001
+                return str(shape)
     if not isinstance(shape, (list, tuple)):
         return str(shape)
-    dims = [d for d in shape[1:] if d is not None]
+    dims = shape[1:]
     if not dims:
-        dims = [d for d in shape[1:]]
-    if not dims:
-        return "?"
+        return "scalar"
     return " x ".join(str(d) if d is not None else "?" for d in dims)
 
 

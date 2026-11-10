@@ -1,9 +1,20 @@
 from types import SimpleNamespace
 
 import aggdraw
+import pytest
 from PIL import Image, ImageFont
 
 from visualkeras import utils
+
+
+@pytest.mark.parametrize("source_size", [(1000, 1), (1, 1000)])
+@pytest.mark.parametrize("target_size", [(1, 1), (2, 3)])
+def test_contain_extreme_aspect_ratios_remains_drawable(source_size, target_size):
+    source = Image.new("RGBA", source_size, "red")
+    image = utils.resize_image_to_fit(source, *target_size, "contain")
+    assert image.size == target_size
+    assert image.getbbox() is not None
+    assert source.size == source_size
 
 
 def test_resolve_style_class_and_name_overrides():
@@ -35,6 +46,45 @@ def test_color_and_math_helpers():
     assert list(utils.get_keys_by_value({"a": 1, "b": 2, "c": 1}, 1)) == ["a", "c"]
 
 
+@pytest.mark.parametrize("shape, expected", [
+    ((None, None, 3, 4), 12), ((None, 2, None), 2),
+    ((None, None), 0), ((), 0), ((None, 0, None, 4), 0),
+])
+def test_shape_product_ignores_all_unknown_dimensions(shape, expected):
+    assert utils.self_multiply(shape) == expected
+
+
+def test_style_conflicts_follow_subclass_and_multiple_inheritance_precedence():
+    class Base:
+        pass
+
+    class First(Base):
+        pass
+
+    class Second(Base):
+        pass
+
+    class Child(First, Second):
+        pass
+
+    defaults = {"fill": "white", "outline": "black"}
+    styles = {
+        Base: {"fill": "red", "outline": "gray"},
+        First: {"fill": "blue"},
+        Second: {"fill": "green"},
+        Child: {"outline": "orange"},
+        "named": {"fill": "purple"},
+    }
+    assert utils.resolve_style(Child(), "unnamed", styles, defaults) == {
+        "fill": "blue", "outline": "orange"
+    }
+    assert utils.resolve_style(Child(), "named", styles, defaults) == {
+        "fill": "purple", "outline": "orange"
+    }
+    assert defaults == {"fill": "white", "outline": "black"}
+    assert styles[Base] == {"fill": "red", "outline": "gray"}
+
+
 def test_layout_helpers():
     a = Image.new("RGBA", (10, 10), "red")
     b = Image.new("RGBA", (10, 10), "blue")
@@ -64,6 +114,22 @@ def test_layout_helpers():
     )
     assert vertical_wrapped.width >= 20
     assert vertical_wrapped.height >= 20
+
+
+@pytest.mark.parametrize("horizontal", [True, False])
+@pytest.mark.parametrize("limit", [10, 23])
+def test_layout_keeps_outer_padding_when_wrapping(horizontal, limit):
+    source = Image.new("RGBA", (10, 10), "red")
+    images = [source] if limit == 10 else [source, source]
+    image = utils.linear_layout(
+        images, max_width=limit, max_height=limit,
+        horizontal=horizontal, padding=2,
+    )
+    target_size = (14, 14) if limit == 10 else ((14, 24) if horizontal else (24, 14))
+    assert image.size == target_size
+    assert image.getpixel((0, 0)) == (255, 255, 255, 255)
+    assert image.getpixel((2, 2)) == (255, 0, 0, 255)
+    assert sum(pixel == (255, 0, 0, 255) for pixel in image.getdata()) == len(images) * 100
 
 
 def _make_box(x1, y1, x2, y2, de=0, shade=10, rotation=None):
@@ -168,6 +234,20 @@ def test_resize_and_affine_helpers():
     assert target.getpixel((20, 20))[0] > 200
 
 
+@pytest.mark.parametrize("source_mode, target_mode, background, expected_pixel", [
+    ("RGB", "RGBA", (0, 0, 0, 0), (255, 0, 0, 255)),
+    ("RGBA", "RGBA", (0, 0, 0, 0), (255, 0, 0, 128)),
+    ("RGBA", "RGBA", (255, 255, 255, 255), (255, 127, 127, 255)),
+    ("RGBA", "RGB", (255, 255, 255), (255, 127, 127)),
+])
+def test_affine_projection_composites_source_alpha_once(source_mode, target_mode, background, expected_pixel):
+    source = Image.new(source_mode, (4, 4), (255, 0, 0) if source_mode == "RGB" else (255, 0, 0, 128))
+    target = Image.new(target_mode, (8, 8), background)
+    utils.apply_affine_transform(target, source, [(2, 2), (6, 2), (6, 6), (2, 6)], "fill")
+    assert target.getpixel((3, 3)) == expected_pixel
+    assert target.getpixel((0, 0)) == background
+
+
 def test_draw_node_logo_and_legend(tmp_path):
     class FaceBox:
         @staticmethod
@@ -224,3 +304,194 @@ def test_draw_node_logo_and_legend(tmp_path):
         font_color="black",
     )
     assert no_legend == base
+
+
+@pytest.mark.parametrize("horizontal", [False, True])
+@pytest.mark.parametrize("padding", [0, 3])
+def test_empty_linear_layout_is_a_savable_padded_canvas(tmp_path, horizontal, padding):
+    image = utils.linear_layout([], horizontal=horizontal, padding=padding, background_fill="navy")
+    path = tmp_path / "empty.png"
+    image.save(path)
+    assert image.size == (max(1, 2 * padding), max(1, 2 * padding))
+    assert image.getpixel((0, 0)) == (0, 0, 128, 255)
+    with Image.open(path) as reopened:
+        saved_size = reopened.size
+    del reopened
+    assert saved_size == image.size
+
+
+@pytest.mark.parametrize("quad", [
+    [(1, 1), (6, 6), (11, 11), (6, 6)],
+    [(1, 1), (11, 11), (11, 11), (1, 1)],
+])
+def test_degenerate_affine_face_does_not_paint_a_rectangle(quad):
+    image = Image.new("RGBA", (16, 16), "white")
+    source = Image.new("RGBA", (8, 8), "red")
+    before = image.tobytes()
+    utils.apply_affine_transform(image, source, quad, "fill")
+    assert image.tobytes() == before
+    assert source.getpixel((0, 0)) == (255, 0, 0, 255)
+
+
+@pytest.mark.parametrize("amount, expected", [
+    (-30, (255, 255, 40, 128)), (300, (0, 0, 0, 128)), (0, (250, 240, 10, 128)),
+])
+def test_fade_color_saturates_both_ends_and_preserves_alpha(amount, expected):
+    assert utils.fade_color((250, 240, 10, 128), amount) == expected
+
+
+def test_brightened_box_faces_saturate_instead_of_wrapping_channels():
+    import aggdraw
+
+    image = Image.new("RGBA", (40, 40), "white")
+    box = utils.Box()
+    box.x1, box.y1, box.x2, box.y2, box.de = 10, 15, 30, 35, 5
+    box.fill = (250, 240, 10, 255)
+    box.outline = "black"
+    box.shade = -30
+    draw = aggdraw.Draw(image)
+    box.draw(draw)
+    draw.flush()
+    assert (255, 255, 40, 255) in image.getdata()
+    assert (255, 255, 70, 255) in image.getdata()
+
+
+@pytest.mark.parametrize("layout", ["horizontal", "vertical", "concat"])
+@pytest.mark.parametrize("background, expected", [
+    ("white", (255, 127, 127, 255)),
+    ((0, 0, 0, 0), (255, 0, 0, 128)),
+    ((0, 0, 255, 128), (170, 0, 85, 192)),
+])
+def test_image_layouts_composite_alpha_over_background(layout, background, expected):
+    source = Image.new("RGBA", (4, 4), (255, 0, 0, 128))
+    second = Image.new("RGB", (4, 4), "lime")
+    if layout == "concat":
+        image = utils.vertical_image_concat(source, second, background_fill=background)
+        first_xy, second_xy = (0, 0), (0, 4)
+    else:
+        image = utils.linear_layout(
+            [source, second], horizontal=layout == "horizontal", padding=2, spacing=1,
+            background_fill=background,
+        )
+        first_xy = (2, 2)
+        second_xy = (7, 2) if layout == "horizontal" else (2, 7)
+        assert image.getpixel((0, 0)) == utils.get_rgba_tuple(background)
+    assert image.getpixel(first_xy) == expected
+    assert image.getpixel(second_xy) == (0, 255, 0, 255)
+    assert source.getpixel((0, 0)) == (255, 0, 0, 128)
+    assert second.mode == "RGB"
+
+
+@pytest.mark.parametrize("size", [(1000, 1), (1, 1000)])
+@pytest.mark.parametrize("corner", ["top-left", "bottom-right", "center"])
+def test_extreme_aspect_logos_stay_within_the_requested_size(size, corner):
+    image = Image.new("RGBA", (60, 60), "white")
+    logo = Image.new("RGBA", size, "red")
+    box = utils.Box()
+    box.x1, box.y1, box.x2, box.y2, box.de = 10, 10, 50, 50, 0
+    box.fill, box.outline = "white", "black"
+    draw = aggdraw.Draw(image)
+    box.draw(draw)
+    draw.flush()
+    utils.draw_node_logo(image, box, logo, {"size": 0.5, "corner": corner}, False)
+    points = [(i % image.width, i // image.width) for i, pixel in enumerate(image.getdata()) if pixel[:3] == (255, 0, 0)]
+    left, right = min(x for x, y in points), max(x for x, y in points)
+    top, bottom = min(y for x, y in points), max(y for x, y in points)
+    assert 10 <= left <= right < 50 and 10 <= top <= bottom < 50
+    assert right - left + 1 <= 20 and bottom - top + 1 <= 20
+    assert logo.size == size
+
+
+@pytest.mark.parametrize("background", [(0, 0, 0, 0), (10, 20, 30, 128)])
+@pytest.mark.parametrize("base_alpha", [0, 128, 255])
+def test_logo_legend_preserves_base_pixels_and_composites_background_once(tmp_path, background, base_alpha):
+    icon = tmp_path / "logo.png"
+    Image.new("RGBA", (16, 16), (255, 0, 0, 128)).save(icon)
+    base = Image.new("RGBA", (160, 20), (20, 50, 80, base_alpha))
+    original = base.tobytes()
+    font = ImageFont.load_default()
+    image = utils.draw_logos_legend(base, [{"name": "A", "file": str(icon)}], {"padding": 4, "spacing": 5}, background, font, "white")
+    assert base.tobytes() == original
+    assert image.crop((0, 0, base.width, base.height)).tobytes() == original
+    assert image.getpixel((0, base.height)) == background
+    icon_size = font.getbbox("Ag")[3] * 2
+    expected = Image.alpha_composite(Image.new("RGBA", (1, 1), background), Image.new("RGBA", (1, 1), (255, 0, 0, 128)))
+    assert image.getpixel((4 + icon_size // 2, base.height + 4 + icon_size // 2)) == expected.getpixel((0, 0))
+
+
+@pytest.mark.parametrize("label", ["jazz", "j\n\ng"])
+def test_logo_legend_preserves_complete_label_glyphs(tmp_path, label, font_dir):
+    from PIL import ImageDraw
+
+    icon = tmp_path / "logo.png"
+    Image.new("RGBA", (12, 12), "blue").save(icon)
+    font = ImageFont.truetype(str(font_dir / "DejaVuSans-Oblique.ttf"), 24)
+    image = utils.draw_logos_legend(Image.new("RGBA", (160, 10), "white"), [{"name": label, "file": str(icon)}], {"padding": 4, "spacing": 5}, "white", font, "magenta")
+    reference = Image.new("RGBA", (160, 160), "white")
+    ImageDraw.Draw(reference).multiline_text((10, 10), label, font=font, fill="magenta")
+
+    def glyphs(im):
+        mask = Image.new("L", im.size)
+        mask.putdata([255 - g if r == b == 255 else 0 for r, g, b, a in im.getdata()])
+        return mask.crop(mask.getbbox())
+
+    actual, expected = glyphs(image), glyphs(reference)
+    assert actual.size == expected.size
+    assert actual.tobytes() == expected.tobytes()
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+def test_affine_fractional_face_keeps_its_last_pixel(mode):
+    image = Image.new(mode, (16, 16), "white")
+    source = Image.new("RGBA", (8, 8), "red")
+    utils.apply_affine_transform(image, source, [(2.25, 2.25), (8.75, 2.25), (8.75, 8.75), (2.25, 8.75)], "fill")
+    assert image.getpixel((8, 8))[:3] == (255, 0, 0)
+    assert image.getpixel((9, 9))[:3] == (255, 255, 255)
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+def test_affine_negative_fractional_origin_is_translation_invariant(mode):
+    quad = [(-0.5, 2.25), (6.25, 2.25), (6.25, 8.75), (-0.5, 8.75)]
+    source = Image.new("RGBA", (8, 8), "red")
+    image = Image.new(mode, (32, 24), "white")
+    reference = Image.new(mode, (40, 24), "white")
+    utils.apply_affine_transform(image, source, quad, "fill")
+    utils.apply_affine_transform(reference, source, [(x + 8, y) for x, y in quad], "fill")
+    assert image.tobytes() == reference.crop((8, 0, 40, 24)).tobytes()
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+@pytest.mark.parametrize("origin", [29.5, 169.5])
+@pytest.mark.parametrize("vertical", [False, True])
+def test_half_pixel_affine_strips_remain_straight(mode, origin, vertical):
+    image = Image.new(mode, (240, 240), "white")
+    source = Image.new("RGBA", (1, 20) if vertical else (20, 1), "red")
+    if vertical:
+        quad = [(origin, 20), (origin + 1, 20), (origin + 1, 40), (origin, 40)]
+        expected = {(int(origin), y) for y in range(20, 40)}
+    else:
+        quad = [(20, origin), (40, origin), (40, origin + 1), (20, origin + 1)]
+        expected = {(x, int(origin)) for x in range(20, 40)}
+    utils.apply_affine_transform(image, source, quad, "fill")
+    points = {(i % image.width, i // image.width) for i, pixel in enumerate(image.getdata()) if pixel[:3] == (255, 0, 0)}
+    assert points == expected
+
+
+@pytest.mark.parametrize("image_mode", ["RGB", "RGBA"])
+def test_logo_legend_accepts_pil_images_without_mutation(tmp_path, image_mode, font_dir):
+    base = Image.new("RGBA", (180, 50), (10, 20, 30, 128))
+    before_base = base.tobytes()
+    logo = Image.new(image_mode, (16, 10), (210, 20, 40) if image_mode == "RGB" else (210, 20, 40, 128))
+    before_logo = logo.tobytes()
+    path = tmp_path / "legend-logo.png"
+    logo.save(path)
+    group = {"name": "Logo\nname", "file": logo}
+    font = ImageFont.truetype(str(font_dir / "DejaVuSans.ttf"), 18)
+    image = utils.draw_logos_legend(base, [group], True, "white", font, "black")
+    reference = utils.draw_logos_legend(base, [{**group, "file": path}], True, "white", font, "black")
+    assert image.size == reference.size
+    assert image.tobytes() == reference.tobytes()
+    assert image.height > base.height
+    assert logo.mode == image_mode
+    assert logo.tobytes() == before_logo
+    assert base.tobytes() == before_base

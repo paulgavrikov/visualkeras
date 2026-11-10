@@ -23,8 +23,10 @@ import aggdraw
 from PIL import Image, ImageDraw, ImageFont
 
 from .layer_utils import get_layers, extract_primary_shape
+from .layer_utils import _shape_from_tensor_output
 from .options import LenetOptions, LENET_PRESETS
-from .utils import get_rgba_tuple, fade_color, resolve_style
+from .options import _track_explicit_arguments, _is_explicit, _validate_option_keys
+from .utils import get_rgba_tuple, fade_color, resolve_style, _aggdraw_context
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +34,7 @@ from .utils import get_rgba_tuple, fade_color, resolve_style
 # ---------------------------------------------------------------------------
 
 def _shape_to_tuple(shape: Any) -> Any:
-    if shape is None:
+    if shape is None or (hasattr(shape, "rank") and shape.rank is None):
         return None
     if isinstance(shape, tuple):
         return shape
@@ -52,7 +54,7 @@ def _resolve_layer_output_shape(layer: Any) -> Any:
         return _shape_to_tuple(shape)
 
     output = getattr(layer, "output", None)
-    tensor_shape = getattr(output, "shape", None)
+    tensor_shape = _shape_from_tensor_output(output)
     if tensor_shape is not None:
         return _shape_to_tuple(tensor_shape)
 
@@ -173,7 +175,7 @@ def _stable_seed(base_seed: Optional[int], *parts: Any) -> int:
 # Face image helpers (front-face textures)
 # ---------------------------------------------------------------------------
 
-_FACE_IMAGE_CACHE: Dict[str, Image.Image] = {}
+_FACE_IMAGE_CACHE: Dict[str, Tuple[Tuple[int, int, int], Image.Image]] = {}
 
 
 def _load_face_image(spec: Any) -> Optional[Image.Image]:
@@ -188,16 +190,20 @@ def _load_face_image(spec: Any) -> Optional[Image.Image]:
             return spec.convert("RGBA")
         except Exception:  # noqa: BLE001
             return None
-    if isinstance(spec, str):
-        path = os.path.expanduser(spec)
-        # Cache the decoded image; callers get a copy to avoid mutation issues.
-        if path in _FACE_IMAGE_CACHE:
-            return _FACE_IMAGE_CACHE[path].copy()
+    if isinstance(spec, (str, os.PathLike)):
+        path = os.path.abspath(os.path.expanduser(os.fsdecode(spec)))
         try:
-            img = Image.open(path).convert("RGBA")
+            stat = os.stat(path)
+            signature = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+            cached = _FACE_IMAGE_CACHE.get(path)
+            if cached is not None and cached[0] == signature:
+                return cached[1].copy()
+            with Image.open(path) as source:
+                img = source.convert("RGBA")
         except Exception:  # noqa: BLE001
+            _FACE_IMAGE_CACHE.pop(path, None)
             return None
-        _FACE_IMAGE_CACHE[path] = img
+        _FACE_IMAGE_CACHE[path] = (signature, img)
         return img.copy()
     return None
 
@@ -307,6 +313,7 @@ def _fit_image_to_rect(
     if iw <= 0 or ih <= 0:
         return Image.new("RGBA", (w, h), background)
 
+    img = img.convert("RGBA")
     if fit == "fill":
         return img.resize((w, h), resample=resample)
 
@@ -316,8 +323,9 @@ def _fit_image_to_rect(
         nh = max(1, int(round(ih * scale)))
         im2 = img.resize((nw, nh), resample=resample)
         canvas = Image.new("RGBA", (w, h), background)
-        canvas.paste(im2, ((w - nw) // 2, (h - nh) // 2), im2)
-        return canvas
+        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        overlay.paste(im2, ((w - nw) // 2, (h - nh) // 2))
+        return Image.alpha_composite(canvas, overlay)
 
     # cover (default)
     scale = max(float(w) / float(iw), float(h) / float(ih))
@@ -366,11 +374,12 @@ def _apply_face_images(img: Image.Image, stacks: Sequence[Dict[str, Any]]) -> No
         ix2 -= inset_px
         iy2 -= inset_px
 
-        w = max(1, ix2 - ix1)
-        h = max(1, iy2 - iy1)
+        w = ix2 - ix1
+        h = iy2 - iy1
+        if w <= 0 or h <= 0:
+            continue
 
-        bg = get_rgba_tuple(style.get("fill", st.fill))
-        fitted = _fit_image_to_rect(face_img, w, h, fit=fit, background=bg)
+        fitted = _fit_image_to_rect(face_img, w, h, fit=fit, background=(0, 0, 0, 0))
 
         if alpha < 255:
             # Multiply alpha channel
@@ -586,7 +595,7 @@ def _canonicalize_shape(layer: Any, shape: Any) -> RenderShape:
         return RenderShape("vector", 1, 1, 1, 1, 1, 1)
 
     # Drop batch dim if present.
-    dims = list(shape[1:]) if len(shape) > 1 else list(shape)
+    dims = list(shape[1:])
     rank = len(dims)
 
     data_format = getattr(layer, "data_format", None)
@@ -609,8 +618,11 @@ def _canonicalize_shape(layer: Any, shape: Any) -> RenderShape:
     if rank == 2:
         # Treat as vector for most cases, but Conv1D/Pooling1D looks nicer as 1×L×C.
         layer_name = type(layer).__name__.lower()
-        if "conv1d" in layer_name or "pool1d" in layer_name:
-            w_dim, c_dim = (num(dims[0]), num(dims[1]))
+        if "conv1d" in layer_name or "pool1d" in layer_name or "pooling1d" in layer_name:
+            if data_format == "channels_first":
+                c_dim, w_dim = (num(dims[0]), num(dims[1]))
+            else:
+                w_dim, c_dim = (num(dims[0]), num(dims[1]))
             return RenderShape("spatial", 1, w_dim, c_dim, 1, w_dim, c_dim)
 
         units = 1
@@ -846,6 +858,24 @@ def _get_text_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFo
     return draw.textsize(text, font=font)
 
 
+def _get_multiline_text_bbox(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+    *,
+    spacing: int = 2,
+) -> Tuple[float, float, float, float]:
+    if not text:
+        return (0, 0, 0, 0)
+    if hasattr(draw, "multiline_textbbox"):
+        return draw.multiline_textbbox((0, 0), str(text), font=font, spacing=spacing, align="center")
+    parts = str(text).splitlines()
+    sizes = [_get_text_size(draw, part, font) for part in parts]
+    width = max((size[0] for size in sizes), default=0)
+    height = sum(size[1] for size in sizes) + spacing * max(0, len(parts) - 1)
+    return (0, 0, width, height)
+
+
 def _get_multiline_text_size(
     draw: ImageDraw.ImageDraw,
     text: str,
@@ -854,18 +884,8 @@ def _get_multiline_text_size(
     spacing: int = 2,
 ) -> Tuple[int, int]:
     """Measure multiline text (\n-delimited) in a Pillow-version-safe way."""
-    if not text:
-        return (0, 0)
-    parts = str(text).splitlines()
-    widths: list[int] = []
-    heights: list[int] = []
-    for part in parts:
-        w, h = _get_text_size(draw, part, font)
-        widths.append(int(w))
-        heights.append(int(h))
-    total_h = int(sum(heights) + spacing * max(0, len(parts) - 1))
-    return (int(max(widths) if widths else 0), total_h)
-
+    left, top, right, bottom = _get_multiline_text_bbox(draw, text, font, spacing=spacing)
+    return (math.ceil(right - left), math.ceil(bottom - top))
 
 def _default_top_label(layer: Any, rshape: RenderShape) -> str:
     return type(layer).__name__
@@ -881,6 +901,7 @@ def _default_bottom_label(layer: Any, rshape: RenderShape) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
+@_track_explicit_arguments
 def lenet_view(
     model: Any,
     to_file: Optional[str] = None,
@@ -1143,6 +1164,7 @@ def lenet_view(
                 option_values = dict(options)
             else:
                 raise TypeError("options must be a LenetOptions instance or a mapping of keyword arguments.")
+            _validate_option_keys(option_values, defaults, "lenet")
             resolved.update(option_values)
 
         explicit_values: Dict[str, Any] = {
@@ -1169,6 +1191,8 @@ def lenet_view(
             "draw_patches": draw_patches,
             "font": font,
             "font_color": font_color,
+            "top_label_callable": top_label_callable,
+            "bottom_label_callable": bottom_label_callable,
             "top_label_padding": top_label_padding,
             "bottom_label_padding": bottom_label_padding,
             "top_label": top_label,
@@ -1178,7 +1202,7 @@ def lenet_view(
         for key, value in explicit_values.items():
             if key not in defaults:
                 continue
-            if value != defaults[key]:
+            if _is_explicit(key):
                 resolved[key] = value
 
         # write back
@@ -1205,6 +1229,8 @@ def lenet_view(
         draw_patches = resolved["draw_patches"]
         font = resolved["font"]
         font_color = resolved["font_color"]
+        top_label_callable = resolved["top_label_callable"]
+        bottom_label_callable = resolved["bottom_label_callable"]
         top_label_padding = resolved.get("top_label_padding", 6)
         bottom_label_padding = resolved.get("bottom_label_padding", 6)
         top_label = resolved["top_label"]
@@ -1598,7 +1624,7 @@ def lenet_view(
     img = Image.new("RGBA", (img_w, img_h), get_rgba_tuple(background_fill))
 
     # Pass 1: draw stacks (geometry + outlines)
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
     for obj in stacks:
         obj["stack"].draw(draw)
     draw.flush()
@@ -1607,7 +1633,7 @@ def lenet_view(
     _apply_face_images(img, stacks)
 
     # Pass 2: draw connections (polygons + patch boxes) over the faces
-    draw = aggdraw.Draw(img)
+    draw = _aggdraw_context(img)
     for conn in connections:
         conn.draw(draw)
     draw.flush()
@@ -1637,7 +1663,8 @@ def lenet_view(
                 text = bottom_label_callable(layer, rshape)
                 if text:
                     tw, th = _get_multiline_text_size(dtext, str(text), font)
-                    dtext.multiline_text((cx - tw / 2.0, y2 + bottom_pad), str(text), font=font, fill=font_color, spacing=2, align='center')
+                    left, top, _, _ = _get_multiline_text_bbox(dtext, str(text), font)
+                    dtext.multiline_text((cx - tw / 2.0 - left, y2 + bottom_pad - top), str(text), font=font, fill=font_color, spacing=2, align='center')
 
             if top_label:
                 text = top_label_callable(layer, rshape)
@@ -1645,7 +1672,8 @@ def lenet_view(
                     # Account for stack offset: top of visible stack is y1 - offset
                     vis_top = y1 - stack.offset
                     tw, th = _get_multiline_text_size(dtext, str(text), font)
-                    dtext.multiline_text((cx - tw / 2.0, vis_top - th - top_pad), str(text), font=font, fill=font_color, spacing=2, align='center')
+                    left, top, _, _ = _get_multiline_text_bbox(dtext, str(text), font)
+                    dtext.multiline_text((cx - tw / 2.0 - left, vis_top - th - top_pad - top), str(text), font=font, fill=font_color, spacing=2, align='center')
 
     if to_file:
         img.save(to_file)

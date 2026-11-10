@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import aggdraw
@@ -123,6 +124,27 @@ def test_load_face_image_from_object_and_path(tmp_path):
     assert _load_face_image("does-not-exist.png") is None
 
 
+@pytest.mark.parametrize("pathlike", [False, True])
+def test_face_image_cache_refreshes_changed_files_and_keeps_copies(tmp_path, pathlike):
+    path = tmp_path / "changing.png"
+    Image.new("RGBA", (4, 4), "red").save(path)
+    spec = path if pathlike else str(path)
+    first = _load_face_image(spec)
+    assert first is not None
+    first.putpixel((0, 0), (0, 255, 0, 255))
+    second = _load_face_image(spec)
+    assert second.getpixel((0, 0)) == (255, 0, 0, 255)
+    previous_stat = path.stat()
+    Image.new("RGBA", (6, 6), "blue").save(path)
+    # Make the replacement observable even on filesystems with coarse timestamps.
+    os.utime(path, ns=(previous_stat.st_atime_ns, previous_stat.st_mtime_ns + 2_000_000_000))
+    third = _load_face_image(spec)
+    assert third.size == (6, 6)
+    assert third.getpixel((0, 0)) == (0, 0, 255, 255)
+    path.unlink()
+    assert _load_face_image(spec) is None
+
+
 def test_parse_face_image_style():
     style = {
         "face_image": {"path": "/tmp/logo.png", "fit": "contain", "alpha": 180, "inset": 2},
@@ -158,6 +180,22 @@ def test_fit_image_to_rect_modes():
     assert contain.size == (20, 20)
     assert cover.size == (20, 20)
     assert fill.size == (20, 20)
+
+
+@pytest.mark.parametrize("fit", ["fill", "cover", "contain", "match_aspect"])
+@pytest.mark.parametrize("source_mode", ["RGB", "RGBA"])
+def test_face_image_fitting_preserves_source_alpha(fit, source_mode):
+    source = Image.new(source_mode, (4, 2), (255, 0, 0) if source_mode == "RGB" else (255, 0, 0, 128))
+    fitted = _fit_image_to_rect(source, 8, 8, fit=fit, background=(0, 0, 0, 0))
+    assert fitted.mode == "RGBA"
+    assert fitted.getpixel((4, 4)) == ((255, 0, 0, 255) if source_mode == "RGB" else (255, 0, 0, 128))
+
+
+def test_contained_face_image_blends_over_opaque_background():
+    source = Image.new("RGBA", (4, 2), (255, 0, 0, 128))
+    fitted = _fit_image_to_rect(source, 8, 8, fit="contain", background=(255, 255, 255, 255))
+    assert fitted.getpixel((4, 4)) == (255, 127, 127, 255)
+    assert fitted.getpixel((0, 0)) == (255, 255, 255, 255)
 
 
 def test_apply_face_images_with_cache_and_fallback(tmp_path, monkeypatch):
@@ -229,6 +267,18 @@ def test_canonicalize_shape_branches():
 
     rs_none = _canonicalize_shape(plain, None)
     assert rs_none.kind == "vector"
+
+
+@pytest.mark.parametrize("layer_name", ["Conv1D", "MaxPooling1D", "AveragePooling1D"])
+@pytest.mark.parametrize("data_format", ["channels_first", "channels_last"])
+def test_1d_spatial_layers_preserve_channel_order(layer_name, data_format):
+    layer_type = type(layer_name, (), {})
+    layer = layer_type()
+    layer.data_format = data_format
+    shape = (None, 3, 12) if data_format == "channels_first" else (None, 12, 3)
+    rendered = _canonicalize_shape(layer, shape)
+    assert rendered.kind == "spatial"
+    assert (rendered.h, rendered.w, rendered.c) == (1, 12, 3)
 
 
 def test_stack_connection_and_text_helpers():
@@ -406,3 +456,48 @@ def test_lenet_view_face_image_style_and_text_font_fallback(tmp_path, monkeypatc
         styles={"dense_1": {"face_image": str(icon), "face_image_fit": "match_aspect"}},
     )
     assert isinstance(img, Image.Image)
+
+
+@pytest.mark.parametrize("shape", [(), (None,), (4,)])
+def test_scalar_shape_has_one_unit_regardless_of_batch_size(shape):
+    result = _canonicalize_shape(SimpleNamespace(), shape)
+    assert (result.kind, result.c, result.c_dim) == ("vector", 1, 1)
+
+
+@pytest.mark.parametrize("text", ["A\ng", "A\n\ng", "jazz"])
+def test_lenet_multiline_measurement_matches_pillow(text, font_dir):
+    import math
+
+    font = ImageFont.truetype(str(font_dir / "DejaVuSans.ttf"), 24)
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    left, top, right, bottom = draw.multiline_textbbox((0, 0), text, font=font, spacing=2, align="center")
+    assert _get_multiline_text_size(draw, text, font) == (math.ceil(right - left), math.ceil(bottom - top))
+
+
+@pytest.mark.parametrize("background_alpha", [128, 255])
+@pytest.mark.parametrize("face_alpha", [128, 255])
+def test_contained_face_images_blend_over_the_existing_face_once(background_alpha, face_alpha):
+    fill = (0, 0, 255, background_alpha)
+    image = Image.new("RGBA", (16, 16), fill)
+    source = Image.new("RGBA", (8, 4), (255, 0, 0, 128))
+    stack = FeatureMapStack(4, 4, 8, 8, 1, map_spacing=0, max_visual_channels=1, fill=fill, outline="black")
+    style = {"face_image": source, "face_image_fit": "contain", "face_image_alpha": face_alpha,
+             "face_image_inset": 0, "fill": fill}
+    _apply_face_images(image, [{"stack": stack, "style": style}])
+    overlay = Image.new("RGBA", (1, 1), (255, 0, 0, int(128 * face_alpha / 255)))
+    expected = Image.alpha_composite(Image.new("RGBA", (1, 1), fill), overlay).getpixel((0, 0))
+    assert image.getpixel((7, 7)) == expected
+    assert image.getpixel((7, 4)) == fill
+    assert source.getpixel((0, 0)) == (255, 0, 0, 128)
+
+
+@pytest.mark.parametrize("inset, should_paint", [(1, True), (2, False), (3, False), (8, False)])
+def test_face_insets_cannot_paint_an_empty_or_inverted_region(inset, should_paint):
+    image = Image.new("RGBA", (20, 20), "white")
+    source = Image.new("RGBA", (4, 4), "red")
+    stack = FeatureMapStack(3, 3, 4, 4, 1, map_spacing=0, max_visual_channels=1, fill="white", outline="black")
+    before = image.tobytes()
+    _apply_face_images(image, [{"stack": stack, "style": {"face_image": source, "face_image_inset": inset}}])
+    assert (image.tobytes() != before) is should_paint
+    if should_paint:
+        assert image.getpixel((4, 4)) == (255, 0, 0, 255)

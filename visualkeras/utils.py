@@ -34,7 +34,7 @@ def resolve_style(
     """
     final_style = defaults.copy()
     
-    for cls in type(target).__mro__:
+    for cls in reversed(type(target).__mro__):
         if cls in styles:
             final_style.update(styles[cls])
     
@@ -42,6 +42,34 @@ def resolve_style(
         final_style.update(styles[name])
         
     return final_style
+
+
+class _PremultipliedDraw:
+    """Adapt aggdraw's premultiplied buffer to Pillow's straight RGBA pixels."""
+
+    def __init__(self, image):
+        self._image = image
+        self._buffer = Image.frombytes("RGBA", image.size, image.convert("RGBa").tobytes())
+        self._previous = self._buffer.copy()
+        self._draw = aggdraw.Draw(self._buffer)
+
+    def __getattr__(self, name):
+        return getattr(self._draw, name)
+
+    def flush(self):
+        self._draw.flush()
+        changed = np.any(np.asarray(self._buffer) != np.asarray(self._previous), axis=2)
+        if changed.any():
+            straight = Image.frombytes("RGBa", self._buffer.size, self._buffer.tobytes()).convert("RGBA")
+            self._image.paste(straight, (0, 0), Image.fromarray(changed.astype("uint8") * 255))
+            self._previous = self._buffer.copy()
+
+
+def _aggdraw_context(image):
+    # Opaque canvases keep the native path and its exact rasterization.
+    if image.mode != "RGBA" or image.getextrema()[3][0] == 255:
+        return aggdraw.Draw(image)
+    return _PremultipliedDraw(image)
 
 
 class RectShape:
@@ -357,9 +385,9 @@ class ColorWheel:
 
 def fade_color(color: tuple, fade_amount: int) -> tuple:
     """Return ``color`` darkened by ``fade_amount`` while preserving alpha."""
-    r = max(0, color[0] - fade_amount)
-    g = max(0, color[1] - fade_amount)
-    b = max(0, color[2] - fade_amount)
+    r = min(255, max(0, color[0] - fade_amount))
+    g = min(255, max(0, color[1] - fade_amount))
+    b = min(255, max(0, color[2] - fade_amount))
     return r, g, b, color[3]
 
 
@@ -413,9 +441,7 @@ def self_multiply(tensor_tuple: tuple):
         Product of the non-``None`` entries, or ``0`` when no numeric entries
         are available.
     """
-    tensor_list = list(tensor_tuple)
-    if None in tensor_list:
-        tensor_list.remove(None)
+    tensor_list = [dimension for dimension in tensor_tuple if dimension is not None]
     if len(tensor_list) == 0:
         return 0
     s = tensor_list[0]
@@ -442,8 +468,8 @@ def vertical_image_concat(im1: Image, im2: Image, background_fill: Any = 'white'
         Vertically concatenated image.
     """
     dst = Image.new('RGBA', (max(im1.width, im2.width), im1.height + im2.height), background_fill)
-    dst.paste(im1, (0, 0))
-    dst.paste(im2, (0, im1.height))
+    dst.alpha_composite(im1.convert('RGBA'), (0, 0))
+    dst.alpha_composite(im2.convert('RGBA'), (0, im1.height))
     return dst
 
 
@@ -476,14 +502,14 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
         Composite image containing the arranged inputs.
     """
     coords = list()
-    width = 0
-    height = 0
+    width = max(1, 2 * padding)
+    height = max(1, 2 * padding)
 
     x, y = padding, padding
 
     for img in images:
         if horizontal:
-            if max_width != -1 and x + img.width > max_width:
+            if max_width != -1 and x > padding and x + img.width + padding > max_width:
                 # make a new row
                 x = padding
                 y = height - padding + spacing
@@ -494,7 +520,7 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
 
             x += img.width + spacing
         else:
-            if max_height != -1 and y + img.height > max_height:
+            if max_height != -1 and y > padding and y + img.height + padding > max_height:
                 # make a new column
                 x = width - padding + spacing
                 y = padding
@@ -507,7 +533,7 @@ def linear_layout(images: list, max_width: int = -1, max_height: int = -1, horiz
 
     layout = Image.new('RGBA', (width, height), background_fill)
     for img, coord in zip(images, coords):
-        layout.paste(img, coord)
+        layout.alpha_composite(img.convert('RGBA'), coord)
 
     return layout
 
@@ -593,6 +619,10 @@ class Ribbon:
             draw.rectangle([x - w/2, ty, x + w/2, by], pen, brush_front)
 
 
+def _load_node_image(source):
+    return source.convert("RGBA") if isinstance(source, Image.Image) else Image.open(source).convert("RGBA")
+
+
 def resize_image_to_fit(image: Image.Image, target_width: int, target_height: int, fit_mode: str) -> Image.Image:
     """Resize an image to fit a target box using a named fit strategy.
 
@@ -646,6 +676,7 @@ def resize_image_to_fit(image: Image.Image, target_width: int, target_height: in
     else: # "fill"
         pass
         
+    new_w, new_h = max(1, new_w), max(1, new_h)
     resized = image.resize((new_w, new_h), Image.LANCZOS)
     
     # Crop or Center if needed
@@ -715,37 +746,36 @@ def apply_affine_transform(target_img: Image.Image, source_img: Image.Image, qua
     # Calculate bounding box of the quad to determine target size
     xs = [p[0] for p in quad]
     ys = [p[1] for p in quad]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
+    min_x, max_x = math.floor(min(xs)), math.ceil(max(xs))
+    min_y, max_y = math.floor(min(ys)), math.ceil(max(ys))
     w = int(max_x - min_x)
     h = int(max_y - min_y)
     
     if w <= 0 or h <= 0: return
 
     # Let's use the side lengths.
-    side_w = np.hypot(quad[1][0]-quad[0][0], quad[1][1]-quad[0][1])
-    side_h = np.hypot(quad[3][0]-quad[0][0], quad[3][1]-quad[0][1])
+    edge_w = np.subtract(quad[1], quad[0])
+    edge_h = np.subtract(quad[3], quad[0])
+    if np.isclose(edge_w[0] * edge_h[1] - edge_w[1] * edge_h[0], 0):
+        return
+    side_w = np.hypot(*edge_w)
+    side_h = np.hypot(*edge_h)
     
     # Resize source image to match the approximate dimensions of the target face
-    resized_source = resize_image_to_fit(source_img, int(side_w), int(side_h), fit_mode)
+    resized_source = resize_image_to_fit(source_img.convert("RGBA"), int(side_w), int(side_h), fit_mode)
     sw, sh = resized_source.size
     
-    coeffs = _calculate_affine_coeffs(quad, (sw, sh))
-    
-    # Transform
-    # x_global = x_local + min_x
-    # x_source = a*(x_local + min_x) + ...
-    #          = a*x_local + b*y_local + (a*min_x + b*min_y + c)
-    
-    new_c = coeffs[0]*min_x + coeffs[1]*min_y + coeffs[2]
-    new_f = coeffs[3]*min_x + coeffs[4]*min_y + coeffs[5]
-    
-    new_coeffs = (coeffs[0], coeffs[1], new_c, coeffs[3], coeffs[4], new_f)
-    
-    transformed = resized_source.transform((w, h), Image.AFFINE, new_coeffs, resample=Image.BILINEAR)
+    # Local coordinates avoid cancellation at fractional pixel boundaries.
+    local_quad = [(x - min_x, y - min_y) for x, y in quad]
+    coeffs = _calculate_affine_coeffs(local_quad, (sw, sh))
+
+    transformed = resized_source.transform((w, h), Image.AFFINE, coeffs, resample=Image.BILINEAR)
     
     # Paste onto target_img at (min_x, min_y)
-    target_img.paste(transformed, (int(min_x), int(min_y)), transformed)
+    if target_img.mode == "RGBA":
+        target_img.alpha_composite(transformed, (int(min_x), int(min_y)))
+    else:
+        target_img.paste(transformed, (int(min_x), int(min_y)), transformed)
 
 
 def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dict[str, Any], draw_volume: bool, draw_reversed: bool = False):
@@ -820,9 +850,13 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
     if isinstance(size, (float, int)):
          scale = float(size)
          base = min(face_w, face_h)
-         target_w = int(base * scale)
-         if target_w <= 0: target_w = 1
-         target_h = int(target_w * logo_img.height / logo_img.width)
+         edge = max(1, int(base * scale))
+         aspect = logo_img.height / logo_img.width
+         target_w = edge
+         target_h = max(1, int(target_w * aspect))
+         if target_h > edge:
+             target_h = edge
+             target_w = max(1, int(target_h / aspect))
     elif isinstance(size, (tuple, list)):
          target_w, target_h = size
     
@@ -861,6 +895,39 @@ def draw_node_logo(img: Image.Image, box: Box, logo_img: Image.Image, group: Dic
     logo_quad = [tuple(l_p0), tuple(l_p1), tuple(l_p2), tuple(l_p3)]
     
     apply_affine_transform(img, resized_logo, logo_quad, "fill")
+
+
+def _clear_caption_y(bounds, occupied, min_gap=4):
+    """Keep a caption's x position, moving it below intersecting text bounds."""
+    left, top, right, bottom = bounds
+    height = bottom - top
+    for other in sorted(occupied, key=lambda rect: rect[1]):
+        if left < other[2] and right > other[0] and top < other[3] and top + height > other[1]:
+            top = other[3] + min_gap
+    return top
+
+
+def _multiline_bbox(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, spacing: int) -> Tuple[int, int, int, int]:
+    # Prefer PIL's bbox helper (handles glyph bearings correctly)
+    if hasattr(draw, "multiline_textbbox"):
+        return draw.multiline_textbbox((0, 0), text, font=font, spacing=spacing, align="left")
+    # Fallback: union per-line bbox
+    lefts, tops, rights, bottoms = [], [], [], []
+    y = 0
+    for line in text.split("\n"):
+        if hasattr(draw, "textbbox"):
+            l, t, r, b = draw.textbbox((0, y), line, font=font)
+        elif hasattr(draw, "textsize"):
+            w, h = draw.textsize(line, font=font)
+            l, t, r, b = 0, y, w, y + h
+        else:
+            l, t, r, b = font.getbbox(line)
+            t, b = t + y, b + y
+        lefts.append(l); tops.append(t); rights.append(r); bottoms.append(b)
+        y += (b - t) + spacing
+    if not lefts:
+        return (0, 0, 0, 0)
+    return (min(lefts), min(tops), max(rights), max(bottoms))
 
 
 def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], legend_config: Union[bool, Dict[str, Any]], background_fill: Any, font: ImageFont.ImageFont, font_color: Any) -> Image.Image:
@@ -912,7 +979,7 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
         if not name or not path: continue
         
         try:
-            logo_img = Image.open(path)
+            logo_img = _load_node_image(path)
         except:
             continue
             
@@ -921,29 +988,25 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
         icon_size = int(text_height * 2)
         logo_img = resize_image_to_fit(logo_img, icon_size, icon_size, "contain")
         
-        # Measure text
-        if hasattr(font, 'getsize'):
-            text_w, text_h = font.getsize(name)
-        else:
-            bbox = font.getbbox(name)
-            text_w = bbox[2]
-            text_h = bbox[3]
-            
+        measure_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        left, top, right, bottom = _multiline_bbox(measure_draw, name, font, 4)
+        text_w, text_h = math.ceil(right - left), math.ceil(bottom - top)
+
         patch_w = icon_size + spacing + text_w
         patch_h = max(icon_size, text_h)
-        
-        patch = Image.new("RGBA", (patch_w, patch_h), background_fill)
+
+        patch = Image.new("RGBA", (patch_w, patch_h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(patch)
         
         # Paste logo
         # Center vertically
         logo_y = (patch_h - icon_size) // 2
-        patch.paste(logo_img, (0, logo_y), logo_img)
+        patch.alpha_composite(logo_img, (0, logo_y))
         
         # Draw text
-        text_x = icon_size + spacing
-        text_y = (patch_h - text_h) // 2
-        draw.text((text_x, text_y), name, font=font, fill=font_color)
+        text_x = icon_size + spacing - left
+        text_y = (patch_h - text_h) // 2 - top
+        draw.multiline_text((text_x, text_y), name, font=font, fill=font_color)
         
         patches.append(patch)
         
@@ -954,4 +1017,7 @@ def draw_logos_legend(img: Image.Image, logo_groups: Sequence[Dict[str, Any]], l
                                  spacing=spacing,
                                  background_fill=background_fill, horizontal=True)
                                  
-    return vertical_image_concat(img, legend_image, background_fill=background_fill)
+    result = Image.new("RGBA", (max(img.width, legend_image.width), img.height + legend_image.height), background_fill)
+    result.paste(img, (0, 0))
+    result.paste(legend_image, (0, img.height))
+    return result

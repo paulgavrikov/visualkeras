@@ -65,6 +65,33 @@ def test_spacing_dummy_layer_smoke():
     assert layer.spacing == 77
 
 
+def test_spacing_layer_preserves_values_dtype_and_mask():
+    tf = pytest.importorskip("tensorflow")
+    layer = lu.SpacingDummyLayer(spacing=23, name="gap")
+    values = tf.constant([[1.25, 2.5]], dtype=tf.float64)
+    result = layer(values)
+    np.testing.assert_array_equal(result.numpy(), values.numpy())
+    assert result.dtype == values.dtype
+    embedded = tf.keras.layers.Embedding(5, 2, mask_zero=True)(tf.constant([[1, 0]]))
+    masked = layer(embedded)
+    np.testing.assert_array_equal(masked._keras_mask.numpy(), [[True, False]])
+
+
+def test_spacing_layer_survives_model_save_and_load(tmp_path):
+    tf = pytest.importorskip("tensorflow")
+    inputs = tf.keras.Input((3,), name="spacing_input")
+    gap = lu.SpacingDummyLayer(spacing=37, name="saved_gap", trainable=False)
+    model = tf.keras.Model(inputs, gap(inputs))
+    path = tmp_path / "spacing.keras"
+    model.save(path)
+    restored = tf.keras.models.load_model(path)
+    restored_gap = restored.get_layer("saved_gap")
+    assert restored_gap.spacing == 37
+    assert restored_gap.trainable is False
+    values = tf.constant([[1.0, 2.0, 3.0]])
+    np.testing.assert_array_equal(restored(values).numpy(), values.numpy())
+
+
 def test_get_layers_variants_and_error():
     m1 = SimpleNamespace(_layers=[1, 2])
     assert lu.get_layers(m1) == [1, 2]
@@ -74,6 +101,19 @@ def test_get_layers_variants_and_error():
 
     with pytest.raises(RuntimeError):
         lu.get_layers(SimpleNamespace())
+
+
+@pytest.mark.parametrize("attributes", [
+    {"layers": ["first", "second"]},
+    {"_layers": None, "layers": ["first", "second"]},
+    {"_layers": None, "_self_tracked_trackables": ["first", "second"]},
+])
+def test_get_layers_falls_back_from_missing_private_containers(attributes):
+    assert lu.get_layers(SimpleNamespace(**attributes)) == ["first", "second"]
+
+
+def test_get_layers_preserves_an_explicit_empty_container():
+    assert lu.get_layers(SimpleNamespace(_layers=[], layers=["other"])) == []
 
 
 def test_incoming_and_outgoing_layer_helpers():
@@ -88,6 +128,20 @@ def test_incoming_and_outgoing_layer_helpers():
     assert list(lu.get_incoming_layers(b)) == [a]
     assert list(lu.get_incoming_layers(c)) == [a, b]
     assert list(lu.get_outgoing_layers(a)) == [b, c]
+
+
+def test_outgoing_layers_support_mixed_keras_node_apis():
+    a, b, c = _Layer("a"), _Layer("b"), _Layer("c")
+    a._outbound_nodes = [SimpleNamespace(outbound_layer=b), SimpleNamespace(operation=c)]
+    assert list(lu.get_outgoing_layers(a)) == [b, c]
+
+
+def test_outgoing_layers_of_real_keras_input():
+    tf = pytest.importorskip("tensorflow")
+    inputs = tf.keras.Input((3,))
+    dense = tf.keras.layers.Dense(2)
+    model = tf.keras.Model(inputs, dense(inputs))
+    assert list(lu.get_outgoing_layers(model.layers[0])) == [dense]
 
 
 def test_adj_matrix_lookup_and_hierarchy_helpers():
@@ -111,6 +165,82 @@ def test_adj_matrix_lookup_and_hierarchy_helpers():
     assert [layer.name for layer in hierarchy[0]] == ["a"]
     assert [layer.name for layer in hierarchy[1]] == ["b"]
     assert [layer.name for layer in hierarchy[2]] == ["c"]
+
+
+def test_adjacency_excludes_layers_outside_model():
+    model, a, b, c = _build_chain_model()
+    foreign = _Layer("foreign")
+    b._inbound_nodes.insert(0, _OldInboundNode([foreign]))
+    mapping, adjacency = lu.model_to_adj_matrix(model)
+    assert list(mapping) == [id(a), id(b), id(c)]
+    assert adjacency.shape == (3, 3)
+    assert adjacency.sum() == 2
+
+
+def test_reused_layer_connectivity_is_scoped_to_model():
+    tf = pytest.importorskip("tensorflow")
+    first = tf.keras.Input((3,), name="first_input")
+    second = tf.keras.Input((3,), name="second_input")
+    shared = tf.keras.layers.Dense(2, name="shared")
+    tf.keras.Model(first, shared(first))
+    model = tf.keras.Model(second, shared(second))
+    mapping, adjacency = lu.model_to_adj_matrix(model)
+    assert len(mapping) == 2
+    assert adjacency[mapping[id(model.layers[0])], mapping[id(shared)]] == 1
+    assert list(lu.get_incoming_layers(shared, model=model)) == [model.layers[0]]
+
+
+def test_scoping_excludes_old_edges_between_present_layers():
+    tf = pytest.importorskip("tensorflow")
+    inputs = tf.keras.Input((3,), name="scope_input")
+    a = tf.keras.layers.Dense(3, name="scope_a")
+    b = tf.keras.layers.Dense(3, name="scope_b")
+    tf.keras.Model(inputs, a(b(inputs)))
+    model = tf.keras.Model(inputs, b(a(inputs)))
+    mapping, adjacency = lu.model_to_adj_matrix(model)
+    assert adjacency.sum() == 2
+    assert adjacency[mapping[id(b)], mapping[id(a)]] == 0
+    assert adjacency[mapping[id(a)], mapping[id(b)]] == 1
+
+
+def test_sequential_wrapper_uses_its_active_internal_graph():
+    tf = pytest.importorskip("tensorflow")
+    old_input = tf.keras.Input((3,), name="old_input")
+    a = tf.keras.layers.Dense(3, name="reused_a")
+    b = tf.keras.layers.Dense(3, name="reused_b")
+    tf.keras.Model(old_input, a(b(old_input)))
+    model = tf.keras.Sequential([tf.keras.Input((3,), name="new_input"), a, b])
+    mapping, adjacency = lu.model_to_adj_matrix(model)
+    assert adjacency.sum() == 2
+    assert adjacency[mapping[id(b)], mapping[id(a)]] == 0
+    assert list(lu.get_incoming_layers(a, model=model)) == [lu.get_layers(model)[0]]
+    assert [layer for level in lu.model_to_hierarchy_lists(model) for layer in level] == lu.get_layers(model)
+
+
+def test_hierarchy_keeps_every_dependency_in_an_earlier_level():
+    a, b, c, d, merge = [_Layer(name) for name in ["a", "b", "c", "d", "merge"]]
+    model = _Model([a, b, c, d, merge])
+    b._inbound_nodes = [_OldInboundNode([a])]
+    c._inbound_nodes = [_OldInboundNode([a])]
+    d._inbound_nodes = [_OldInboundNode([b])]
+    merge._inbound_nodes = [_OldInboundNode([c, d])]
+    hierarchy = lu.model_to_hierarchy_lists(model)
+    assert [[layer.name for layer in level] for level in hierarchy] == [
+        ["a"], ["b", "c"], ["d"], ["merge"]
+    ]
+
+
+def test_hierarchy_preserves_model_order_for_disconnected_inputs():
+    layers = [_Layer(name) for name in ["first", "second", "third"]]
+    assert lu.model_to_hierarchy_lists(_Model(layers)) == [layers]
+
+
+def test_hierarchy_rejects_cycles_instead_of_returning_partial_graph():
+    a, b, c = [_Layer(name) for name in ["a", "b", "c"]]
+    b._inbound_nodes = [_OldInboundNode([a, c])]
+    c._inbound_nodes = [_OldInboundNode([b])]
+    with pytest.raises(ValueError, match="[Cc]ycle"):
+        lu.model_to_hierarchy_lists(_Model([a, b, c]))
 
 
 def test_find_output_layers_old_and_new_api_paths():
@@ -163,6 +293,27 @@ def test_extract_primary_shape_cases():
         lu.extract_primary_shape(123, "bad")
 
 
+@pytest.mark.parametrize("shape, expected", [
+    ([None, 8], (None, 8)), ([4, 8], (4, 8)),
+    ([None], (None,)), ([5], (5,)), ([[None, 8]], (None, 8)),
+    (((None, 8),), (None, 8)),
+])
+def test_primary_shape_normalizes_single_shapes_without_multioutput_warning(shape, expected):
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert lu.extract_primary_shape(shape) == expected
+    assert not caught
+
+
+def test_primary_shape_accepts_tensor_shape_and_unknown_rank():
+    tf = pytest.importorskip("tensorflow")
+    assert lu.extract_primary_shape(tf.TensorShape([None, 8])) == (None, 8)
+    with pytest.warns(UserWarning, match="unknown rank"):
+        assert lu.extract_primary_shape(tf.TensorShape(None)) == (None, 1)
+
+
 def test_calculate_layer_dimensions_modes_and_fallbacks():
     common = dict(scale_z=1, scale_xy=1, max_z=100, max_xy=200, min_z=5, min_xy=7)
 
@@ -197,6 +348,43 @@ def test_calculate_layer_dimensions_modes_and_fallbacks():
     with pytest.warns(UserWarning, match="Unknown sizing mode"):
         fallback = lu.calculate_layer_dimensions((None, 9), one_dim_orientation="y", sizing_mode="unknown", **common)
     assert fallback == (7, 9, 5)
+
+
+@pytest.mark.parametrize("shape, expected", [
+    ((None, 20, 30, 8), (15, 15, 6)),
+    ((None, 4, 5, 2, 3), (7, 7, 6)),
+])
+def test_capped_dimensions_include_spatial_channels(shape, expected):
+    actual = lu.calculate_layer_dimensions(
+        shape, scale_z=1, scale_xy=1, max_z=100, max_xy=200,
+        min_z=5, min_xy=7, sizing_mode="capped",
+        dimension_caps={"sequence": 15, "channels": 6},
+    )
+    assert actual == expected
+
+
+@pytest.mark.parametrize("integer_type", [np.int32, np.int64])
+@pytest.mark.parametrize("mode", ["accurate", "capped", "balanced", "logarithmic", "relative"])
+def test_numpy_integer_shapes_match_python_integer_shapes(integer_type, mode):
+    common = dict(scale_z=1, scale_xy=1, max_z=500, max_xy=500, min_z=2, min_xy=2, sizing_mode=mode)
+    expected = lu.calculate_layer_dimensions((None, 12, 8, 3), **common)
+    shape = (None, integer_type(12), integer_type(8), integer_type(3))
+    assert lu.calculate_layer_dimensions(shape, **common) == expected
+
+
+@pytest.mark.parametrize("mode", ["accurate", "capped", "balanced", "logarithmic", "relative"])
+def test_symbolic_axes_keep_their_positions_when_sizing(mode):
+    common = dict(scale_z=1, scale_xy=1, max_z=500, max_xy=500, min_z=2, min_xy=2, sizing_mode=mode)
+    shape = (None, None, 12, 3)
+    expected = lu.calculate_layer_dimensions((None, 1, 12, 3), **common)
+    assert lu.calculate_layer_dimensions(shape, **common) == expected
+
+
+@pytest.mark.parametrize("mode", ["accurate", "capped", "balanced", "logarithmic", "relative"])
+def test_high_rank_channel_axes_match_their_flattened_product(mode):
+    common = dict(scale_z=1, scale_xy=1, max_z=500, max_xy=500, min_z=2, min_xy=2, sizing_mode=mode)
+    flattened = lu.calculate_layer_dimensions((None, 4, 5, 80), **common)
+    assert lu.calculate_layer_dimensions((None, 4, 5, 2, 40), **common) == flattened
 
 
 def test_find_input_and_hierarchy_without_precomputed_graph():
@@ -259,3 +447,35 @@ def test_calculate_layer_dimensions_additional_branch_cases():
     # relative scaling with zero dimension exercises proportional floor branch
     rel_zero = lu.calculate_layer_dimensions((None, 0), one_dim_orientation="y", sizing_mode="relative", relative_base_size=3, **common)
     assert rel_zero == (7, 7, 5)
+
+
+def test_spacing_layer_imports_without_tensorflow_or_keras(tmp_path):
+    import os
+    import subprocess
+    from pathlib import Path
+
+    script = """
+import sys
+class NoFrameworks:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in {'tensorflow', 'keras'}:
+            raise ModuleNotFoundError(fullname)
+sys.meta_path.insert(0, NoFrameworks())
+import visualkeras
+print(visualkeras.SpacingDummyLayer(spacing=7).spacing)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=tmp_path, capture_output=True, text=True,
+        env={**os.environ, "PYTHONPATH": str(Path(lu.__file__).resolve().parents[1])}, check=True,
+    )
+    assert result.stdout.strip() == "7"
+
+
+def test_spacing_layer_registration_avoids_custom_object_name_collisions():
+    tf = pytest.importorskip("tensorflow")
+    config = tf.keras.layers.serialize(lu.SpacingDummyLayer(spacing=37, trainable=False))
+    with tf.keras.utils.custom_object_scope({"SpacingDummyLayer": tf.keras.layers.Dense}):
+        restored = tf.keras.layers.deserialize(config)
+    assert isinstance(restored, lu.SpacingDummyLayer)
+    assert restored.spacing == 37
+    assert restored.trainable is False
