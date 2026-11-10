@@ -861,6 +861,24 @@ def functional_view(
                     stacklevel=3,
                 )
 
+    if simple_text_visualization and simple_text_label_mode == "inside":
+        # Boxes are sized from tensor shapes, which is often far too small for
+        # the label drawn inside them. Grow each box so its label fits at the
+        # requested font size, unless the caller pinned an explicit box_size.
+        for node in graph.nodes.values():
+            node_style = node.style or {}
+            if node.kind == "virtual" or not bool(node_style.get("box_text_enabled", True)):
+                continue
+            if isinstance(node_style.get("box_size"), (tuple, list)):
+                continue
+            need_w, need_h = _box_text_required_size(
+                _resolve_box_label(node), node_style, font, text_vspacing,
+            )
+            # Round up to even sizes so box centers land on whole pixels and
+            # straight connectors between neighbouring boxes stay straight.
+            node.width = max(node.width, need_w + need_w % 2)
+            node.height = max(node.height, need_h + need_h % 2)
+
     ranks = _assign_ranks(graph.nodes, graph.edges)
     graph, ranks = _expand_long_edges(graph, ranks, virtual_node_size)
 
@@ -1991,6 +2009,51 @@ def _render_text_image_bbox(text: str, font: ImageFont.ImageFont, color: Any, sp
     return img
 
 
+def _box_text_padding(style: Mapping[str, Any]) -> Tuple[int, int]:
+    """Return the ``(pad_x, pad_y)`` inset used for text drawn inside a box."""
+    pad = style.get("box_text_padding", 8)
+    if isinstance(pad, (tuple, list)) and len(pad) == 2:
+        return int(pad[0]), int(pad[1])
+    return int(pad), int(pad)
+
+
+def _box_text_rotation(style: Mapping[str, Any]) -> int:
+    """Return the in-box text rotation in degrees (0, 90, 180 or 270)."""
+    orientation = str(style.get("box_orientation", "vertical") or "vertical").lower()
+    rot = style.get("box_text_rotation")
+    if rot is None:
+        rot = 90 if orientation == "vertical" else 0
+    try:
+        rot = int(rot) % 360
+    except Exception:
+        return 0
+    return rot if rot in (0, 90, 180, 270) else 0
+
+
+def _box_text_required_size(
+    text: str,
+    style: Mapping[str, Any],
+    fallback_font: Optional[ImageFont.ImageFont],
+    fallback_spacing: int,
+) -> Tuple[int, int]:
+    """Return the box ``(width, height)`` needed to show ``text`` unshrunk.
+
+    Mirrors the measurement in :func:`_draw_box_text_in_rect` (same font,
+    padding, line spacing and rotation) so that a box grown to this size
+    renders its label without wrapping, shrinking or overflowing.
+    """
+    if not text:
+        return 0, 0
+    pad_x, pad_y = _box_text_padding(style)
+    spacing = style.get("box_text_line_spacing", fallback_spacing)
+    spacing = int(fallback_spacing if spacing is None else spacing)
+    font, _, _ = _resolve_box_font(style, fallback_font)
+    text_w, text_h = _render_text_image_bbox(text, font, "black", spacing, margin=2).size
+    if _box_text_rotation(style) in (90, 270):
+        text_w, text_h = text_h, text_w
+    return text_w + 2 * pad_x, text_h + 2 * pad_y
+
+
 def _wrap_text_to_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int, mode: str, max_lines: Optional[int]) -> str:
     mode = (mode or "words").lower()
     if max_lines is not None and max_lines <= 0:
@@ -2052,25 +2115,12 @@ def _draw_box_text_in_rect(
     w = max(1, x2 - x1)
     h = max(1, y2 - y1)
 
-    pad = style.get("box_text_padding", 8)
-    if isinstance(pad, (tuple, list)) and len(pad) == 2:
-        pad_x, pad_y = int(pad[0]), int(pad[1])
-    else:
-        pad_x = pad_y = int(pad)
+    pad_x, pad_y = _box_text_padding(style)
 
     avail_w = max(1, w - 2 * pad_x)
     avail_h = max(1, h - 2 * pad_y)
 
-    orientation = str(style.get("box_orientation", "vertical") or "vertical").lower()
-    rot = style.get("box_text_rotation")
-    if rot is None:
-        rot = 90 if orientation == "vertical" else 0
-    try:
-        rot = int(rot) % 360
-    except Exception:
-        rot = 0
-    if rot not in (0, 90, 180, 270):
-        rot = 0
+    rot = _box_text_rotation(style)
 
     # For 90/270, swap fit constraints pre-rotation
     pre_w, pre_h = (avail_h, avail_w) if rot in (90, 270) else (avail_w, avail_h)
@@ -2515,47 +2565,6 @@ def _render_graph(
                 continue
             max_bottom = max(max_bottom, node.y + node.height + int(extra) + padding)
 
-    group_captions = []
-    if layered_groups:
-        dummy_img = Image.new("RGBA", (1, 1))
-        dummy_draw = ImageDraw.Draw(dummy_img)
-        
-        for group in layered_groups:
-            group_nodes = _get_group_nodes(graph, group)
-            if not group_nodes:
-                continue
-            g_min_x = min(n.x for n in group_nodes)
-            g_max_x = max(n.x + n.width for n in group_nodes)
-            g_min_y = min(n.y for n in group_nodes)
-            g_max_y = max(n.y + n.height for n in group_nodes)
-            
-            g_padding = group.get("padding", 10)
-            g_min_x -= g_padding
-            g_max_x += g_padding
-            g_min_y -= g_padding
-            g_max_y += g_padding
-            
-            stroke = float(group.get("width", 1)) / 2
-            min_left = min(min_left, g_min_x - stroke)
-            min_top = min(min_top, g_min_y - stroke)
-            max_right = max(max_right, g_max_x + padding + stroke)
-            max_bottom = max(max_bottom, g_max_y + padding + stroke)
-            caption = group.get("name", group.get("caption"))
-            if caption:
-                group_font = _get_font(group)
-                text_w, text_h = _measure_text(dummy_draw, caption, group_font)
-                
-                center_x = (g_min_x + g_max_x) / 2
-                text_x = center_x - text_w / 2
-                gap = group.get("text_spacing", 5)
-                text_y = g_max_y + gap
-                
-                min_left = min(min_left, text_x)
-                min_top = min(min_top, text_y)
-                max_right = max(max_right, text_x + text_w + padding)
-                max_bottom = max(max_bottom, text_y + text_h + padding)
-                group_captions.append((group, text_x, text_y, text_w, text_h))
-
     external_labels: List[Dict[str, Any]] = []
     if text_callable is not None:
         external_font = font or ImageFont.load_default()
@@ -2595,6 +2604,7 @@ def _render_graph(
                     "h": int(text_height),
                     "text": text_value,
                     "bbox": (text_left, text_top, text_right, text_bottom),
+                    "node_id": node.node_id,
                 }
             )
 
@@ -2602,6 +2612,39 @@ def _render_graph(
             max_right = max(max_right, text_x + text_right)
             min_top = min(min_top, int(text_y) + text_top)
             max_bottom = max(max_bottom, int(text_y) + text_bottom)
+
+    group_captions = []
+    if layered_groups:
+        dummy_img = Image.new("RGBA", (1, 1))
+        dummy_draw = ImageDraw.Draw(dummy_img)
+        
+        label_rects = _external_label_rects(external_labels)
+        for group in layered_groups:
+            group_nodes = _get_group_nodes(graph, group)
+            if not group_nodes:
+                continue
+            g_min_x, g_min_y, g_max_x, g_max_y = _group_rect(group_nodes, group, label_rects)
+
+            stroke = float(group.get("width", 1)) / 2
+            min_left = min(min_left, g_min_x - stroke)
+            min_top = min(min_top, g_min_y - stroke)
+            max_right = max(max_right, g_max_x + padding + stroke)
+            max_bottom = max(max_bottom, g_max_y + padding + stroke)
+            caption = group.get("name", group.get("caption"))
+            if caption:
+                group_font = _get_font(group)
+                text_w, text_h = _measure_text(dummy_draw, caption, group_font)
+                
+                center_x = (g_min_x + g_max_x) / 2
+                text_x = center_x - text_w / 2
+                gap = group.get("text_spacing", 5)
+                text_y = g_max_y + gap
+                
+                min_left = min(min_left, text_x)
+                min_top = min(min_top, text_y)
+                max_right = max(max_right, text_x + text_w + padding)
+                max_bottom = max(max_bottom, text_y + text_h + padding)
+                group_captions.append((group, text_x, text_y, text_w, text_h))
 
     shift_x = ceil(-min_left)
     shift_y = ceil(-min_top)
@@ -2625,10 +2668,26 @@ def _render_graph(
     occupied_text = [(label["x"] + label["bbox"][0], label["y"] + label["bbox"][1],
                       label["x"] + label["bbox"][2], label["y"] + label["bbox"][3])
                      for label in external_labels]
+    # Final group rectangles use the settled label positions so each group
+    # encloses its members' captions instead of cutting through them.
+    group_rects: Dict[int, Tuple[float, float, float, float]] = {}
+    if layered_groups:
+        label_rects = _external_label_rects(external_labels)
+        for group in layered_groups:
+            group_nodes = _get_group_nodes(graph, group)
+            if not group_nodes:
+                continue
+            rect = _group_rect(group_nodes, group, label_rects)
+            group_rects[id(group)] = rect
+            stroke = float(group.get("width", 1)) / 2
+            max_right = max(max_right, rect[2] + padding + stroke)
+            max_bottom = max(max_bottom, rect[3] + padding + stroke)
+
     group_caption_positions = {}
-    for group, x, y, width, height in group_captions:
-        x += shift_x
-        y += shift_y
+    for group, _, _, width, height in group_captions:
+        g_min_x, _, g_max_x, g_max_y = group_rects[id(group)]
+        x = (g_min_x + g_max_x) / 2 - width / 2
+        y = g_max_y + group.get("text_spacing", 5)
         top = _clear_caption_y((x, y, x + width, y + height), occupied_text)
         group_caption_positions[id(group)] = top
         occupied_text.append((x, top, x + width, top + height))
@@ -2655,7 +2714,7 @@ def _render_graph(
     color_wheel = ColorWheel()
 
     if layered_groups:
-        _draw_group_boxes(draw, graph, layered_groups)
+        _draw_group_boxes(draw, graph, layered_groups, group_rects=group_rects)
 
     _draw_connectors(
         draw,
@@ -2830,7 +2889,8 @@ def _render_graph(
         )
 
     if layered_groups:
-        _draw_group_captions(img, graph, layered_groups, caption_positions=group_caption_positions)
+        _draw_group_captions(img, graph, layered_groups, caption_positions=group_caption_positions,
+                             group_rects=group_rects)
 
     if logos_legend:
         if font is None:
@@ -2954,10 +3014,56 @@ def _get_group_nodes(graph: FunctionalGraph, group: Dict[str, Any]) -> List[Func
     return group_nodes
 
 
+def _external_label_rects(
+    labels: Sequence[Mapping[str, Any]],
+) -> Dict[int, Tuple[float, float, float, float]]:
+    """Map node ids to the union of their external caption bounds."""
+    rects: Dict[int, Tuple[float, float, float, float]] = {}
+    for label in labels:
+        node_id = label.get("node_id")
+        if node_id is None:
+            continue
+        left, top, right, bottom = label["bbox"]
+        rect = (label["x"] + left, label["y"] + top, label["x"] + right, label["y"] + bottom)
+        if node_id in rects:
+            prev = rects[node_id]
+            rect = (min(prev[0], rect[0]), min(prev[1], rect[1]),
+                    max(prev[2], rect[2]), max(prev[3], rect[3]))
+        rects[node_id] = rect
+    return rects
+
+
+def _group_rect(
+    group_nodes: Sequence[FunctionalNode],
+    group: Mapping[str, Any],
+    label_rects: Optional[Mapping[int, Tuple[float, float, float, float]]] = None,
+) -> Tuple[float, float, float, float]:
+    """Return the padded highlight rectangle for one layered group.
+
+    The rectangle covers every member node and, when provided, the external
+    captions of those members, so the group outline never cuts through them.
+    """
+    min_x = min(n.x for n in group_nodes)
+    max_x = max(n.x + n.width for n in group_nodes)
+    min_y = min(n.y for n in group_nodes)
+    max_y = max(n.y + n.height for n in group_nodes)
+    for node in group_nodes:
+        rect = (label_rects or {}).get(node.node_id)
+        if rect is None:
+            continue
+        min_x = min(min_x, rect[0])
+        min_y = min(min_y, rect[1])
+        max_x = max(max_x, rect[2])
+        max_y = max(max_y, rect[3])
+    padding = group.get("padding", 10)
+    return min_x - padding, min_y - padding, max_x + padding, max_y + padding
+
+
 def _draw_group_boxes(
     draw: aggdraw.Draw,
     graph: FunctionalGraph,
     groups: Sequence[Dict[str, Any]],
+    group_rects: Optional[Mapping[int, Tuple[float, float, float, float]]] = None,
 ) -> None:
     """Draw configured group highlight rectangles behind matching nodes.
 
@@ -2965,22 +3071,17 @@ def _draw_group_boxes(
         draw: Aggdraw context for the destination image.
         graph: Positioned graph.
         groups: Group style dictionaries containing layer selectors and colors.
+        group_rects: Optional precomputed rectangles keyed by ``id(group)``.
+            Groups without an entry fall back to their padded node bounds.
     """
     for group in groups:
-        group_nodes = _get_group_nodes(graph, group)
-        if not group_nodes:
-            continue
-
-        min_x = min(n.x for n in group_nodes)
-        max_x = max(n.x + n.width for n in group_nodes)
-        min_y = min(n.y for n in group_nodes)
-        max_y = max(n.y + n.height for n in group_nodes)
-
-        padding = group.get("padding", 10)
-        min_x -= padding
-        max_x += padding
-        min_y -= padding
-        max_y += padding
+        rect = (group_rects or {}).get(id(group))
+        if rect is None:
+            group_nodes = _get_group_nodes(graph, group)
+            if not group_nodes:
+                continue
+            rect = _group_rect(group_nodes, group)
+        min_x, min_y, max_x, max_y = rect
 
         fill = group.get("fill", (200, 200, 200, 100)) 
         outline = group.get("outline", "black")
@@ -3000,6 +3101,7 @@ def _draw_group_captions(
     graph: FunctionalGraph,
     groups: Sequence[Dict[str, Any]],
     caption_positions: Optional[Mapping[int, float]] = None,
+    group_rects: Optional[Mapping[int, Tuple[float, float, float, float]]] = None,
 ) -> None:
     """Draw text captions for configured layer groups.
 
@@ -3009,26 +3111,22 @@ def _draw_group_captions(
         img: Destination image.
         graph: Positioned graph.
         groups: Group configuration dictionaries.
+        caption_positions: Optional caption top coordinates keyed by ``id(group)``.
+        group_rects: Optional precomputed rectangles keyed by ``id(group)``.
     """
     draw = ImageDraw.Draw(img)
     for group in groups:
         caption = group.get("name", group.get("caption"))
         if not caption:
             continue
-            
-        group_nodes = _get_group_nodes(graph, group)
-        if not group_nodes:
-            continue
 
-        min_x = min(n.x for n in group_nodes)
-        max_x = max(n.x + n.width for n in group_nodes)
-        min_y = min(n.y for n in group_nodes)
-        max_y = max(n.y + n.height for n in group_nodes)
-        
-        padding = group.get("padding", 10)
-        box_min_x = min_x - padding
-        box_max_x = max_x + padding
-        box_max_y = max_y + padding
+        rect = (group_rects or {}).get(id(group))
+        if rect is None:
+            group_nodes = _get_group_nodes(graph, group)
+            if not group_nodes:
+                continue
+            rect = _group_rect(group_nodes, group)
+        box_min_x, _, box_max_x, box_max_y = rect
 
         font = _get_font(group)
         color = group.get("font_color", "black")

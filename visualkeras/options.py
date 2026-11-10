@@ -365,14 +365,26 @@ class LenetOptions:
 # ---------------------------------------------------------------------------
 
 LAYERED_PRESETS: Dict[str, LayeredOptions] = {
+    # Mirrors the function defaults used across the README's quick-start.
     "default": LayeredOptions(),
+    # Tighter spacing for dense figures (added in 0.3.0).
     "compact": LayeredOptions(spacing=6, padding=6, connector_width=1),
+    # Matches the "flat style" example showcased in the documentation.
+    # Kept identical to v0.2.0 for backward compatibility.
+    "flat": LayeredOptions(draw_volume=False, draw_funnel=False, shade_step=0),
+    # Emphasizes clean spacing and 2D presentation for print-ready figures.
+    # Kept identical to v0.2.0 for backward compatibility.
     "presentation": LayeredOptions(
-        spacing=18,
-        padding=20,
-        connector_width=2,
-        text_callable=LAYERED_TEXT_CALLABLES["name_shape"],
+        draw_volume=False,
+        draw_funnel=True,
+        spacing=40,
+        padding=30,
+        scale_xy=2.5,
+        scale_z=1.0,
         legend=True,
+        show_dimension=True,
+        sizing_mode="balanced",
+        text_callable=LAYERED_TEXT_CALLABLES["name_shape"],
     ),
 }
 """Curated presets for layered renderings keyed by human-friendly names."""
