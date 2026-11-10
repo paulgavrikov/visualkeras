@@ -295,7 +295,11 @@ def test_presets_are_not_empty(preset_dict):
     [LAYERED_PRESETS, GRAPH_PRESETS, FUNCTIONAL_PRESETS, LENET_PRESETS],
 )
 def test_presets_have_expected_names(preset_dict):
-    assert set(preset_dict.keys()) == {"default", "compact", "presentation"}
+    expected = {"default", "compact", "presentation"}
+    if preset_dict is LAYERED_PRESETS:
+        # "flat" shipped in v0.2.0 and is kept for backward compatibility.
+        expected = expected | {"flat"}
+    assert set(preset_dict.keys()) == expected
 
 
 @pytest.mark.parametrize(

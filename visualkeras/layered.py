@@ -570,7 +570,7 @@ def layered_view(model,
         easier to read than passing many keyword arguments inline.
     preset : str, optional
         Name of a preset from ``visualkeras.LAYERED_PRESETS``. Layered mode
-        currently provides ``default``, ``compact``, and ``presentation``.
+        currently provides ``default``, ``compact``, ``flat``, and ``presentation``.
 
         Presets are useful starting points rather than strict modes. They can be
         combined with ``options`` and explicit overrides when you want the
@@ -874,6 +874,10 @@ def layered_view(model,
     if color_map is None:
         color_map = dict()
 
+    # Per-class colors shown in the legend (kept separate from ``color_map``).
+    legend_colors = {}
+    legend_from_named = {}
+
     # Pre-process groups to map layers to their groups
     layer_to_groups = {}
     if layered_groups:
@@ -1053,8 +1057,15 @@ def layered_view(model,
         box.outline = style.get('outline', 'black')
         box.shade = style.get('shade_step', shade_step)
         
-        # Update the color_map so the legend reflects this layer's appearance
-        color_map[layer_type] = {'fill': box.fill, 'outline': box.outline}
+        # Record this class's appearance for the legend. This must not be
+        # written back into ``color_map``: that mapping feeds the per-class
+        # defaults above, so a name-keyed style would otherwise bleed into
+        # every later layer of the same class (and into the caller's dict).
+        # Prefer a layer without a name-keyed override as the class exemplar.
+        named_override = layer_name in styles
+        if layer_type not in legend_colors or (legend_from_named[layer_type] and not named_override):
+            legend_colors[layer_type] = {'fill': box.fill, 'outline': box.outline}
+            legend_from_named[layer_type] = named_override
 
         box.de = 0
         if draw_volume and index not in index_2D:
@@ -1107,8 +1118,10 @@ def layered_view(model,
             visual_x1 += box.de
             visual_x2 += box.de
 
-        min_scene_x = min(min_scene_x, visual_x1)
-        max_scene_x = max(max_scene_x, visual_x2)
+        # Include the receding back face: it extends ``de`` to the left in
+        # reversed mode and ``de`` to the right otherwise.
+        min_scene_x = min(min_scene_x, visual_x1 - (box.de if draw_reversed else 0))
+        max_scene_x = max(max_scene_x, visual_x2 + (0 if draw_reversed else box.de))
 
     external_labels = []
     external_label_bounds = []
@@ -1152,8 +1165,12 @@ def layered_view(model,
                 max_top_extent = max(max_top_extent, layer_y[box_idx] / 2 + text_h, -top)
             else:
                 max_bottom_extent = max(max_bottom_extent, layer_y[box_idx] / 2 + text_h, bottom)
-            min_scene_x = min(min_scene_x, x + dx, left)
-            max_scene_x = max(max_scene_x, x + dx + text_w, right, box.x2 + dx)
+            # Boxes may have been shifted right to clear labels, so re-include
+            # their full extent (front face plus receding back face).
+            box_left = box.x1 + dx - (box.de if draw_reversed else 0)
+            box_right = box.x2 + dx + (0 if draw_reversed else box.de)
+            min_scene_x = min(min_scene_x, x + dx, left, box_left)
+            max_scene_x = max(max_scene_x, x + dx + text_w, right, box_right)
 
     group_caption_positions = {}
     occupied_text = list(external_label_bounds)
@@ -1507,8 +1524,8 @@ def layered_view(model,
             box.y2 = box.y1 + cube_size
             box.de = de
             box.shade = shade_step
-            box.fill = color_map.get(layer_type, {}).get('fill', "#000000")
-            box.outline = color_map.get(layer_type, {}).get('outline', "#000000")
+            box.fill = legend_colors.get(layer_type, {}).get('fill', "#000000")
+            box.outline = legend_colors.get(layer_type, {}).get('outline', "#000000")
             box.draw(draw_box, draw_reversed)
 
             text_x = box.x2 + box.de + spacing
