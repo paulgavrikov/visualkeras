@@ -77,7 +77,7 @@ img = visualkeras.show(
 
 ## Examples
 
-We provide basic examples here. Explamples with various options and customizations are covered in the documentation: <https://visualkeras.readthedocs.io/>.
+We provide basic examples here. Explamples with various options and customizations are covered in **the documentation**: <https://visualkeras.readthedocs.io/>.
 
 ### Layered view
 
