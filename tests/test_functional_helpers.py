@@ -1338,11 +1338,11 @@ def test_get_logo_nodes_empty_and_name_type_maps():
 
 
 @pytest.mark.parametrize("font_size", [18, 26])
-def test_box_text_keeps_smallest_font_when_no_size_fits(font_size):
+def test_box_text_keeps_smallest_font_when_no_size_fits(font_size, font_dir):
     image = Image.new("RGBA", (64, 32), "white")
     expected = Image.new("RGBA", image.size, "white")
     style = {
-        "box_text_font": "DejaVuSans.ttf", "box_text_font_size": font_size,
+        "box_text_font": str(font_dir / "DejaVuSans.ttf"), "box_text_font_size": font_size,
         "box_text_min_font_size": 8, "box_text_padding": 1,
         "box_text_wrap": "none", "box_text_rotation": 0,
     }
@@ -1390,8 +1390,8 @@ def test_box_wrapping_preserves_explicit_paragraphs(mode, text, max_lines, expec
 
 @pytest.mark.parametrize("in_memory", [False, True])
 @pytest.mark.parametrize("as_fallback", [False, True])
-def test_box_autoshrink_accepts_font_objects(in_memory, as_fallback):
-    font = ImageFont.load_default(size=26) if in_memory else ImageFont.truetype("DejaVuSans.ttf", 26)
+def test_box_autoshrink_accepts_font_objects(in_memory, as_fallback, font_dir):
+    font = ImageFont.load_default(size=26) if in_memory else ImageFont.truetype(str(font_dir / "DejaVuSans.ttf"), 26)
     image = Image.new("RGBA", (360, 80), "white")
     reference = Image.new("RGBA", image.size, "white")
     style = {"box_text_rotation": 0, "box_text_padding": 0, "box_text_wrap": "none",
@@ -1413,10 +1413,10 @@ def test_box_autoshrink_accepts_font_objects(in_memory, as_fallback):
 
 
 @pytest.mark.parametrize("resolver", ["box", "annotation"])
-def test_font_path_objects_preserve_requested_family(resolver):
+def test_font_path_objects_preserve_requested_family(resolver, font_dir):
     from pathlib import Path
 
-    requested = ImageFont.truetype("DejaVuSansMono.ttf", 24)
+    requested = ImageFont.truetype(str(font_dir / "DejaVuSansMono.ttf"), 24)
     path = Path(requested.path)
     if resolver == "box":
         font, _, _ = functional._resolve_box_font({"box_text_font": path, "box_text_font_size": 24}, None)
@@ -1471,10 +1471,10 @@ def test_box_line_limits_apply_without_automatic_wrapping(mode, width, limit, ex
 
 @pytest.mark.parametrize("text", ["j\nMMMMMM", "ffff\nj", "W\njjjjj"])
 @pytest.mark.parametrize("margin", [0, 2])
-def test_centered_text_image_uses_alignment_aware_bounds(text, margin):
+def test_centered_text_image_uses_alignment_aware_bounds(text, margin, font_dir):
     import math
 
-    font = ImageFont.truetype("DejaVuSans-Oblique.ttf", 36)
+    font = ImageFont.truetype(str(font_dir / "DejaVuSans-Oblique.ttf"), 36)
     image = functional._render_text_image_bbox(text, font, "black", 2, margin=margin)
     draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     left, top, right, bottom = draw.multiline_textbbox((0, 0), text, font=font, spacing=2, align="center")

@@ -420,12 +420,12 @@ def test_logo_legend_preserves_base_pixels_and_composites_background_once(tmp_pa
 
 
 @pytest.mark.parametrize("label", ["jazz", "j\n\ng"])
-def test_logo_legend_preserves_complete_label_glyphs(tmp_path, label):
+def test_logo_legend_preserves_complete_label_glyphs(tmp_path, label, font_dir):
     from PIL import ImageDraw
 
     icon = tmp_path / "logo.png"
     Image.new("RGBA", (12, 12), "blue").save(icon)
-    font = ImageFont.truetype("DejaVuSans-Oblique.ttf", 24)
+    font = ImageFont.truetype(str(font_dir / "DejaVuSans-Oblique.ttf"), 24)
     image = utils.draw_logos_legend(Image.new("RGBA", (160, 10), "white"), [{"name": label, "file": str(icon)}], {"padding": 4, "spacing": 5}, "white", font, "magenta")
     reference = Image.new("RGBA", (160, 160), "white")
     ImageDraw.Draw(reference).multiline_text((10, 10), label, font=font, fill="magenta")
@@ -478,7 +478,7 @@ def test_half_pixel_affine_strips_remain_straight(mode, origin, vertical):
 
 
 @pytest.mark.parametrize("image_mode", ["RGB", "RGBA"])
-def test_logo_legend_accepts_pil_images_without_mutation(tmp_path, image_mode):
+def test_logo_legend_accepts_pil_images_without_mutation(tmp_path, image_mode, font_dir):
     base = Image.new("RGBA", (180, 50), (10, 20, 30, 128))
     before_base = base.tobytes()
     logo = Image.new(image_mode, (16, 10), (210, 20, 40) if image_mode == "RGB" else (210, 20, 40, 128))
@@ -486,7 +486,7 @@ def test_logo_legend_accepts_pil_images_without_mutation(tmp_path, image_mode):
     path = tmp_path / "legend-logo.png"
     logo.save(path)
     group = {"name": "Logo\nname", "file": logo}
-    font = ImageFont.truetype("DejaVuSans.ttf", 18)
+    font = ImageFont.truetype(str(font_dir / "DejaVuSans.ttf"), 18)
     image = utils.draw_logos_legend(base, [group], True, "white", font, "black")
     reference = utils.draw_logos_legend(base, [{**group, "file": path}], True, "white", font, "black")
     assert image.size == reference.size

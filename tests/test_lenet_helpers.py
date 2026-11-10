@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import aggdraw
@@ -133,7 +134,10 @@ def test_face_image_cache_refreshes_changed_files_and_keeps_copies(tmp_path, pat
     first.putpixel((0, 0), (0, 255, 0, 255))
     second = _load_face_image(spec)
     assert second.getpixel((0, 0)) == (255, 0, 0, 255)
+    previous_stat = path.stat()
     Image.new("RGBA", (6, 6), "blue").save(path)
+    # Make the replacement observable even on filesystems with coarse timestamps.
+    os.utime(path, ns=(previous_stat.st_atime_ns, previous_stat.st_mtime_ns + 2_000_000_000))
     third = _load_face_image(spec)
     assert third.size == (6, 6)
     assert third.getpixel((0, 0)) == (0, 0, 255, 255)
@@ -461,10 +465,10 @@ def test_scalar_shape_has_one_unit_regardless_of_batch_size(shape):
 
 
 @pytest.mark.parametrize("text", ["A\ng", "A\n\ng", "jazz"])
-def test_lenet_multiline_measurement_matches_pillow(text):
+def test_lenet_multiline_measurement_matches_pillow(text, font_dir):
     import math
 
-    font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    font = ImageFont.truetype(str(font_dir / "DejaVuSans.ttf"), 24)
     draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     left, top, right, bottom = draw.multiline_textbbox((0, 0), text, font=font, spacing=2, align="center")
     assert _get_multiline_text_size(draw, text, font) == (math.ceil(right - left), math.ceil(bottom - top))

@@ -1,5 +1,6 @@
 pytest>=7.0
 pytest-cov>=5.0
+setuptools
 black>=24.0
 ruff>=0.5
 isort>=5.12
