@@ -37,7 +37,6 @@ Explore Examples
    - Inception-style modules
 
 **Custom Models** - Advanced and specialized patterns
-   - Subclassed models
    - Models with custom layers
    - Hybrid architectures
 

@@ -1,17 +1,18 @@
 # Configuration file for the Sphinx documentation builder.
 
-import os
 import sys
+from pathlib import Path
+from runpy import run_path
 
 # Add the parent directory to the path so we can import visualkeras
-sys.path.insert(0, os.path.abspath('../../'))
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root))
 
 # Project information
 project = 'visualkeras'
 copyright = '2020-2024, Paul Gavrikov'
 author = 'Paul Gavrikov'
-version = '0.2.0'
-release = '0.2.0'
+version = release = run_path(str(project_root / 'visualkeras' / '_version.py'))['__version__']
 
 # General configuration
 extensions = [

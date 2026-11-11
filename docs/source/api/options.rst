@@ -53,13 +53,16 @@ Instead of passing many individual parameters, you can use options objects for c
 Available Presets
 =================
 
-All renderers include three curated presets:
+All renderers include these presets:
 
 **'default'** - Balanced defaults for general use
 
 **'compact'** - Minimal spacing for tight layouts
 
 **'presentation'** - Large, detailed output for publications and talks
+
+Layered view also includes ``'flat'`` for 2D boxes without funnels or shading.
+Its ``'presentation'`` preset uses 2D boxes with a dimension legend.
 
 .. code-block:: python
 

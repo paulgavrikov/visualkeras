@@ -56,12 +56,13 @@ For more control, bundle related settings with ``LayeredOptions``:
 
 .. code-block:: python
 
-    from visualkeras.options import LayeredOptions, LAYERED_PRESETS
+    from dataclasses import replace
+    from visualkeras.options import LAYERED_PRESETS
     import visualkeras
 
     # Use preset as base, then customize
-    my_options = LayeredOptions(
-        **LAYERED_PRESETS['presentation'].__dict__,  # Start with presentation preset
+    my_options = replace(
+        LAYERED_PRESETS['presentation'],
         one_dim_orientation='x',  # Customize: orientation for 1D layers
     )
 

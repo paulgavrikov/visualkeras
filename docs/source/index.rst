@@ -12,17 +12,17 @@ visualkeras
    :alt: Download Count
    :target: https://pypi.python.org/pypi/visualkeras
 
-.. image:: https://img.shields.io/badge/tests-170%2F170%20passed%20(100%25)-brightgreen
-   :alt: Test Pass Rate
-
-.. image:: https://img.shields.io/badge/coverage-95.09%25-brightgreen
-   :alt: Coverage
+.. image:: https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml/badge.svg
+   :alt: CI
+   :target: https://github.com/paulgavrikov/visualkeras/actions/workflows/ci.yaml
 
 .. raw:: html
 
    <br><br>
 
 visualkeras is a Python package to help visualize Keras (either standalone or included in TensorFlow) neural network architectures. It provides a unified, high-level API for creating publication-quality visualizations of your models.
+
+`Release notes <https://github.com/paulgavrikov/visualkeras/blob/master/changelog/CHANGELOG.md>`_
 
 Key Features
 ============

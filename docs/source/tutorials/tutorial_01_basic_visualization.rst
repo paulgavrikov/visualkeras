@@ -36,7 +36,7 @@ visualkeras provides **four visualization modes**, all accessed through the unif
 
 **mode='graph'** — Computational graph
     - Shows model as a connected graph
-    - Works with any model type (Sequential, Functional, Subclassed)
+    - Shows layer connections in built Sequential and Functional models
     - Clear visualization of connections and branching
     - Best for complex models with multiple paths
 
@@ -112,7 +112,7 @@ When to Use Each Mode
     - Working with complex models with many branches
     - Have skip connections or parallel layers
     - Want the most compact representation
-    - Visualizing Functional or Subclassed models
+    - Visualizing Functional models
 
 **Use Functional** when:
     - Have a CNN with non-sequential elements (skip connections)

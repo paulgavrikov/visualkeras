@@ -196,11 +196,12 @@ Fine-tune your functional visualization with mode-specific options:
 
 .. code-block:: python
 
-    from visualkeras.options import FunctionalOptions, FUNCTIONAL_PRESETS
+    from dataclasses import replace
+    from visualkeras.options import FUNCTIONAL_PRESETS
 
     # Use presentation preset and customize
-    options = FunctionalOptions(
-        **FUNCTIONAL_PRESETS['presentation'].__dict__,
+    options = replace(
+        FUNCTIONAL_PRESETS['presentation'],
         column_spacing=100,       # Space between columns
         row_spacing=60,           # Space between rows
         sizing_mode='balanced',   # Better size distribution

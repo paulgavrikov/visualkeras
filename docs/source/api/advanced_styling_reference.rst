@@ -49,15 +49,13 @@ Groups are defined via the ``layered_groups`` parameter in ``LayeredOptions``:
         layered_groups=[
             {
                 'name': 'Feature Extraction',
-                'type': 'block',
-                'indices': [0, 1, 2, 3],  # Layer indices to group
+                'layers': list(model.layers[:4]),
                 'fill': '#e8f4f8',         # Background color
                 'outline': '#4a90e2',      # Border color
             },
             {
                 'name': 'Classification',
-                'type': 'block',
-                'indices': [4, 5, 6],
+                'layers': list(model.layers[4:]),
                 'fill': '#f8e8e8',         # Different color
                 'outline': '#e24a4a',
             }
@@ -75,17 +73,22 @@ Each group definition is a dictionary with:
 ============== ========== ===================================================================================================
 Parameter      Type       Description
 ============== ========== ===================================================================================================
-``name``       str        Label for the group (displayed above the block)
-``type``       str        Must be ``'block'`` (groups consecutive layers into a visual block)
-``indices``    list/tuple Layer indices to include in the group (0-indexed from model.layers)
+``name``       str        Label for the group (displayed below the block)
+``layers``     list/tuple Layer names, layer objects, or layer classes to include
 ``fill``       color      Background fill color (hex string like ``'#e8f4f8'`` or CSS color name)
 ``outline``    color      Border color around the group
 ============== ========== ===================================================================================================
+
+Each group draws one enclosing rectangle. If selected layers are separated,
+the rectangle also spans the layers between them.
 
 Practical Example: ResNet-style Model
 --------------------------------------
 
 .. code-block:: python
+
+    from dataclasses import replace
+    from visualkeras.options import LAYERED_PRESETS
 
     model = keras.Sequential([
         # Input/preprocessing layers
@@ -108,33 +111,31 @@ Practical Example: ResNet-style Model
         keras.layers.Dense(10, activation='softmax'),
     ])
 
-    options = LayeredOptions(
+    options = replace(
+        LAYERED_PRESETS['presentation'],
         layered_groups=[
             {
                 'name': 'Input & Preprocessing',
-                'type': 'block',
-                'indices': [0, 1, 2, 3, 4],
+                'layers': list(model.layers[:4]),
                 'fill': '#e3f2fd',      # Blue
                 'outline': '#1976d2',
             },
             {
                 'name': 'Feature Extraction',
-                'type': 'block',
-                'indices': [5, 6, 7, 8],
+                'layers': list(model.layers[4:8]),
                 'fill': '#f3e5f5',      # Purple
                 'outline': '#7b1fa2',
             },
             {
                 'name': 'Classification Head',
-                'type': 'block',
-                'indices': [9, 10, 11, 12],
+                'layers': list(model.layers[8:]),
                 'fill': '#e8f5e9',      # Green
                 'outline': '#388e3c',
             }
         ]
     )
 
-    image = visualkeras.show(model, mode='layered', options=options, preset='presentation')
+    image = visualkeras.show(model, mode='layered', options=options)
     image.show()
 
 Logos and Branding (logo_groups, logos_legend)
@@ -160,14 +161,17 @@ Define logos via the ``logo_groups`` and ``logos_legend`` parameters:
 .. code-block:: python
 
     from visualkeras.options import LayeredOptions
-    
+    from PIL import Image
+
+    logo = Image.new('RGBA', (32, 32), 'navy')
     options = LayeredOptions(
         logo_groups=[
             {
-                'indices': [0, 1, 2],      # Layers to label
-                'fill': '#3498db',         # Color
-                'outline': '#2980b9',      # Border
-                'text': 'Conv Block 1',    # Logo/label text
+                'file': logo,             # Image object or file path
+                'layers': list(model.layers[:3]),
+                'name': 'Conv Block 1',    # Legend label
+                'corner': 'top-right',
+                'size': 0.5,              # Fraction of the layer face
             }
         ],
         logos_legend=True  # Show legend explaining logos
@@ -182,11 +186,11 @@ Logo Parameter Details
 ============== ============ ============================================================================================================================
 Parameter      Type         Description
 ============== ============ ============================================================================================================================
-``text``       str          Text label for the logo
-``indices``    list/tuple   Layer indices to apply this logo to
-``fill``       color        Background color for logo
-``outline``    color        Border color for logo
-``positions``  str          When to show: ``'top'``, ``'bottom'``, ``'above'``, ``'below'`` (depends on context)
+``file``       path/image   Image path or ``PIL.Image`` object
+``layers``     list/tuple   Layer names, objects, or classes to apply this logo to
+``name``       str          Label in the logo legend
+``corner``     str          ``'top-left'``, ``'top-right'``, ``'bottom-left'``, ``'bottom-right'``, or ``'center'``
+``size``       float/tuple  Fraction of the layer face, or a ``(width, height)`` size in pixels
 ============== ============ ============================================================================================================================
 
 ``logos_legend`` can be:
@@ -219,11 +223,11 @@ Styles are passed via the ``styles`` parameter in LayeredOptions:
     import visualkeras
 
     styles = {
-        0: {                              # Layer 0 (by index)
+        model.layers[0].name: {            # First layer, selected by name
             'fill': '#1f77b4',
             'outline': '#0d47a1',
         },
-        'conv_1': {                       # Layer by name
+        model.layers[4].name: {            # Another layer, selected by name
             'fill': '#ff7f0e',
             'outline': '#d84315',
         },
@@ -255,12 +259,9 @@ Available style parameters per layer:
    * - ``outline``
      - color
      - Layer border color
-   * - ``line_width``
+   * - ``line_width`` (LeNet)
      - int
      - Border thickness in pixels
-   * - ``text``
-     - str
-     - Custom text to display in or for the layer
 
 Image Embedding (face_image)
 =============================
@@ -285,7 +286,7 @@ Basic Syntax (LeNet Mode)
     from visualkeras.options import LenetOptions
     
     styles = {
-        0: {           # Layer 0
+        model.layers[0].name: {  # First layer, selected by name
             'face_image': '/path/to/kernel_viz.png',
             'face_image_fit': 'cover',   # How to fit image
             'face_image_alpha': 200,     # Transparency (0-255)
@@ -312,7 +313,7 @@ Image Options Reference
      - Path to an image file or a ``PIL.Image`` object
    * - ``face_image_fit``
      - str
-     - Fit mode: ``'cover'``, ``'contain'``, ``'fill'``, or ``'match_aspect'``
+     - Fit mode: ``'cover'``, ``'contain'``, ``'fill'``, ``'stretch'``, or ``'scale-down'``
    * - ``face_image_alpha``
      - int
      - Transparency from 0 (transparent) to 255 (opaque)
@@ -344,7 +345,7 @@ These options control global image behavior in layered mode:
     from visualkeras.options import LayeredOptions
     
     options = LayeredOptions(
-        image_axis='z',      # Which axis represents image depth (batch processing)
+        image_axis='z',      # Layer face used for the image
         image_fit='fill',    # How to fit images in layer blocks
     )
 
@@ -427,22 +428,20 @@ LeNet mode has special label callables:
 
 .. code-block:: python
 
-    from visualkeras.options import LenetOptions
-    
     def top_info(layer, render_shape):
         """Text above each layer"""
-        return f"{render_shape.dH}×{render_shape.dW}×{render_shape.dZ}"  # h x w x channels
+        return f"{render_shape.h}x{render_shape.w}x{render_shape.c}"
     
     def bottom_info(layer, render_shape):
         """Text below each layer"""
         return layer.__class__.__name__
     
-    options = LenetOptions(
+    image = visualkeras.show(
+        model,
+        mode='lenet',
         top_label_callable=top_info,
         bottom_label_callable=bottom_info,
     )
-    
-    image = visualkeras.show(model, mode='lenet', options=options)
     image.show()
 
 RenderShape Properties (for LeNet)
@@ -456,30 +455,30 @@ When using label callables in LeNet mode, the ``RenderShape`` object provides:
 
    * - Attr
      - Description
-   * - ``dH``
-     - Height of the feature-map visualization in pixels
-   * - ``dW``
-     - Width of the feature-map visualization in pixels
-   * - ``dZ``
+   * - ``h``
+     - Feature-map height before scaling to pixels
+   * - ``w``
+     - Feature-map width before scaling to pixels
+   * - ``c``
      - Number of channels (depth)
 
 Dimension Display Options
 ==========================
 
-Control how tensor dimensions are shown.
+Show tensor dimensions in the legend and control rendered layer sizes.
 
 ShowDimension
 --------------
 
-Enable dimension display on layers:
+Include tensor dimensions in the legend:
 
 .. code-block:: python
 
     from visualkeras.options import LayeredOptions
     
     options = LayeredOptions(
-        show_dimension=True,      # Show tensor shapes on layers
-        dimension_caps=None,      # Custom dimension display
+        legend=True,
+        show_dimension=True,
     )
     
     image = visualkeras.show(model, mode='layered', options=options)
@@ -488,18 +487,22 @@ Enable dimension display on layers:
 DimensionCaps
 ---------------
 
-Limit dimension display formatting:
+Limit rendered sizes with ``sizing_mode='capped'``. These caps do not change
+the dimension text:
 
 .. code-block:: python
 
     options = LayeredOptions(
-        show_dimension=True,
+        sizing_mode='capped',
         dimension_caps={
-            'max_width': 100,     # Max characters for width display
-            'max_height': 100,    # Max characters for height display
-            'decimal_places': 2,  # Decimal precision
+            'channels': 60,
+            'sequence': 100,
+            'general': 100,
         }
     )
+
+    image = visualkeras.show(model, mode='layered', options=options)
+    image.show()
 
 SizingMode Strategies
 =======================
@@ -519,6 +522,8 @@ Available Modes
      - Use actual tensor dimensions (default and most precise)
    * - ``'balanced'``
      - Balance readability with accuracy
+   * - ``'capped'``
+     - Limit rendered sizes using ``dimension_caps``
    * - ``'logarithmic'``
      - Use logarithmic scaling to handle a large range of sizes
    * - ``'relative'``
@@ -547,11 +552,13 @@ Combining multiple advanced features:
 
 .. code-block:: python
 
-    from visualkeras.options import LayeredOptions, LAYERED_TEXT_CALLABLES
+    from dataclasses import replace
+    from visualkeras.options import LAYERED_PRESETS, LAYERED_TEXT_CALLABLES
     import visualkeras
 
     # Define advanced options
-    options = LayeredOptions(
+    options = replace(
+        LAYERED_PRESETS['presentation'],
         # Layout
         spacing=20,
         padding=30,
@@ -564,15 +571,13 @@ Combining multiple advanced features:
         layered_groups=[
             {
                 'name': 'Feature Extraction',
-                'type': 'block',
-                'indices': [0, 1, 2, 3],
+                'layers': list(model.layers[:8]),
                 'fill': '#e3f2fd',
                 'outline': '#1976d2',
             },
             {
                 'name': 'Dense Classifier',
-                'type': 'block',
-                'indices': [4, 5, 6],
+                'layers': list(model.layers[8:]),
                 'fill': '#e8f5e9',
                 'outline': '#388e3c',
             }
@@ -593,14 +598,12 @@ Combining multiple advanced features:
         
         # Legends
         legend=True,
-        logos_legend=True,
     )
 
     image = visualkeras.show(
         model,
         mode='layered',
         options=options,
-        preset='presentation'
     )
     image.save('advanced_diagram.png')
 

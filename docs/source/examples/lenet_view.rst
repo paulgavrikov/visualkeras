@@ -161,54 +161,52 @@ Control what text appears above and below each layer.
 Built-in Text Options
 -----------------------
 
-By default, LeNet shows layer names below and shapes above. You can customize this with label callables:
+By default, LeNet shows layer types above and dimensions below. You can customize this with label callables:
 
 .. code-block:: python
 
-    from visualkeras.options import LenetOptions
-    
     # Define custom top label (above each layer)
     def top_label(layer, shape):
         """Show shape info above each layer"""
-        return f"{shape.dH}×{shape.dW}×{shape.dZ}"  # height x width x channels
+        return f"{shape.h}x{shape.w}x{shape.c}"  # height x width x channels
     
     # Define custom bottom label (below each layer)
     def bottom_label(layer, shape):
-        """Show layer name below each layer"""
+        """Show layer type below each layer"""
         return layer.__class__.__name__
     
-    options = LenetOptions(
+    image = visualkeras.show(
+        model,
+        mode='lenet',
         top_label_callable=top_label,
         bottom_label_callable=bottom_label,
     )
-    
-    image = visualkeras.show(model, mode='lenet', options=options)
     image.show()
 
 The ``RenderShape`` object provides:
-    - ``dH``, ``dW``: Height and width of feature maps
-    - ``dZ``: Number of channels (depth)
+    - ``h``, ``w``: Feature-map height and width before scaling to pixels
+    - ``c``: Number of channels (depth)
 
 Practical Label Example
 ------------------------
 
-Show parameter counts and activation info:
+Show layer types and activation names:
 
 .. code-block:: python
 
     def info_label(layer, shape):
-        """Show layer type and parameters"""
+        """Show layer type and activation"""
         layer_type = layer.__class__.__name__
         activation = getattr(layer, 'activation', None)
         if activation:
             return f"{layer_type} ({activation.__name__})"
         return layer_type
     
-    options = LenetOptions(
+    image = visualkeras.show(
+        model,
+        mode='lenet',
         bottom_label_callable=info_label
     )
-    
-    image = visualkeras.show(model, mode='lenet', options=options)
     image.show()
 
 Advanced: Embedding Images in Feature Maps
@@ -227,7 +225,7 @@ Embed an image in a specific layer's visualization:
     
     # Style: embed image in specific layer
     styles = {
-        'layer_2': {  # Apply to layer at index 2
+        model.layers[2].name: {  # Select the third layer by name
             'face_image': '/path/to/your/texture.png',
             'face_image_fit': 'cover',      # How to fit image in frame
             'face_image_alpha': 200,        # Transparency (0-255)

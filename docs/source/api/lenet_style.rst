@@ -109,7 +109,7 @@ Custom Label Functions
     import visualkeras
     
     def top_label(layer, shape):
-        return f"{shape.dH}×{shape.dW}×{shape.dZ}"
+        return f"{shape.h}x{shape.w}x{shape.c}"
     
     def bottom_label(layer, shape):
         return layer.__class__.__name__
@@ -129,7 +129,7 @@ With Embedded Images
     from visualkeras.options import LenetOptions
     
     styles = {
-        0: {
+        model.layers[0].name: {
             'face_image': 'kernel_viz.png',
             'face_image_fit': 'cover',
             'face_image_alpha': 200,

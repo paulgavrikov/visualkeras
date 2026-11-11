@@ -7,12 +7,12 @@ Graph view visualization for neural networks.
 Overview
 ========
 
-The graph renderer displays neural network architectures as computational graphs, with nodes representing layers and edges showing data flow. This mode is ideal for understanding model topology and works with any Keras model type.
+The graph renderer displays neural network architectures as computational graphs, with nodes representing layers and edges showing data flow. It uses the layer and connection information exposed by built Sequential and Functional models.
 
 **When to use:**
     - Models with complex topology (branches, merges, skip connections)
     - Understanding computational structure is important
-    - Functional or Subclassed models
+    - Functional models
     - Any model where connections between non-adjacent layers matter
     - Comparative topology analysis
 

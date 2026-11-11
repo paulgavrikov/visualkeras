@@ -130,7 +130,7 @@ visaalkeras supports four visualization modes. Each mode is useful for different
    # Layered view: Great for CNNs, shows stacked feature maps
    layered = visualkeras.show(model, mode='layered')
    
-   # Graph view: Shows computational structure for any model type
+   # Graph view: Shows layer connections in Sequential and Functional models
    graph = visualkeras.show(model, mode='graph')
    
    # Functional view: Graph-aware layering (bridges both approaches)
