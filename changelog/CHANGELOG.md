@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file, starting from version 0.0.1.
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-11-10)
 
 Requires Python 3.9 or newer.
 
